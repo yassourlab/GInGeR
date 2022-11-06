@@ -6,10 +6,10 @@ if __name__ == "__main__":
     PROJECT_DIR = f'{LAB}/Projects/hybrid_assembler'
     PIPELINE_TREE = f'{PROJECT_DIR}/pipeline_tree'
 
-    long_reads = f'{PIPELINE_TREE}/zymo_standard/data/long_reads/ERR3152364_GridION_sequencing_sample_250000.fastq.gz'
-    short_reads_1 = f'{PIPELINE_TREE}/zymo_standard/data/short_reads/ERR2984773_Illumina_MiSeq_paired_end_sequencing_1_sample_1000000.fastq.gz'
-    short_reads_2 = f'{PIPELINE_TREE}/zymo_standard/data/short_reads/ERR2984773_Illumina_MiSeq_paired_end_sequencing_2_sample_1000000.fastq.gz'
-    output_folder = f'{LAB}/Projects/hybrid_assembler/test_run'
+    long_reads = f'{PIPELINE_TREE}/zymo_standard/data/long_reads/ERR3152364_GridION_sequencing_sample_250000.fastq.gz' # TODO change to ''
+    short_reads_1 = f'{PIPELINE_TREE}/zymo_standard/data/short_reads/ERR2984773_Illumina_MiSeq_paired_end_sequencing_1_sample_1000000.fastq.gz' # TODO - replace with short reads from mobile
+    short_reads_2 = f'{PIPELINE_TREE}/zymo_standard/data/short_reads/ERR2984773_Illumina_MiSeq_paired_end_sequencing_2_sample_1000000.fastq.gz'# TODO - replace with short reads from mobile
+    output_folder = f'{LAB}/Projects/hybrid_assembler/test_run' # TODO - replace with a folder in your directory
     assembly_folder = None
     threads = 16
     kraken_output_path = f'{output_folder}/kraken_folder/kraken_output_file.tsv'
@@ -18,7 +18,7 @@ if __name__ == "__main__":
     references_folder = f'{output_folder}/references_folder/'
     indexed_reference = None
     merged_filtered_fasta = f'{output_folder}/kraken_folder/merged_filtered_ref_db.fasta'
-    genes_path = f'{PROJECT_DIR}/pipeline_tree/genes_from_amir_erez/processed/genes_without_dup_locations.fasta'
+    genes_path = f'{PROJECT_DIR}/pipeline_tree/genes_from_amir_erez/processed/genes_without_dup_locations.fasta' # TODO get ARGs (Antibiotic resistance genes) fasta from Nadav\Netta
     depth_limit = 12
     maximal_gap_ratio = 1.5
     max_context_len = 2500
