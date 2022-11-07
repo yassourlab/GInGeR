@@ -2,12 +2,13 @@ import sys
 import timeit
 import logging
 import argparse
+import pandas as pd
 import pickle
 
 import pipeline_utils as pu
 import reference_database_utils as rdu
 import hybrid_assembly_utils as hau
-import in_out_paths_approach as iopa
+import process_context_candidates as iopa
 import sequence_alignment_utils as sau
 import constants
 
@@ -52,7 +53,6 @@ def get_command_parser():
     return parser
 
 
-# TODO use logging instead of prints
 def step_timing(start, step_name):
     stop = timeit.default_timer()
     log.info(f'{RUNTIME_PRINTS_PATTERN} {step_name} took {(stop - start) / 60} minutes {RUNTIME_PRINTS_PATTERN}')
@@ -96,6 +96,42 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, temp_folder, assemb
     return results
 
 
+def write_context_level_output_to_csv(output, csv_path):
+    output_lines = [
+        'gene,reference_contig,in_context,out_context,in_context_start,gene_start,gene_end,out_context_end,match_score\n']
+    for gene_species_tuple, matches_list in output.items():
+        gene, species = gene_species_tuple
+        for match in matches_list:
+            in_context = match.in_path.query_name
+            out_context = match.out_path.query_name
+            in_context_start = match.in_path.bug_start
+            gene_start = match.start
+            gene_end = match.end
+            out_context_end = match.out_path.bug_end
+            match_score = match.match_score
+            output_lines.append(
+                f'{gene},{species},{in_context},{out_context},{in_context_start},{gene_start},{gene_end},{out_context_end},{match_score}\n')
+
+    with open(csv_path, 'w') as f:
+        f.writelines(output_lines)
+
+
+def aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path, metadata_path,
+                                                                         species_level_output_path):
+    context_level_df = pd.read_csv(context_level_output_path)
+    context_level_df['Genome'] = context_level_df['reference_contig'].apply(lambda x: x.split('_')[0].split('.')[0])
+    metadata_df = pd.read_csv(metadata_path, sep='\t')
+    context_level_df_with_metadata = pd.merge(context_level_df, metadata_df[['Genome', 'Species_rep']], on='Genome',
+                                              how='left')
+    genomes_per_species = metadata_df.Species_rep.value_counts()
+    agg_output = context_level_df_with_metadata.groupby(['gene', 'Species_rep']).aggregate(
+        {'Genome': ['count'], 'match_score': ['max']})
+    agg_output.columns = ['_'.join(col) for col in agg_output.columns.values]
+    agg_output = agg_output.merge(genomes_per_species, left_on='Species_rep', right_index=True, how='left')
+    agg_output['references_ratio'] = agg_output['Genome_count'] / agg_output['Species_rep']
+    agg_output[['references_ratio', 'match_score_max']].to_csv(species_level_output_path)
+
+
 if __name__ == "__main__":
     parser = vars(get_command_parser())
     # arguments that are simply parsed
@@ -134,6 +170,11 @@ if __name__ == "__main__":
                                     depth_limit, maximal_gap_ratio, max_context_len, gene_pident_filtering_th,
                                     paths_pident_filtering_th,
                                     skip_database_filtering, skip_reference_indexing, skip_assembly)
-    with open(f'{output_folder}/output_pickled.pkl', 'wb') as pickle_out_file:
-        pickle.dump(ginger_results, pickle_out_file)
 
+    context_level_output_path = f'{output_folder}/context_level_matches.csv'
+    species_level_output_path = f'{output_folder}/species_level_matches.csv'
+    write_context_level_output_to_csv(ginger_results, context_level_output_path)
+    aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path, metadata_path,
+                                                                         species_level_output_path)
+    # with open(f'{output_folder}/output_pickled.pkl', 'wb') as pickle_out_file:
+    #     pickle.dump(ginger_results, pickle_out_file)
