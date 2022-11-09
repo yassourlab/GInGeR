@@ -5,7 +5,7 @@ log = logging.getLogger(__name__)
 
 # TODO use logging instead of prints
 # TODO change path to be in the same directory + add links to my directory
-SPADES = '/sci/labs/morani/morani/icore-data/lab/Tools/SPAdes-3.15.5-Linux/bin/spades.py'
+SPADES = 'spades.py'
 META_SPADES_COMMAND = "{spades} --meta -1 {short_reads_1} -2 {short_reads_2} {optional_long_reads}-o {output_folder} -t {threads}"
 OPTIONAL_LONG_READS_ADDITION = "--nanopore {long_reads} "
 

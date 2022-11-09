@@ -9,7 +9,7 @@ import logging
 
 log = logging.getLogger(__name__)
 TOOLS = '/sci/labs/morani/morani/icore-data/lab/Tools'
-KRAKEN_PATH = f'{TOOLS}/kraken2/kraken2'
+KRAKEN_PATH = f'kraken2'
 KRAKEN_DB = f'{TOOLS}/kraken2_db/UnifiedHumanGastrointestinalGenome'
 KRAKEN_COMMAND = '{kraken_path} --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {output} --use-names'  # --report {report}
 KRAKEN_OUTPUT_HEADER = ['classified', 'read', 'genome', 'reads_len', 'mapping_str']

@@ -9,9 +9,9 @@ log = logging.getLogger(__name__)
 JUST_PRINT_DEFAULT = False
 # TODO add real logging
 # TODO maybe I should filter the alignments earlier?
-MINIMAP_PATH = '/sci/labs/morani/morani/icore-data/lab/Tools/minimap2'
-MINIMAP2_COMMAND = MINIMAP_PATH + '/minimap2 -cx {preset} -t {nthreads} {target} {query} > {out_file} -P'
-MINIMAP2_INDEXING_COMMAND = MINIMAP_PATH+ '/minimap2 -x {preset} -d {index_file} {fasta_file}'
+MINIMAP_PATH = 'minimap2'
+MINIMAP2_COMMAND ='minimap2 -cx {preset} -t {nthreads} {target} {query} > {out_file} -P'
+MINIMAP2_INDEXING_COMMAND = 'minimap2 -x {preset} -d {index_file} {fasta_file}'
 CONTIGS_TO_BUGS_PRESET = 'asm20'
 GENES_TO_CONTIGS_PRESET = 'asm20'
 ARGS_TO_REFERENCE_CONTIGS = 'asm20'
