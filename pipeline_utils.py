@@ -1,8 +1,20 @@
 import os
 from Bio import SeqIO
 import logging
+import pandas as pd
+import timeit
 
+RUNTIME_PRINTS_PATTERN = '$$$$$$$$$$'
 log = logging.getLogger(__name__)
+
+
+def step_timing(func):
+    def wrapper_lot_and_time(*args):
+        start = timeit.default_timer()
+        func(*args)
+        stop = timeit.default_timer()
+        log.info(f'{RUNTIME_PRINTS_PATTERN} {func} took {(stop - start) / 60} minutes {RUNTIME_PRINTS_PATTERN}')
+    return wrapper_lot_and_time
 
 
 def check_and_makedir(path_with_file):
@@ -153,3 +165,39 @@ def is_similar_to_representatives(representatives, record, iou_th):
         if interval_iou(record.start, record.end, rep.start, rep.end) > iou_th:
             return True
     return False
+
+
+def write_context_level_output_to_csv(output, csv_path):
+    output_lines = [
+        'gene,reference_contig,in_context,out_context,in_context_start,gene_start,gene_end,out_context_end,match_score\n']
+    for gene_species_tuple, matches_list in output.items():
+        gene, species = gene_species_tuple
+        for match in matches_list:
+            in_context = match.in_path.query_name
+            out_context = match.out_path.query_name
+            in_context_start = match.in_path.bug_start
+            gene_start = match.start
+            gene_end = match.end
+            out_context_end = match.out_path.bug_end
+            match_score = match.match_score
+            output_lines.append(
+                f'{gene},{species},{in_context},{out_context},{in_context_start},{gene_start},{gene_end},{out_context_end},{match_score}\n')
+
+    with open(csv_path, 'w') as f:
+        f.writelines(output_lines)
+
+
+def aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path, metadata_path,
+                                                                         species_level_output_path):
+    context_level_df = pd.read_csv(context_level_output_path)
+    context_level_df['Genome'] = context_level_df['reference_contig'].apply(lambda x: x.split('_')[0].split('.')[0])
+    metadata_df = pd.read_csv(metadata_path, sep='\t')
+    context_level_df_with_metadata = pd.merge(context_level_df, metadata_df[['Genome', 'Species_rep']], on='Genome',
+                                              how='left')
+    genomes_per_species = metadata_df.Species_rep.value_counts()
+    agg_output = context_level_df_with_metadata.groupby(['gene', 'Species_rep']).aggregate(
+        {'Genome': ['count'], 'match_score': ['max']})
+    agg_output.columns = ['_'.join(col) for col in agg_output.columns.values]
+    agg_output = agg_output.merge(genomes_per_species, left_on='Species_rep', right_index=True, how='left')
+    agg_output['references_ratio'] = agg_output['Genome_count'] / agg_output['Species_rep']
+    agg_output[['references_ratio', 'match_score_max']].to_csv(species_level_output_path)

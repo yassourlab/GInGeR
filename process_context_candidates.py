@@ -5,6 +5,8 @@ import pyfastg
 import datetime as dt
 import networkx as nx
 
+import extract_contexts_candidates as ecc
+
 import matches_classes as mc
 import sequence_alignment_utils as sau
 import pipeline_utils as pu
@@ -24,199 +26,6 @@ def extract_start_and_end(i_start, i_end, o_start, o_end, strand):
         start = o_end
         end = i_start
     return start, end
-
-
-def save_paths_to_fasta_io_paths_approach(paths, paths_fasta_name, records_dict, node_to_find=None,
-                                          context_len=math.inf, in_or_out=None, covered_by_gene=0, gene_and_node=''):
-    # TODO I think I don't really need the outputs of this function anymore
-    # print(f'{dt.datetime.now()} saving paths to {paths_fasta_name}')
-    in_paths_lengths = {}
-    node_locations = {}
-    with open(paths_fasta_name, 'a') as f:
-        for path in paths:
-            seq, node_start = pu.generate_str_from_list_of_nodes(records_dict, path, node_to_find)
-            node_locations['_'.join(path)] = node_start
-            if len(seq) > context_len:
-                if in_or_out == 'in':
-                    seq = seq[-(int(context_len + covered_by_gene)):-int(covered_by_gene)]
-                if in_or_out == 'out':
-                    seq = seq[int(covered_by_gene):int(covered_by_gene + context_len)]
-            else:
-                if in_or_out == 'in':
-                    seq = seq[:-int(covered_by_gene)]
-                if in_or_out == 'out':
-                    seq = seq[int(covered_by_gene):]
-            in_paths_lengths['_'.join(path)] = len(seq)
-            f.write(f">{gene_and_node}_path_{'_'.join(path)}\n" if gene_and_node else f">{'_'.join(path)}\n")
-            f.write(f'{seq}\n')
-
-    return in_paths_lengths, node_locations
-
-
-def paths_enumerator(graph, stack, max_depth, min_length, neighbors_func, reverse=False, covered_by_gene=0):
-    # TODO in cases where there are no incoming or out coming paths, I think that we don't take the path that consists only of the node itself into account - for example gene_Subject_11486372__Scaffold_30890__Start_212__End_556_nodes_722037+ in the graph with just 1M short reads
-    out_paths = []
-    while stack:
-        (vertex, path) = stack.pop()
-        total_length_estimation = sum([length for node, length in path]) - (len(path) * 55) - covered_by_gene
-        neighbors = list(neighbors_func(graph, vertex))
-        if len(neighbors) > 0 and total_length_estimation < min_length and len(path) < max_depth:
-            for neighbor in neighbors:
-                if reverse:
-                    stack.append((neighbor, [(neighbor, graph.nodes[neighbor]['length'])] + path))
-                else:
-                    stack.append((neighbor, path + [(neighbor, graph.nodes[neighbor]['length'])]))
-        else:
-            out_paths.append([n for n, l in path])
-    return out_paths
-
-
-def add_nodes_list_and_start_location_to_gene_contig_match(records_dict, nodes_in_path, gene_contig_match):
-    #  this is not the exact start but it's good enough
-    contig_start = gene_contig_match.contig_start
-    contig_end = gene_contig_match.contig_end
-    if not nodes_in_path:
-        return gene_contig_match
-    elif len(nodes_in_path) == 1:
-        gene_contig_match.nodes_list = nodes_in_path
-        gene_contig_match.start_in_first_node = contig_start
-    else:
-        prev_seq = str(records_dict[nodes_in_path[0]].seq)
-        end = len(prev_seq)
-        if contig_start <= end:  # in case that the match starts in the first node
-            start_in_first_node = contig_start
-            nodes_for_genes = [nodes_in_path[0]]
-        else:
-            nodes_for_genes = []
-            start_in_first_node = None
-        for node in nodes_in_path[1:]:
-            cur_seq = str(records_dict[node].seq)
-            try:
-                k = pu.get_sequence_overlap(prev_seq, cur_seq)
-            except Exception as e:
-                log.error(f'error! {str(e)} {node} ')
-                raise Exception
-            start = end - k
-            end = start + len(cur_seq)
-            if pu.intervals_overlap(start, end, contig_start, contig_end):
-                if start_in_first_node is None and start <= contig_start <= end:
-                    start_in_first_node = contig_start - start
-                nodes_for_genes.append(node)
-            else:
-                if nodes_for_genes:
-                    break
-            prev_seq = cur_seq
-        gene_contig_match.nodes_list = nodes_for_genes
-        gene_contig_match.start_in_first_node = start_in_first_node
-    # TODO I'm modifying and then returning the same object. I think it's not optimal
-    return gene_contig_match
-
-
-def get_genes_to_contigs_with_nodes_list(genes_path, contigs_path, temp_files_path, assembly_graph, records_dict,
-                                         paths_path, n_minimap_threads, pident_filtering_th):
-    genes_to_contigs_path = f'{temp_files_path}/genes_to_contigs.paf'
-
-    genes_to_contigs_path = sau.map_genes_to_contigs(genes_path, contigs_path, genes_to_contigs_path,
-                                                     nthreads=n_minimap_threads)
-    genes_to_contigs = sau.read_and_filter_minimap_matches(mc.GeneContigMatch, genes_to_contigs_path,
-                                                           pident_filtering_th,
-                                                           verbose=True)
-    contig_nodes_dict = pu.get_contig_nodes_dict(assembly_graph.nodes, paths_path, keep_contigs_with_gaps=False)
-    matches_with_nodes_list_and_start_location = []
-    for gene_contig_match in genes_to_contigs:  # TODO turn this to an iterator when I finish debugging
-        updated_gene_contig_match = add_nodes_list_and_start_location_to_gene_contig_match(records_dict,
-                                                                                           contig_nodes_dict.get(
-                                                                                               gene_contig_match.contig,
-                                                                                               None), gene_contig_match)
-        if updated_gene_contig_match.nodes_list and updated_gene_contig_match.start_in_first_node:
-            matches_with_nodes_list_and_start_location.append(updated_gene_contig_match)
-    return matches_with_nodes_list_and_start_location
-
-
-def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, records_dict, genes_to_contigs, depth_limit,
-                                                      context_len,
-                                                      in_paths_fasta, out_paths_fasta):
-    gene_and_nodes_path_set = set()
-    gene_lengths = {}
-    for gene_contigs_match in genes_to_contigs:
-        gene_and_nodes_path_str = f"{gene_contigs_match.gene}_nodes_{'_'.join(gene_contigs_match.nodes_list)}"
-        if gene_and_nodes_path_str in gene_and_nodes_path_set or gene_contigs_match.start_in_first_node is None:  # I already ran the pipeline for this and there is no need to do it again
-            log.debug(
-                f'{dt.datetime.now()} pipeline did not run for {gene_and_nodes_path_str} {gene_contigs_match.start_in_first_node}')
-        else:
-            # unpacking variables
-            gene_and_nodes_path_set.add(gene_and_nodes_path_str)
-            first_node = gene_contigs_match.nodes_list[0]
-            last_node = gene_contigs_match.nodes_list[-1]
-            gene_name = gene_contigs_match.gene
-            nodes_list_for_gene = gene_contigs_match.nodes_list
-            start_in_first_node = gene_contigs_match.start_in_first_node
-            gene_length = gene_contigs_match.gene_length
-            gene_nodes_length = len(pu.generate_str_from_list_of_nodes(records_dict, nodes_list_for_gene, None)[0])
-
-            # in paths
-            in_covered_by_gene = assembly_graph.nodes[first_node]['length'] - start_in_first_node
-            in_paths_initial_stack = [(first_node, [(first_node, assembly_graph.nodes[first_node]['length'])])]
-            in_paths = paths_enumerator(assembly_graph, in_paths_initial_stack, depth_limit, context_len,
-                                        nx.DiGraph.predecessors, reverse=True, covered_by_gene=in_covered_by_gene)
-            in_paths_lengths, _ = save_paths_to_fasta_io_paths_approach(in_paths, in_paths_fasta, records_dict,
-                                                                        context_len=context_len,
-                                                                        in_or_out='in',
-                                                                        covered_by_gene=in_covered_by_gene,
-                                                                        gene_and_node=gene_and_nodes_path_str)
-
-            # out paths
-            out_paths_initial_stack = [(last_node, [(last_node, assembly_graph.nodes[last_node][
-                'length'])])]
-            gene_end_in_last_node = gene_nodes_length - start_in_first_node - gene_length
-            out_covered_by_gene = assembly_graph.nodes[last_node]['length'] - gene_end_in_last_node
-
-            out_paths = paths_enumerator(assembly_graph, out_paths_initial_stack, depth_limit, context_len,
-                                         nx.DiGraph.successors, covered_by_gene=out_covered_by_gene)
-            out_paths_lengths, _ = save_paths_to_fasta_io_paths_approach(out_paths, out_paths_fasta, records_dict,
-                                                                         context_len=context_len, in_or_out='out',
-                                                                         covered_by_gene=out_covered_by_gene,
-                                                                         gene_and_node=gene_and_nodes_path_str)
-            gene_lengths[gene_name] = gene_length
-            if len(in_paths) == 0 or len(out_paths) == 0:
-                log.debug(f'{gene_contigs_match} in {len(in_paths)} out {len(out_paths)}')
-
-    return gene_lengths
-
-
-def run_in_out_paths_approach(assembly_dir, genes_path, reference_path,
-                              n_minimap_threads, depth_limit, maximal_gap_ratio, context_len,
-                              gene_pident_filtering_th,
-                              paths_pident_filtering_th, temp_folder):
-    contigs_path = f"{assembly_dir}/{'contigs.fasta'}"
-    paths_path = f"{assembly_dir}/{'contigs.paths'}"
-    assembly_graph_path = f"{assembly_dir}/{'assembly_graph.fastg'}"
-    in_paths_fasta = f"{temp_folder}/all_in_paths.fasta"
-    out_paths_fasta = f"{temp_folder}/all_out_paths.fasta"
-    in_mapping_to_bugs_path = f'{temp_folder}/in_paths_to_reference.paf'
-    out_mapping_to_bugs_path = f'{temp_folder}/out_paths_to_reference.paf'
-
-    assembly_graph = pyfastg.parse_fastg(assembly_graph_path)
-    records_dict = pu.get_records_dict_from_assembly_graph(assembly_graph_path)
-    log.info(f'{dt.datetime.now()} mapping genes to contigs')
-    genes_to_contigs = get_genes_to_contigs_with_nodes_list(genes_path, contigs_path, temp_folder, assembly_graph,
-                                                            records_dict, paths_path, n_minimap_threads,
-                                                            gene_pident_filtering_th)
-    # TODO if there are no in paths, there is no need to calc out paths. but maybe we should always have in paths. check this
-    # get in and out paths
-    log.info(f'{dt.datetime.now()} extracting in and out paths')
-    genes_lengths = extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, records_dict,
-                                                                      genes_to_contigs, depth_limit,
-                                                                      context_len,
-                                                                      in_paths_fasta, out_paths_fasta)
-    # map them to the reference
-    log.info(f'{dt.datetime.now()} mapping in and out paths')
-    sau.map_contigs_to_bugs(in_paths_fasta, reference_path, in_mapping_to_bugs_path, nthreads=n_minimap_threads)
-    sau.map_contigs_to_bugs(out_paths_fasta, reference_path, out_mapping_to_bugs_path, nthreads=n_minimap_threads)
-
-    # merge and get results
-    return process_in_and_out_paths_to_results(in_mapping_to_bugs_path, out_mapping_to_bugs_path, genes_lengths,
-                                               paths_pident_filtering_th, 0, maximal_gap_ratio)
 
 
 def get_in_out_match(i, o, gene_length, minimal_gap_ratio, maximal_gap_ratio):
@@ -268,7 +77,7 @@ def keep_best_matches_per_gene_bug_pair(matches_per_gene) -> defaultdict:
     return best_matches_per_gene
 
 
-def keep_best_matches(matches, iou_th: float = 0): #  -> Dict[Tuple[str,str]:List[mc.InOutPathsMatch]]
+def keep_best_matches(matches, iou_th: float = 0):  # -> Dict[Tuple[str,str]:List[mc.InOutPathsMatch]]
     # TODO double check that I can get more than one match
     sorted_matches = sorted(matches, key=lambda x: x.match_score, reverse=True)
     representative_matches = []

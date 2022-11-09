@@ -1,5 +1,6 @@
 from subprocess import run
 from readpaf import parse_paf
+import pipeline_utils as pu
 import os
 import datetime as dt
 import logging
@@ -10,7 +11,7 @@ JUST_PRINT_DEFAULT = False
 # TODO add real logging
 # TODO maybe I should filter the alignments earlier?
 MINIMAP_PATH = 'minimap2'
-MINIMAP2_COMMAND ='minimap2 -cx {preset} -t {nthreads} {target} {query} > {out_file} -P'
+MINIMAP2_COMMAND = 'minimap2 -cx {preset} -t {nthreads} {target} {query} > {out_file} -P'
 MINIMAP2_INDEXING_COMMAND = 'minimap2 -x {preset} -d {index_file} {fasta_file}'
 CONTIGS_TO_BUGS_PRESET = 'asm20'
 GENES_TO_CONTIGS_PRESET = 'asm20'
@@ -63,17 +64,6 @@ GT_ARGS_TO_BUGS_HEADER_CONVERSION = {
 }
 
 
-def check_and_makedir_with_file_name(path_with_file):
-    path = '/'.join(path_with_file.split('/')[:-1])
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-
-def check_and_make_dir(path):
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-
 def generate_index(fasta_file, preset=INDEXING_PRESET, just_print=JUST_PRINT_DEFAULT):
     if fasta_file.endswith('fasta.gzip'):
         index_file = fasta_file[:-len('fasta.gzip')] + 'mmi'
@@ -93,14 +83,14 @@ def generate_index(fasta_file, preset=INDEXING_PRESET, just_print=JUST_PRINT_DEF
     return index_file
 
 
-def map_contigs_to_bugs(contigs_path, reference_path, contigs_to_bugs_path,
-                        just_print=JUST_PRINT_DEFAULT, nthreads=N_THREADS_DEFAULT):
+def map_contexts_to_bugs(contigs_path, reference_path, contigs_to_bugs_path,
+                         just_print=JUST_PRINT_DEFAULT, nthreads=N_THREADS_DEFAULT):
     return _run_minimap2_paf(contigs_path, reference_path, CONTIGS_TO_BUGS_PRESET, contigs_to_bugs_path, just_print,
                              nthreads)
 
 
-def map_genes_to_contigs(genes_path, contigs_path, genes_to_contigs_path,
-                         just_print=JUST_PRINT_DEFAULT, nthreads=N_THREADS_DEFAULT):
+def map_genes_to_contexts(genes_path, contigs_path, genes_to_contigs_path,
+                          just_print=JUST_PRINT_DEFAULT, nthreads=N_THREADS_DEFAULT):
     return _run_minimap2_paf(genes_path, contigs_path, GENES_TO_CONTIGS_PRESET, genes_to_contigs_path, just_print,
                              nthreads)
 
@@ -113,7 +103,7 @@ def map_genes_to_reference(args_path, reference_path, genes_to_reference_path,
 
 def _run_minimap2_paf(query, target, preset, out_file, just_print=JUST_PRINT_DEFAULT, nthreads=1):
     command = MINIMAP2_COMMAND.format(preset=preset, target=target, query=query, out_file=out_file, nthreads=nthreads)
-    check_and_makedir_with_file_name(out_file)
+    pu.check_and_makedir(out_file)
     logging.info(f'running minimap2: {command}')
     if just_print:
         return out_file
@@ -177,3 +167,10 @@ def read_and_filter_minimap_matches(match_object_constructor: callable, alignmen
         log.debug(
             f'{dt.datetime.now()} {len(filtered_minimap_results)} alignments for {len(set([match.gene for match in filtered_minimap_results]))} genes were left after filtering ')
     return filtered_minimap_results
+
+
+@pu.step_timing
+def map_in_and_out_contexts_to_ref(in_paths_fasta, out_paths_fasta, reference_path, in_mapping_to_bugs_path,
+                                   out_mapping_to_bugs_path, n_minimap_threads):
+    map_contexts_to_bugs(in_paths_fasta, reference_path, in_mapping_to_bugs_path, nthreads=n_minimap_threads)
+    map_contexts_to_bugs(out_paths_fasta, reference_path, out_mapping_to_bugs_path, nthreads=n_minimap_threads)

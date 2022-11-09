@@ -6,6 +6,7 @@ from glob import glob
 import urllib
 import gzip
 import logging
+import pipeline_utils as pu
 
 log = logging.getLogger(__name__)
 TOOLS = '/sci/labs/morani/morani/icore-data/lab/Tools'
@@ -89,6 +90,7 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
     return merged_filtered_fasta
 
 
+@pu.step_timing
 def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_path, reads_ratio_th, metadata_path,
                                      references_folder, merged_filtered_fasta):
     run_kraken(reads_1, reads_2, threads, kraken_output_path)
