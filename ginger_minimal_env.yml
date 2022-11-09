@@ -1,0 +1,12 @@
+name: GInGeR-minimal
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - biopython=1.78
+  - pip=22.2.2
+  - pip:
+    - pyfastg==0.1.0
+    - readpaf==0.0.10
+prefix: /cs/usr/haimasree/miniconda3/envs/GInGeR-minimal
