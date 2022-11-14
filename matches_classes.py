@@ -1,5 +1,23 @@
+from collections import namedtuple
+
+
+PafLine = namedtuple('PafLine', ["query_name",
+                                 "query_length",
+                                 "query_start",
+                                 "query_end",
+                                 "strand",
+                                 "target_name",
+                                 "target_length",
+                                 "target_start",
+                                 "target_end",
+                                 "residue_matches",
+                                 "alignment_block_length",
+                                 "mapping_quality",
+                                 "tags"])
+
+
 class PathBugMatch:
-    def __init__(self, paf_line):
+    def __init__(self, paf_line: PafLine):
         query_name_splt = paf_line.query_name.split('_path_')
         gene_and_nodes_list = query_name_splt[0].split('_nodes_')
         self.query_name = paf_line.query_name

@@ -150,6 +150,7 @@ def filter_contigs_in_bugs(df, query_field, pident_filtering_th, alignment_lengt
 
 def read_and_filter_minimap_matches(match_object_constructor: callable, alignment_path, pident_filtering_th,
                                     verbose=True):
+    # TODO - on one hand I want to use an iterator here. On the other hand, I need to close the file after I finih using it and the iterator is lazy. what's the better approach
     if os.path.getsize(alignment_path) == 0:
         return None
 
