@@ -4,15 +4,15 @@ import logging
 import argparse
 import pandas as pd
 import pickle
-import locate_genes as lg
+import locating_genes_in_graph as lg
 
 import pipeline_utils as pu
 import reference_database_utils as rdu
 import hybrid_assembly_utils as hau
-import process_context_candidates as iopa
+import verify_context_candidates as iopa
 import extract_contexts_candidates as ecc
 import sequence_alignment_utils as sau
-import process_context_candidates as pcc
+import verify_context_candidates as pcc
 import constants
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
@@ -75,40 +75,28 @@ def extract_genes_lengths(genes_path):
             gene_lengths[gene_name] = gene_length
     return gene_lengths
 
+
 def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, temp_folder, assembly_dir, threads, kraken_output_path,
                    reads_ratio_th, metadata_path, references_folder, indexed_reference, merged_filtered_fasta,
                    genes_path,
                    depth_limit, maximal_gap_ratio, max_context_len, gene_pident_filtering_th, paths_pident_filtering_th,
-                   skip_database_filtering, skip_reference_indexing, skip_assembly):
+                   skip_database_preprocessing, skip_assembly):
     # filter reference database using kraken
-    if not skip_database_filtering:
-        pu.check_and_makedir(kraken_output_path)
-        pu.check_and_make_dir_no_file_name(references_folder)
+    if not skip_database_preprocessing:
         rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads, kraken_output_path, reads_ratio_th,
                                              metadata_path, references_folder, merged_filtered_fasta)
-    if not skip_reference_indexing:
         indexed_reference = sau.generate_index(merged_filtered_fasta, preset=sau.INDEXING_PRESET,
                                                just_print=sau.JUST_PRINT_DEFAULT)  # TODO can multithread this also
-
     # run assembly
-    if assembly_dir is None:
-        assembly_dir = f'{temp_folder}/{constants.ASSEMBLY_FOLDER_NAME}'
     if not skip_assembly:
+        if assembly_dir is None:
+            assembly_dir = f'{temp_folder}/{constants.ASSEMBLY_FOLDER_NAME}'
         hau.run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, assembly_dir, threads)
-
     # run tool
 
-    contigs_path = f"{assembly_dir}/{'contigs.fasta'}"
-    paths_path = f"{assembly_dir}/{'contigs.paths'}"
-    assembly_graph_path = f"{assembly_dir}/{'assembly_graph.fastg'}"
-    in_paths_fasta = f"{temp_folder}/all_in_paths.fasta"
-    out_paths_fasta = f"{temp_folder}/all_out_paths.fasta"
-    in_mapping_to_bugs_path = f'{temp_folder}/in_paths_to_reference.paf'
-    out_mapping_to_bugs_path = f'{temp_folder}/out_paths_to_reference.paf'
+    assembly_graph, genes_to_contigs, records_dict = lg.locate_genes_in_graph(assembly_dir, gene_pident_filtering_th,
+                                                                              genes_path, threads, temp_folder)
 
-    assembly_graph, genes_to_contigs, records_dict = lg.find_genes_in_graph(assembly_graph_path, contigs_path,
-                                                                            gene_pident_filtering_th, genes_path,
-                                                                            threads, paths_path, temp_folder)
     # TODO if there are no in paths, there is no need to calc out paths. but maybe we should always have in paths. check this
     # get in and out paths
     genes_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, records_dict,

@@ -1,5 +1,5 @@
 import os
-from Bio import SeqIO
+
 import logging
 import pandas as pd
 import timeit
@@ -88,29 +88,8 @@ def get_contig_nodes_dict(assembly_graph_nodes, paths_path, keep_contigs_with_ga
     return contig_nodes_dict
 
 
-def get_records_dict_from_assembly_graph(assembly_graph_path):
-    with open(assembly_graph_path) as handle:
-        records = list(SeqIO.parse(handle, "fasta"))
-    records_dict = {get_short_node_name(record.name): record for record in records}
-    return records_dict
 
 
-def get_node_without_adj(long_node_name):
-    split_by_dots = long_node_name.split(':')[0]
-    split_by_comma_dot = long_node_name.split(';')[0]
-    if len(split_by_comma_dot) <= len(split_by_dots):
-        return split_by_comma_dot
-    return split_by_dots
-
-
-def get_short_node_name(long_node_name):
-    node_without_adj = get_node_without_adj(long_node_name)
-    node_num = node_without_adj.split('_')[1]
-    last_char_chuku = node_without_adj[-1] == "'"
-    if last_char_chuku:
-        return node_num + '-'
-    else:
-        return node_num + '+'
 
 
 def get_sequence_overlap(seq_a, seq_b):
