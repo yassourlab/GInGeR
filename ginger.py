@@ -1,115 +1,93 @@
 import sys
-from Bio import SeqIO
 import logging
-import argparse
-import pandas as pd
-import pickle
-import locating_genes_in_graph as lg
+import click
 
-import pipeline_utils as pu
+import locating_genes_in_graph as lg
 import reference_database_utils as rdu
 import hybrid_assembly_utils as hau
-import verify_context_candidates as iopa
 import extract_contexts_candidates as ecc
 import sequence_alignment_utils as sau
-import verify_context_candidates as pcc
-import constants
+import verify_context_candidates as vcc
+import constants as c
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)
 
 
+# def extract_genes_lengths(genes_path):
+#     gene_lengths = {}
+#     with open(genes_path) as f:
+#         fasta_sequences = SeqIO.parse(f, 'fasta')
+#         for s in fasta_sequences:
+#             gene_length = len(s.seq)
+#             gene_name = s.id
 #
-# def get_command_parser():
-#     # TODO - deal with conda env
-#     # TODO make sure parsing from terminal works well
-#     parser = argparse.ArgumentParser(prog='GInGeR',
-#                                      description='A tool for analyzing the genomic regions of genes of interest in a metagenomic sample')
-#     # must haves
-#     parser.add_argument('short_reads_1')
-#     parser.add_argument('short_reads_2')
-#     parser.add_argument('genes_path')
-#     parser.add_argument('output_folder')
+#             gene_lengths[gene_name] = gene_length
+#     return gene_lengths
 #
-#     # TODO make it possible to work with other databases other than the UHGG Kraken one
-#     # reference genomes database preprocessing optional parameters:
-#     parser.add_argument('--skip-species-downloading', action=argparse.BooleanOptionalAction)
-#     parser.add_argument('--skip-reference-indexing', action=argparse.BooleanOptionalAction)
-#     parser.add_argument('--minimal-reads-ratio', default=0.01, type=float)
-#     parser.add_argument('--reference-metadata-path')
-#
-#     parser.add_argument('--reference-genome-db')
-#
-#     # Assembly optional parameters:
-#     parser.add_argument('--skip-assembly', action=argparse.BooleanOptionalAction)
-#     parser.add_argument('--long-reads')
-#     parser.add_argument('--assembly-folder')
-#
-#     # GInGeR optional parameters:
-#     parser.add_argument('--depth-limit', default=12, type=int)
-#     parser.add_argument('--maximal-gap-ratio', default=1.5, type=float)
-#     parser.add_argument('--max-context-len', default=2500, type=int)
-#     parser.add_argument('--gene-pident-filtering-th', default=0.9, type=float)
-#     parser.add_argument('--paths-pident-filtering-th', default=0.9, type=float)
-#     parser.add_argument('--threads', default=1, type=int)
-#     return parser
-#
-#
-#
-#
-#
-# def run_in_out_paths_approach(assembly_dir, genes_path, reference_path,
-#                               n_minimap_threads, depth_limit, maximal_gap_ratio, context_len,
-#                               gene_pident_filtering_th,
-#                               paths_pident_filtering_th, temp_folder):
 
-
-def extract_genes_lengths(genes_path):
-    gene_lengths = {}
-    with open(genes_path) as f:
-        fasta_sequences = SeqIO.parse(f, 'fasta')
-        for s in fasta_sequences:
-            gene_length = len(s.seq)
-            gene_name = s.id
-
-            gene_lengths[gene_name] = gene_length
-    return gene_lengths
-
-
-def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, temp_folder, assembly_dir, threads, kraken_output_path,
+@click.command()
+@click.option('short_reads_1', required=True, type=click.Path(exists=True), help='R1 fastq or fastq.gzip file')
+@click.option('short_reads_2', required=True, type=click.Path(exists=True), help='R2 fastq or fastq.gzip file')
+@click.option('genes_path', required=True, type=click.Path(exists=True), help='A fasta file with the genes of interest')
+@click.option('long_reads', type=click.Path(exists=True), help='A fastq or fastq.gzip file of Oxford Nanopore reads')
+@click.option('-o', '--out-folder', default='ginger_output', help="A path specifying where to save GInGeR's output")
+@click.option('assembly_dir', default='ginger_output/SPAdes',
+              help="Specifies where to save the assembly results. In case of pre-ran assembly, please insert the path do the spades output directory")
+@click.option('threads', type=int, default=1,
+              help='Number of threads that will be used for running Kraken2, SPAdes and Minimap2')
+@click.option('kraken_output_path', )
+@click.option('reads_ratio_th')
+@click.option('metadata_path')
+@click.option('references_folder')
+@click.option('indexed_reference')
+@click.option('merged_filtered_fasta')
+@click.option('depth_limit')
+@click.option('maximal_gap_ratio')
+@click.option('max_context_len')
+@click.option('gene_pident_filtering_th')
+@click.option('paths_pident_filtering_th')
+@click.option('skip_database_preprocessing')
+@click.option('skip_assembly')
+def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_folder, assembly_dir, threads, kraken_output_path,
                    reads_ratio_th, metadata_path, references_folder, indexed_reference, merged_filtered_fasta,
-                   genes_path,
-                   depth_limit, maximal_gap_ratio, max_context_len, gene_pident_filtering_th, paths_pident_filtering_th,
+                   genes_path, depth_limit, maximal_gap_ratio, max_context_len, gene_pident_filtering_th,
+                   paths_pident_filtering_th,
                    skip_database_preprocessing, skip_assembly):
     # filter reference database using kraken
     if not skip_database_preprocessing:
         rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads, kraken_output_path, reads_ratio_th,
                                              metadata_path, references_folder, merged_filtered_fasta)
         indexed_reference = sau.generate_index(merged_filtered_fasta, preset=sau.INDEXING_PRESET,
-                                               just_print=sau.JUST_PRINT_DEFAULT)  # TODO can multithread this also
+                                               just_print=sau.JUST_PRINT_DEFAULT)
     # run assembly
     if not skip_assembly:
         if assembly_dir is None:
-            assembly_dir = f'{temp_folder}/{constants.ASSEMBLY_FOLDER_NAME}'
+            assembly_dir = f'{out_folder}/{c.ASSEMBLY_FOLDER_NAME}'
         hau.run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, assembly_dir, threads)
     # run tool
 
     assembly_graph, genes_to_contigs, records_dict = lg.locate_genes_in_graph(assembly_dir, gene_pident_filtering_th,
-                                                                              genes_path, threads, temp_folder)
+                                                                              genes_path, threads, out_folder)
 
     # TODO if there are no in paths, there is no need to calc out paths. but maybe we should always have in paths. check this
     # get in and out paths
+    in_paths_fasta = c.IN_PATHS_FASTA_TEMPLATE.format(temp_folder=out_folder)
+    out_paths_fasta = c.OUT_PATHS_FASTA_TEMPLATE.format(temp_folder=out_folder)
     genes_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, records_dict,
                                                                           genes_to_contigs, depth_limit,
                                                                           max_context_len, in_paths_fasta,
                                                                           out_paths_fasta)
     # map them to the reference
-    sau.map_in_and_out_contexts_to_ref(in_paths_fasta, out_paths_fasta, indexed_reference, in_mapping_to_bugs_path,
-                                       out_mapping_to_bugs_path, threads)
+    in_contexts_to_bugs = c.IN_MAPPING_TO_BUGS_PATH_TEMPLATE.format(temp_folder=out_folder)
+    out_contexts_to_bugs = c.OUT_MAPPING_TO_BUGS_PATH_TEMPLATE.format(temp_folder=out_folder)
+
+    sau.map_in_and_out_contexts_to_ref(in_paths_fasta, out_paths_fasta, indexed_reference, in_contexts_to_bugs,
+                                       out_contexts_to_bugs, threads)
 
     # merge and get results
-    genes_lengths = extract_genes_lengths(genes_path)
-    results = pcc.process_in_and_out_paths_to_results(in_mapping_to_bugs_path, out_mapping_to_bugs_path, genes_lengths,
+    # genes_lengths = extract_genes_lengths(genes_path)
+    results = vcc.process_in_and_out_paths_to_results(in_contexts_to_bugs, out_contexts_to_bugs, genes_lengths,
                                                       paths_pident_filtering_th, 0, maximal_gap_ratio)
     return results
 
