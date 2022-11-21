@@ -26,18 +26,27 @@ log = logging.getLogger(__name__)
 #     return gene_lengths
 #
 
+# kraken_output_path = f'{output_folder}/kraken_folder/kraken_output_file.tsv'
+# reads_ratio_th = 0.01
+# metadata_path = f'{LAB}/Tools/UnifiedHumanGastrointestinalGenome/genomes-all_metadata.tsv'
+# references_folder = f'{output_folder}/references_folder/'
+# indexed_reference = None
+# merged_filtered_fasta = f'{output_folder}/kraken_folder/merged_filtered_ref_db.fasta'
+
 @click.command()
 @click.option('short_reads_1', required=True, type=click.Path(exists=True), help='R1 fastq or fastq.gzip file')
 @click.option('short_reads_2', required=True, type=click.Path(exists=True), help='R2 fastq or fastq.gzip file')
 @click.option('genes_path', required=True, type=click.Path(exists=True), help='A fasta file with the genes of interest')
 @click.option('long_reads', type=click.Path(exists=True), help='A fastq or fastq.gzip file of Oxford Nanopore reads')
-@click.option('-o', '--out-folder', default='ginger_output', help="A path specifying where to save GInGeR's output")
+@click.option('-o', '--out-folder', default='ginger_output', help="A path specifying where to save GInGeR's output",
+              type=click.Path())
 @click.option('assembly_dir', default='ginger_output/SPAdes',
-              help="Specifies where to save the assembly results. In case of pre-ran assembly, please insert the path do the spades output directory")
+              help="Specifies where to save the assembly results. In case of pre-ran assembly, please insert the path do the spades output directory",
+              type=click.Path())
 @click.option('threads', type=int, default=1,
               help='Number of threads that will be used for running Kraken2, SPAdes and Minimap2')
-@click.option('kraken_output_path', )
-@click.option('reads_ratio_th')
+@click.option('kraken_output_path', default='ginger_output/kraken_folder/kraken_output_file.tsv', type=click.Path())
+@click.option('reads_ratio_th', type=float, default=0.9)
 @click.option('metadata_path')
 @click.option('references_folder')
 @click.option('indexed_reference')
