@@ -1,13 +1,22 @@
 name: GInGeR-minimal
 channels:
   - conda-forge
+  - bioconda
   - defaults
 dependencies:
-  - python=3.9
-  - biopython=1.78
-  - pandas=1.4.4
-  - pip=22.2.2
+  - biopython=1.80
+  - kraken2=2.1.2
+  - minimap2=2.24
+  - numpy=1.23.5
+  - pandas=1.5.1
+  - perl=5.32.1
+  - pip=22.3.1
+  - python=3.10.6
+  - setuptools=65.5.1
+  - six=1.16.0
+  - spades=3.15.5
   - pip:
+    - networkx==2.8.8
     - pyfastg==0.1.0
     - readpaf==0.0.10
-prefix: /cs/usr/haimasree/miniconda3/envs/GInGeR-minimal
+prefix: /cs/labs/morani/haimasree/miniconda3/envs/GInGeR-minimal
