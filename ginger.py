@@ -32,20 +32,17 @@ def extract_genes_lengths(genes_path):
 @click.argument('short-reads-1', required=True, type=click.Path(exists=True))
 @click.argument('short-reads-2', required=True, type=click.Path(exists=True))
 @click.argument('genes-path', required=True, type=click.Path(exists=True))
+@click.argument('out-dir', required=True, type=click.Path())
 @click.option('--long-reads', type=click.Path(exists=True), help='A fastq or fastq.gzip file of Oxford Nanopore reads')
-@click.option('-o', '--out-dir', default='ginger_output', help="A path specifying where to save GInGeR's output",
-              type=click.Path())
-@click.option('--assembly-dir', default='ginger_output/SPAdes',
-              help="Specifies where to save the assembly results. In case of pre-ran assembly, please insert the path do the spades output directory",
-              type=click.Path())
+@click.option('--assembly-dir', default=None,
+              help="Specifies where to save the assembly results. In case of pre-ran assembly, please insert the path do the spades output directory")
 @click.option('--threads', '-t', type=int, default=1,
               help='Number of threads that will be used for running Kraken2, SPAdes and Minimap2')
 @click.option('--kraken-output-path', default=None, help="A path for saving Kraken2's output")
 @click.option('--reads-ratio-th', type=float, default=0.01,
               help='The minimal % of reads that need to be mapped to a certain species for it to be included in the analysis')
-@click.option('--metadata-path', type=click.Path(),
-              default='UHGG-metadata.tsv')  # TODO figure out how do I give it the correct default path when I don't run GInGeR from the GInGeR dir
-@click.option('--references-dir', type=click.Path(), default='ginger_output/references_folder',
+@click.option('--metadata-path', type=click.Path(), default='UHGG-metadata.tsv', help='The path to the reference database metadata table')  # TODO figure out how do I give it the correct default path when I don't run GInGeR from the GInGeR dir
+@click.option('--references-dir', type=click.Path(), default='references_dir',
               help='The directory to which GInGeR will download missing reference genomes from UHGG. This folder can be shared for all runs of GInGer in order to avoid the same file being  downloaded and saved multiple times')
 @click.option('--merged-filtered-fasta', type=click.Path(), default=None,
               help='A reference database (using this will skip the stages of creating a sample specific database based on the species Kraken2) detected in the sample')
@@ -75,43 +72,48 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_d
     \b
     GENES_PATH - A fasta file with the genes of interest
 
+    \b
+    OUT_DIR - A path specifying where to save GInGeR's output
+
     """
-    # # filter reference database using kraken
-    # if merged_filtered_fasta is None:
-    #     merged_filtered_fasta = f'{references_dir}/merged_filtered_ref_db.fasta'
-    #     if kraken_output_path is None:
-    #         kraken_output_path = f'{out_dir}/kraken_output_file.tsv'
-    #     rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads,
-    #                                          kraken_output_path, reads_ratio_th,
-    #                                          metadata_path, references_dir,
-    #                                          merged_filtered_fasta)
-    # indexed_reference = sau.generate_index(merged_filtered_fasta, preset=sau.INDEXING_PRESET,
-    #                                        just_print=sau.JUST_PRINT_DEFAULT)
-    # # run assembly
-    # if not skip_assembly:
-    #     hau.run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, assembly_dir, threads)
-    # # run tool
-    #
-    # assembly_graph, genes_with_location_in_graph, records_dict = lg.locate_genes_in_graph(assembly_dir,
-    #                                                                                       gene_pident_filtering_th,
-    #                                                                                       genes_path, threads, out_dir)
-    # if genes_with_location_in_graph is None:
-    #     log.info('Genes of interest were not detected in assembly. No results will be generated')
-    #     return
-    #
-    # # get in and out paths
-    # in_paths_fasta = c.IN_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
-    # out_paths_fasta = c.OUT_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
-    # _ = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, records_dict,
-    #                                                           genes_with_location_in_graph, depth_limit,
-    #                                                           max_context_len, in_paths_fasta,
-    #                                                           out_paths_fasta)
+    # filter reference database using kraken
+    if merged_filtered_fasta is None:
+        merged_filtered_fasta = f'{references_dir}/merged_filtered_ref_db.fasta'
+        if kraken_output_path is None:
+            kraken_output_path = f'{out_dir}/kraken_output_file.tsv'
+        rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads,
+                                             kraken_output_path, reads_ratio_th,
+                                             metadata_path, references_dir,
+                                             merged_filtered_fasta)
+    indexed_reference = sau.generate_index(merged_filtered_fasta, preset=sau.INDEXING_PRESET,
+                                           just_print=sau.JUST_PRINT_DEFAULT)
+    # run assembly
+    if assembly_dir is None:
+        assembly_dir = f'{out_dir}/SPAdes',
+    if not skip_assembly:
+        hau.run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, assembly_dir, threads)
+    # run tool
+
+    assembly_graph, genes_with_location_in_graph, records_dict = lg.locate_genes_in_graph(assembly_dir,
+                                                                                          gene_pident_filtering_th,
+                                                                                          genes_path, threads, out_dir)
+    if genes_with_location_in_graph is None:
+        log.info('Genes of interest were not detected in assembly. No results will be generated')
+        return
+
+    # get in and out paths
+    in_paths_fasta = c.IN_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
+    out_paths_fasta = c.OUT_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
+    _ = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, records_dict,
+                                                              genes_with_location_in_graph, depth_limit,
+                                                              max_context_len, in_paths_fasta,
+                                                              out_paths_fasta)
     # map them to the reference
     in_contexts_to_bugs = c.IN_MAPPING_TO_BUGS_PATH_TEMPLATE.format(temp_folder=out_dir)
     out_contexts_to_bugs = c.OUT_MAPPING_TO_BUGS_PATH_TEMPLATE.format(temp_folder=out_dir)
-    #
-    # sau.map_in_and_out_contexts_to_ref(in_paths_fasta, out_paths_fasta, indexed_reference, in_contexts_to_bugs,
-    #                                    out_contexts_to_bugs, threads)
+
+    sau.map_in_and_out_contexts_to_ref(in_paths_fasta, out_paths_fasta, indexed_reference, in_contexts_to_bugs,
+                                       out_contexts_to_bugs, threads)
 
     # merge and get results
     genes_lengths = extract_genes_lengths(genes_path)
