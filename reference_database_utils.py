@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 TOOLS = '/sci/labs/morani/morani/icore-data/lab/Tools'
 KRAKEN_PATH = f'kraken2'
 KRAKEN_DB = f'{TOOLS}/kraken2_db/UnifiedHumanGastrointestinalGenome'
-KRAKEN_COMMAND = '{kraken_path} --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {output} --use-names'  # --report {report}
+KRAKEN_COMMAND = '{kraken_path} --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {output_path} --use-names'  # --report {report}
 KRAKEN_OUTPUT_HEADER = ['classified', 'read', 'genome', 'reads_len', 'mapping_str']
 
 READ_STATUS_INDEX = 0
@@ -21,9 +21,9 @@ SPECIES_NAME_INDEX = 2
 
 # TODO - write tests
 # TODO - make it possible to run this on a database different than UHGG
-def run_kraken(reads_1, reads_2, threads, output):
+def run_kraken(reads_1, reads_2, threads, output_path):
     command = KRAKEN_COMMAND.format(kraken_path=KRAKEN_PATH, kraken_db=KRAKEN_DB, reads_1=reads_1, reads_2=reads_2,
-                                    threads=threads, output=output)
+                                    threads=threads, output_path=output_path)
     log.info(f'running kraken: {command}')
     command_output = run(command, shell=True, capture_output=True)
     if command_output.returncode:
@@ -90,12 +90,15 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
     return merged_filtered_fasta
 
 
+
 @pu.step_timing
 def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_path, reads_ratio_th, metadata_path,
                                      references_folder, merged_filtered_fasta):
+
     pu.check_and_makedir(kraken_output_path)
     pu.check_and_make_dir_no_file_name(references_folder)
     run_kraken(reads_1, reads_2, threads, kraken_output_path)
     top_species = get_list_of_top_species_by_kraken(kraken_output_path, reads_ratio_th)
-    return generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path, references_folder,
+    generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path, references_folder,
                                                                merged_filtered_fasta)
+    return merged_filtered_fasta

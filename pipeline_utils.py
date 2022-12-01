@@ -1,8 +1,8 @@
 import os
-
 import logging
 import pandas as pd
 import timeit
+from collections import defaultdict
 
 RUNTIME_PRINTS_PATTERN = '$$$$$$$$$$'
 log = logging.getLogger(__name__)
@@ -14,6 +14,7 @@ def step_timing(func):
         func(*args)
         stop = timeit.default_timer()
         log.info(f'{RUNTIME_PRINTS_PATTERN} {func} took {(stop - start) / 60} minutes {RUNTIME_PRINTS_PATTERN}')
+
     return wrapper_lot_and_time
 
 
@@ -88,10 +89,6 @@ def get_contig_nodes_dict(assembly_graph_nodes, paths_path, keep_contigs_with_ga
     return contig_nodes_dict
 
 
-
-
-
-
 def get_sequence_overlap(seq_a, seq_b):
     ks = [55, 33, 21, 43]  # I added 43 because I found it myself. it didn't appear in the documentation
     for k in ks:
@@ -146,24 +143,26 @@ def is_similar_to_representatives(representatives, record, iou_th):
     return False
 
 
-def write_context_level_output_to_csv(output, csv_path):
-    output_lines = [
-        'gene,reference_contig,in_context,out_context,in_context_start,gene_start,gene_end,out_context_end,match_score\n']
+def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str):
+    results_dict = defaultdict(list)
     for gene_species_tuple, matches_list in output.items():
-        gene, species = gene_species_tuple
+        gene, reference = gene_species_tuple
         for match in matches_list:
-            in_context = match.in_path.query_name
-            out_context = match.out_path.query_name
-            in_context_start = match.in_path.bug_start
-            gene_start = match.start
-            gene_end = match.end
-            out_context_end = match.out_path.bug_end
-            match_score = match.match_score
-            output_lines.append(
-                f'{gene},{species},{in_context},{out_context},{in_context_start},{gene_start},{gene_end},{out_context_end},{match_score}\n')
+            results_dict['gene'].append(gene)
+            results_dict['reference'].append(reference)
+            results_dict['in_context'].append(match.in_path.query_name)
+            results_dict['out_context'].append(match.out_path.query_name)
+            results_dict['in_context_start'].append(match.in_path.bug_start)
+            results_dict['gene_start'].append(match.start)
+            results_dict['gene_end'].append(match.end)
+            results_dict['out_context_end'].append(match.out_path.bug_end)
+            results_dict['match_score'].append(match.match_score)
+            results_dict['output_lines'].append(match.match_score)
 
-    with open(csv_path, 'w') as f:
-        f.writelines(output_lines)
+    metadata_df = pd.read_csv(metadata_path, sep='\t')
+    results_df = pd.DataFrame(results_dict)
+    results_df['Genome'] = results_df['reference'].apply(lambda x: x.split('_')[0].split('.')[0])
+    results_df.merge().to_csv(csv_path, index=False)
 
 
 def aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path, metadata_path,
@@ -171,12 +170,15 @@ def aggregate_context_level_output_to_species_level_output_and_write_csv(context
     context_level_df = pd.read_csv(context_level_output_path)
     context_level_df['Genome'] = context_level_df['reference_contig'].apply(lambda x: x.split('_')[0].split('.')[0])
     metadata_df = pd.read_csv(metadata_path, sep='\t')
-    context_level_df_with_metadata = pd.merge(context_level_df, metadata_df[['Genome', 'Species_rep']], on='Genome',
+    # metadata_df['species'] = metadata_df.Lineage.apply(lambda x: x.split('s__')[-1])
+    context_level_df_with_metadata = pd.merge(context_level_df, metadata_df[['Genome', 'species']],
+                                              on='Genome',
                                               how='left')
-    genomes_per_species = metadata_df.Species_rep.value_counts()
-    agg_output = context_level_df_with_metadata.groupby(['gene', 'Species_rep']).aggregate(
+
+    genomes_per_species = metadata_df.species.value_counts()
+    agg_output = context_level_df_with_metadata.groupby(['gene', 'species']).aggregate(
         {'Genome': ['count'], 'match_score': ['max']})
     agg_output.columns = ['_'.join(col) for col in agg_output.columns.values]
-    agg_output = agg_output.merge(genomes_per_species, left_on='Species_rep', right_index=True, how='left')
-    agg_output['references_ratio'] = agg_output['Genome_count'] / agg_output['Species_rep']
+    agg_output = agg_output.merge(genomes_per_species, left_on='species', right_index=True, how='left')
+    agg_output['references_ratio'] = agg_output['Genome_count'] / agg_output['species']
     agg_output[['references_ratio', 'match_score_max']].to_csv(species_level_output_path)

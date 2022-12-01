@@ -105,19 +105,20 @@ def find_genes_in_contigs(temp_dir: str, genes_path: str, contigs_path: str, n_m
     genes_to_contigs_path = sau.map_genes_to_contexts(genes_path, contigs_path, genes_to_contigs_path,
                                                       nthreads=n_minimap_threads)
     genes_to_contigs = sau.read_and_filter_minimap_matches(mc.GeneContigMatch, genes_to_contigs_path,
-                                                           pident_filtering_th,
-                                                           verbose=True)
+                                                           pident_filtering_th)
     return genes_to_contigs
 
 
 def locate_genes_in_graph(assembly_dir: str, gene_pident_filtering_th: float, genes_path: str, n_minimap_threads: int,
-                          temp_folder: str):  # -> Tuple[networkx.DiGraph,??? ,???]
+                          temp_folder: str):  # -> Tuple[networkx.DiGraph,??? ,Dict[str, SeqIO.SeqRecord]]
     contigs_path = c.CONTIGS_PATH_TEMPLATE.format(assembly_dir=assembly_dir)
     assembly_graph_path = c.ASSEMBLY_GRAPH_PATH_TEMPLATE.format(assembly_dir=assembly_dir)
     nodes_with_edges_and_sequences = get_nodes_dict_from_fastg_file(assembly_graph_path)
 
     genes_to_contigs = find_genes_in_contigs(temp_folder, genes_path, contigs_path, n_minimap_threads,
                                              gene_pident_filtering_th)
+    if genes_to_contigs is None:
+        return None, None, None
 
     assembly_graph = pyfastg.parse_fastg(assembly_graph_path)
     genes_with_location_in_graph = get_genes_to_contigs_with_nodes_list(genes_to_contigs, assembly_graph,

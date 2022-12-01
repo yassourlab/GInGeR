@@ -148,23 +148,21 @@ def filter_contigs_in_bugs(df, query_field, pident_filtering_th, alignment_lengt
             df[f'matches_{query_field}_length_ratio'] > pident_filtering_th)]
 
 
-def read_and_filter_minimap_matches(match_object_constructor: callable, alignment_path, pident_filtering_th,
-                                    verbose=True):
-    # TODO - on one hand I want to use an iterator here. On the other hand, I need to close the file after I finih using it and the iterator is lazy. what's the better approach
+def read_and_filter_minimap_matches(match_object_constructor: callable, alignment_path: str,
+                                    pident_filtering_th: float):
     if os.path.getsize(alignment_path) == 0:
         return None
 
-    minimap_results = (match_object_constructor(gene_to_contig) for gene_to_contig in
-                       parse_paf(open(alignment_path, 'r')))
+    minimap_results = [match_object_constructor(gene_to_contig) for gene_to_contig in
+                       parse_paf(open(alignment_path, 'r'))]
 
     if log.level == logging.DEBUG:
-        minimap_results = list(minimap_results)
+        minimap_results = minimap_results
         log.debug(
             f'{dt.datetime.now()} {len(minimap_results)} alignments for {len(set([match.gene for match in minimap_results]))} genes were found in {alignment_path}')
-    filtered_minimap_results = (paf_line for paf_line in minimap_results if paf_line.match_score > pident_filtering_th)
+    filtered_minimap_results = [paf_line for paf_line in minimap_results if paf_line.match_score > pident_filtering_th]
 
     if log.level == logging.DEBUG:
-        filtered_minimap_results = list(filtered_minimap_results)
         log.debug(
             f'{dt.datetime.now()} {len(filtered_minimap_results)} alignments for {len(set([match.gene for match in filtered_minimap_results]))} genes were left after filtering ')
     return filtered_minimap_results

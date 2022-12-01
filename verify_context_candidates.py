@@ -43,8 +43,7 @@ def get_in_out_match(i, o, gene_length, minimal_gap_ratio, maximal_gap_ratio):
 
 def read_and_filter_path_matches_per_gene(match_object_constructor: callable, alignment_path, pident_filtering_th):
     parsed_as_iterator = sau.read_and_filter_minimap_matches(match_object_constructor, alignment_path,
-                                                             pident_filtering_th,
-                                                             False)
+                                                             pident_filtering_th)
     genes_to_matches = defaultdict(list)
     for match in parsed_as_iterator:
         genes_to_matches[(match.gene, match.bug)].append(match)
