@@ -47,6 +47,9 @@ Minimap2.
 `--reads-ratio-th` - A float in the range [0,1] specifying the minimal % of reads that need to be mapped to a certain
 species for it to be included in the analysis, default 0.01 (1%).
 
+`--max-species-representatives` - The maximal references per species that will be downloaded from UHGG and taken into
+account in the aggregation of results at the species level, defaults is 10.
+
 `--depth-limit` - An integer specifying The maximal depth for paths describing context candidates in the assembly graph.
 default is 12. Greater values can increase runtime and generate longer and lower certainty contexts. Smaller values can
 decrease runtime and generate shorter contexts with higher certainty.
@@ -122,7 +125,9 @@ Genome Length Lineage FTP_download species':
 - 'species' the species name of the given genome. Will be used when generating the outputs.
 
 ### Use GInGer's pipeline to filter and select the relevant species from your reference database
+
 TODO - missing this part
+
 # Dependencies (should all be automatically included in the conda environment)
 
 ### Python 3.10

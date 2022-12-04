@@ -90,15 +90,14 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
     return merged_filtered_fasta
 
 
-
 @pu.step_timing
 def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_path, reads_ratio_th, metadata_path,
-                                     references_folder, merged_filtered_fasta):
-
+                                     references_folder, merged_filtered_fasta,max_species_representatives):
     pu.check_and_makedir(kraken_output_path)
     pu.check_and_make_dir_no_file_name(references_folder)
     run_kraken(reads_1, reads_2, threads, kraken_output_path)
     top_species = get_list_of_top_species_by_kraken(kraken_output_path, reads_ratio_th)
     generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path, references_folder,
-                                                               merged_filtered_fasta)
+                                                               merged_filtered_fasta,
+                                                               max_refs_per_species=max_species_representatives)
     return merged_filtered_fasta

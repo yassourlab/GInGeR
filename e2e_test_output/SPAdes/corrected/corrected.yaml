@@ -1,0 +1,9 @@
+- "left reads":
+  - "/sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_test_output/SPAdes/corrected/ecoli_1K_1.fq.00.0_0.cor.fastq.gz"
+  "number": !!int "1"
+  "orientation": "fr"
+  "right reads":
+  - "/sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_test_output/SPAdes/corrected/ecoli_1K_2.fq.00.0_0.cor.fastq.gz"
+  "single reads":
+  - "/sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_test_output/SPAdes/corrected/ecoli_1K__unpaired.00.0_0.cor.fastq.gz"
+  "type": "paired-end"

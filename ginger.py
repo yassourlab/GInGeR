@@ -41,7 +41,10 @@ def extract_genes_lengths(genes_path):
 @click.option('--kraken-output-path', default=None, help="A path for saving Kraken2's output")
 @click.option('--reads-ratio-th', type=float, default=0.01,
               help='The minimal % of reads that need to be mapped to a certain species for it to be included in the analysis')
-@click.option('--metadata-path', type=click.Path(), default='UHGG-metadata.tsv', help='The path to the reference database metadata table')  # TODO figure out how do I give it the correct default path when I don't run GInGeR from the GInGeR dir
+@click.option('--max-species-representatives', type=int, default=100,
+              help='The maximal references per species that will be downloaded from UHGG and taken into account in the aggregation of results at the species level')
+@click.option('--metadata-path', type=click.Path(), default='UHGG-metadata.tsv',
+              help='The path to the reference database metadata table')  # TODO figure out how do I give it the correct default path when I don't run GInGeR from the GInGeR dir
 @click.option('--references-dir', type=click.Path(), default='references_dir',
               help='The directory to which GInGeR will download missing reference genomes from UHGG. This folder can be shared for all runs of GInGer in order to avoid the same file being  downloaded and saved multiple times')
 @click.option('--merged-filtered-fasta', type=click.Path(), default=None,
@@ -60,7 +63,7 @@ def extract_genes_lengths(genes_path):
 def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                    reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta,
                    genes_path, depth_limit, maximal_gap_ratio, max_context_len, gene_pident_filtering_th,
-                   paths_pident_filtering_th, skip_assembly):
+                   paths_pident_filtering_th, skip_assembly, max_species_representatives):
     """GInGeR - A tool for analyzing the genomic contexts of genes in metagenomic samples.
 
     \b
@@ -84,12 +87,12 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_d
         rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads,
                                              kraken_output_path, reads_ratio_th,
                                              metadata_path, references_dir,
-                                             merged_filtered_fasta)
+                                             merged_filtered_fasta, max_species_representatives)
     indexed_reference = sau.generate_index(merged_filtered_fasta, preset=sau.INDEXING_PRESET,
                                            just_print=sau.JUST_PRINT_DEFAULT)
     # run assembly
     if assembly_dir is None:
-        assembly_dir = f'{out_dir}/SPAdes',
+        assembly_dir = f'{out_dir}/SPAdes'
     if not skip_assembly:
         hau.run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, assembly_dir, threads)
     # run tool
@@ -123,7 +126,8 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_d
     species_level_output_path = c.SPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     pu.write_context_level_output_to_csv(results, context_level_output_path, metadata_path)
     pu.aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path, metadata_path,
-                                                                            species_level_output_path)
+                                                                            species_level_output_path,
+                                                                            max_species_representatives)
     log.info(
         f"GInGer's run completed successfully!\nContext-level output can be found here {context_level_output_path}, species-level output can be found here {species_level_output_path}")
 

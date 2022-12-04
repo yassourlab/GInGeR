@@ -149,7 +149,7 @@ def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str)
         gene, reference = gene_species_tuple
         for match in matches_list:
             results_dict['gene'].append(gene)
-            results_dict['reference'].append(reference)
+            results_dict['reference_contig'].append(reference)
             results_dict['in_context'].append(match.in_path.query_name)
             results_dict['out_context'].append(match.out_path.query_name)
             results_dict['in_context_start'].append(match.in_path.bug_start)
@@ -161,24 +161,25 @@ def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str)
 
     metadata_df = pd.read_csv(metadata_path, sep='\t')
     results_df = pd.DataFrame(results_dict)
-    results_df['Genome'] = results_df['reference'].apply(lambda x: x.split('_')[0].split('.')[0])
-    results_df.merge().to_csv(csv_path, index=False)
+    results_df['Genome'] = results_df['reference_contig'].apply(lambda x: x.split('_')[0].split('.')[0])
+    results_df.merge(metadata_df[['Genome', 'species']], on='Genome', how='left').to_csv(csv_path, index=False)
 
 
 def aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path, metadata_path,
-                                                                         species_level_output_path):
+                                                                         species_level_output_path,
+                                                                         max_species_representatives: int):
     context_level_df = pd.read_csv(context_level_output_path)
-    context_level_df['Genome'] = context_level_df['reference_contig'].apply(lambda x: x.split('_')[0].split('.')[0])
     metadata_df = pd.read_csv(metadata_path, sep='\t')
-    # metadata_df['species'] = metadata_df.Lineage.apply(lambda x: x.split('s__')[-1])
     context_level_df_with_metadata = pd.merge(context_level_df, metadata_df[['Genome', 'species']],
-                                              on='Genome',
+                                              on=['Genome', 'species'],
                                               how='left')
 
-    genomes_per_species = metadata_df.species.value_counts()
+    genomes_per_species = metadata_df.species.value_counts().to_frame().rename(columns={'species': 'species_instances'})
+    genomes_per_species['species_instances'] = genomes_per_species['species_instances'].apply(
+        lambda x: min(x, max_species_representatives))
     agg_output = context_level_df_with_metadata.groupby(['gene', 'species']).aggregate(
         {'Genome': ['count'], 'match_score': ['max']})
     agg_output.columns = ['_'.join(col) for col in agg_output.columns.values]
     agg_output = agg_output.merge(genomes_per_species, left_on='species', right_index=True, how='left')
-    agg_output['references_ratio'] = agg_output['Genome_count'] / agg_output['species']
-    agg_output[['references_ratio', 'match_score_max']].to_csv(species_level_output_path)
+    agg_output['references_ratio'] = agg_output['Genome_count'] / agg_output['species_instances']
+    agg_output[['references_ratio', 'match_score_max', 'species_instances']].to_csv(species_level_output_path)

@@ -1,4 +1,5 @@
-from subprocess import run
+from subprocess import run, Popen, PIPE
+import sys
 import pipeline_utils as pu
 import logging
 
@@ -17,7 +18,9 @@ def run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, output_f
                                          optional_long_reads=long_reads_str, output_folder=output_folder,
                                          threads=threads)
     log.info(f'running MetaSPAdes - {command}')
-    command_output = run(command, shell=True, capture_output=True)
-    if command_output.returncode:
-        raise Exception(f'Hybrid spades failed to run - {command_output}')
+    spades_process = Popen(command.split(' '), stdout=PIPE)
+    for output_char in iter(lambda: spades_process.stdout.read(1), b""):
+        sys.stdout.buffer.write(output_char)
+    # if command_output.returncode:
+    #     raise Exception(f'Hybrid spades failed to run - {command_output}')
     return output_folder
