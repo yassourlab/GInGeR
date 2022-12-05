@@ -1,6 +1,7 @@
-name: GInGeR-minimal
+name: ginger_env
 channels:
   - conda-forge
+  - bioconda
   - defaults
 dependencies:
   - python=3.10
@@ -11,6 +12,6 @@ dependencies:
   - pip=22.2.2
   - spades=3.15.5
   - click=8.0.4
+  - pyfastg=0.1.0
   - pip:
-    - pyfastg==0.1.0
     - readpaf==0.0.10
