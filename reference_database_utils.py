@@ -19,8 +19,7 @@ READ_STATUS_INDEX = 0
 SPECIES_NAME_INDEX = 2
 
 
-# TODO - write tests
-# TODO - make it possible to run this on a database different than UHGG
+# TODO do I need to constantly log minimap's output (see assembly_utils) or is it enough to just log it in the end
 def run_kraken(reads_1, reads_2, threads, output_path):
     command = KRAKEN_COMMAND.format(kraken_path=KRAKEN_PATH, kraken_db=KRAKEN_DB, reads_1=reads_1, reads_2=reads_2,
                                     threads=threads, output_path=output_path)
@@ -92,7 +91,7 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
 
 @pu.step_timing
 def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_path, reads_ratio_th, metadata_path,
-                                     references_folder, merged_filtered_fasta,max_species_representatives):
+                                     references_folder, merged_filtered_fasta, max_species_representatives):
     pu.check_and_makedir(kraken_output_path)
     pu.check_and_make_dir_no_file_name(references_folder)
     run_kraken(reads_1, reads_2, threads, kraken_output_path)

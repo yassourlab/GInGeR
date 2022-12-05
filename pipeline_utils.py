@@ -157,7 +157,6 @@ def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str)
             results_dict['gene_end'].append(match.end)
             results_dict['out_context_end'].append(match.out_path.bug_end)
             results_dict['match_score'].append(match.match_score)
-            results_dict['output_lines'].append(match.match_score)
 
     metadata_df = pd.read_csv(metadata_path, sep='\t')
     results_df = pd.DataFrame(results_dict)

@@ -8,9 +8,7 @@ import logging
 log = logging.getLogger(__name__)
 
 JUST_PRINT_DEFAULT = False
-# TODO add real logging
-# TODO maybe I should filter the alignments earlier?
-MINIMAP_PATH = 'minimap2'
+# TODO do I need to constantly log minimap's output (see assembly_utils) or is it enough to just log it in the end
 MINIMAP2_COMMAND = 'minimap2 -cx {preset} -t {nthreads} {target} {query} > {out_file} -P'
 MINIMAP2_INDEXING_COMMAND = 'minimap2 -x {preset} -d {index_file} {fasta_file}'
 CONTIGS_TO_BUGS_PRESET = 'asm20'

@@ -87,10 +87,33 @@ specific database based on the species Kraken2 detected in the sample.
 
 GInGeR's outputs two results files:
 
-1. context_level_matches.csv - the locations in the reference database that match the genomic contexts that were
-   detected in the assembly graph for the genes of interest. TODO - write in detail about the format
+1. context_level_matches.csv - a CSV specifying the locations in the reference database that match the genomic contexts
+   that were detected in the assembly graph for the genes of interest. The CSV columns are:
+    * gene - the gene of interest (name is taken from the fasta of genes given as input to the pipeline)
+    * reference_contig - the reference sequence (usually an assembly contig) where the context of gene in the sample was
+      matched
+    * in_context - the name of the incoming context that was matched (the equivalent sequence can be found in
+      all_in_paths.fasta)
+    * out_context - the name of the outgoing context that was matched (the equivalent sequence can be found in
+      all_out_paths.fasta)
+    * in_context_start - the start of the match of the incoming context to the reference sequence
+    * gene_start - the end of the match of the incoming context to the reference sequence (note that the gene is not
+      necessarily found there, this is the estimated start location of the gene)
+    * gene_end - the start of the match of the outgoing context to the reference sequence
+    * out_context_end - the end of the match of the outgoing context to the reference sequence
+    * match_score - the match score. Namely, the % of matching base-pairs between the genomic contexts and the reference
+      sequence
+    * Genome - the genome id as inferred from the reference_contig field
+    * species - the species name as inferred from UHGG-metadata.tsv
+
 2. species_level_matches.csv - an aggregation of the first output by gene and species, intending to summarize whether a
-   gene was detected on a certain species in the sample. TODO - write in detail about the format
+   gene was detected on a certain species in the sample. The CSV columns are:
+    * gene - the gene of interest as described for `context_level_output.csv`
+    * species - the species name as described for `context_level_output.csv`
+    * references_ratio - the % of instances of the species that included the gene (given as a ratio in the range [0,1])
+    * match_score_max - the maximal match score for the given gene and species
+    * species_instances - the number of instances of the given species taken into account in the calculation (determined
+      as the minimum between `--max-species-representatives` and the number of instances found in the UHGG database)
 
 # Reference database
 
@@ -128,7 +151,9 @@ Genome Length Lineage FTP_download species':
 
 TODO - missing this part
 
-# Dependencies (should all be automatically included in the conda environment)
+# Dependencies
+
+GInGeR requires a 64-bit Linux system and conda (or miniconda).
 
 ### Python 3.10
 
