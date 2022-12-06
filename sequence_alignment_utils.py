@@ -63,21 +63,24 @@ GT_ARGS_TO_BUGS_HEADER_CONVERSION = {
 
 
 def generate_index(fasta_file, preset=INDEXING_PRESET, just_print=JUST_PRINT_DEFAULT):
-    if fasta_file.endswith('fasta.gzip'):
+    if fasta_file.endswith('fasta.gz'):
+        index_file = fasta_file[:-len('fasta.gz')] + 'mmi'
+    elif fasta_file.endswith('fasta.gzip'):
         index_file = fasta_file[:-len('fasta.gzip')] + 'mmi'
     elif fasta_file.endswith('fasta'):
         index_file = fasta_file[:-len('fasta')] + 'mmi'
     else:
-        raise Exception('fasta file name should end with fasta.gzip or fasta')
+        raise Exception('fasta file name should end with fasta.gzip,  fasta.gz or fasta')
     command = MINIMAP2_INDEXING_COMMAND.format(preset=preset, index_file=index_file, fasta_file=fasta_file)
-    log.info(f'{dt.datetime.now()} running minimap2 indexing: {command}')
+    log.info(f'{dt.datetime.now()} running Minimap2 indexing: {command}')
     if just_print:
         return index_file
     command_output = run(command, shell=True, capture_output=True)
     if command_output.returncode:
-        logging.error(f'minimap2 stderr: {command_output.stderr}')
+        logging.error(f'Minimap2 stderr: {command_output.stderr}')
+        raise Exception('Minimap2 failed to run. GInGeR will abort.')
     else:
-        logging.info(f'minimap2 run successfully. stdout: {command_output.stdout}')
+        logging.info(f'Minimap2 run successfully. stdout: {command_output.stdout}')
     return index_file
 
 

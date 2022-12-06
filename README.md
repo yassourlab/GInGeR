@@ -14,7 +14,11 @@ species.
 1. Clone the repository using `git clone`.
 2. Use the conda environment file given in the repository to create GInGeR's conda
    environment `conda env create -f ginger.yml`.
-3. To verify your installation run the test `test_ginger.sh`.
+3. To verify your installation, activate the environment and run the simple end-to-end test:
+    * `conda activate ginger_env`
+    * `python3 ginger.py tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.fasta e2e_test_output --reads-ratio-th 0.1 --max-species-representatives 10`
+    * **Note that due to Kraken2's memory requirements, you'd need to allocate at least 16G of memory for the pipeline
+      to run successfully**.
 
 # Running GInGeR
 
@@ -25,7 +29,8 @@ addition to the short paired-end reads, it excepts long Oxford NanoPore reads (o
 
 ## GInGeR's command line application
 
-To run GInGeR, you can type:
+To run GInGeR, you can type (note that if you don't skip the database filtering step, you would need at least 16G of
+memory for the pipeline to run successfully):
 
 ``` bash
 python3 ginger.py <SHORT_READS_1> <SHORT_READS_2> <GENES_PATH> <OUT_DIR>

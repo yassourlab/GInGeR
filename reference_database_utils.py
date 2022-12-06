@@ -27,6 +27,7 @@ def run_kraken(reads_1, reads_2, threads, output_path):
     command_output = run(command, shell=True, capture_output=True)
     if command_output.returncode:
         log.error(command_output.stderr)
+        raise Exception('GInGeR failed to run Kraken2. The pipeline will abort')
     else:
         log.info(command_output.stdout)
 

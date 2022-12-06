@@ -1,7 +1,0 @@
-- "left reads":
-  - "/sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/tests/test_files/ecoli_1K_1.fq.gz"
-  "number": !!int "1"
-  "orientation": "fr"
-  "right reads":
-  - "/sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/tests/test_files/ecoli_1K_2.fq.gz"
-  "type": "paired-end"

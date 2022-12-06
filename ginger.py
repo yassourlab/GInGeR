@@ -5,7 +5,7 @@ from Bio import SeqIO
 
 import locating_genes_in_graph as lg
 import reference_database_utils as rdu
-import hybrid_assembly_utils as hau
+import assembly_utils as au
 import extract_contexts_candidates as ecc
 import sequence_alignment_utils as sau
 import verify_context_candidates as vcc
@@ -48,7 +48,7 @@ def extract_genes_lengths(genes_path):
 @click.option('--references-dir', type=click.Path(), default='references_dir',
               help='The directory to which GInGeR will download missing reference genomes from UHGG. This folder can be shared for all runs of GInGer in order to avoid the same file being  downloaded and saved multiple times')
 @click.option('--merged-filtered-fasta', type=click.Path(), default=None,
-              help='A reference database (using this will skip the stages of creating a sample specific database based on the species Kraken2) detected in the sample')
+              help='A fasta or fasta.gz file that will be used a reference database (using this will skip the stages of creating a sample specific database based on the species detected in the sample by Kraken2)')
 @click.option('--depth-limit', type=int, default=12,
               help='The maximal depth for paths describing context candidates in the assembly graph')
 @click.option('--maximal-gap-ratio', type=float, default=1.5,
@@ -94,7 +94,7 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_d
     if assembly_dir is None:
         assembly_dir = f'{out_dir}/SPAdes'
     if not skip_assembly:
-        hau.run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, assembly_dir, threads)
+        au.run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, assembly_dir, threads)
     # run tool
 
     assembly_graph, genes_with_location_in_graph, records_dict = lg.locate_genes_in_graph(assembly_dir,
@@ -129,7 +129,7 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_d
                                                                             species_level_output_path,
                                                                             max_species_representatives)
     log.info(
-        f"GInGer's run completed successfully!\nContext-level output can be found here {context_level_output_path}, species-level output can be found here {species_level_output_path}")
+        f"GInGer's run completed successfully!\nContext-level output can be found here: {context_level_output_path}, species-level output can be found here: {species_level_output_path}")
 
 
 if __name__ == "__main__":
