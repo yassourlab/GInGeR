@@ -1,5 +1,6 @@
 from subprocess import run
 from readpaf import parse_paf
+import pipeline_utils as pu
 import os
 import datetime as dt
 import logging
@@ -7,11 +8,9 @@ import logging
 log = logging.getLogger(__name__)
 
 JUST_PRINT_DEFAULT = False
-# TODO add real logging
-# TODO maybe I should filter the alignments earlier?
-MINIMAP_PATH = '/sci/labs/morani/morani/icore-data/lab/Tools/minimap2'
-MINIMAP2_COMMAND = MINIMAP_PATH + '/minimap2 -cx {preset} -t {nthreads} {target} {query} > {out_file} -P'
-MINIMAP2_INDEXING_COMMAND = MINIMAP_PATH+ '/minimap2 -x {preset} -d {index_file} {fasta_file}'
+# TODO do I need to constantly log minimap's output (see assembly_utils) or is it enough to just log it in the end
+MINIMAP2_COMMAND = 'minimap2 -cx {preset} -t {nthreads} {target} {query} > {out_file} -P'
+MINIMAP2_INDEXING_COMMAND = 'minimap2 -x {preset} -d {index_file} {fasta_file}'
 CONTIGS_TO_BUGS_PRESET = 'asm20'
 GENES_TO_CONTIGS_PRESET = 'asm20'
 ARGS_TO_REFERENCE_CONTIGS = 'asm20'
@@ -63,44 +62,36 @@ GT_ARGS_TO_BUGS_HEADER_CONVERSION = {
 }
 
 
-def check_and_makedir_with_file_name(path_with_file):
-    path = '/'.join(path_with_file.split('/')[:-1])
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-
-def check_and_make_dir(path):
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-
 def generate_index(fasta_file, preset=INDEXING_PRESET, just_print=JUST_PRINT_DEFAULT):
-    if fasta_file.endswith('fasta.gzip'):
+    if fasta_file.endswith('fasta.gz'):
+        index_file = fasta_file[:-len('fasta.gz')] + 'mmi'
+    elif fasta_file.endswith('fasta.gzip'):
         index_file = fasta_file[:-len('fasta.gzip')] + 'mmi'
     elif fasta_file.endswith('fasta'):
         index_file = fasta_file[:-len('fasta')] + 'mmi'
     else:
-        raise Exception('fasta file name should end with fasta.gzip or fasta')
+        raise Exception('fasta file name should end with fasta.gzip,  fasta.gz or fasta')
     command = MINIMAP2_INDEXING_COMMAND.format(preset=preset, index_file=index_file, fasta_file=fasta_file)
-    log.info(f'{dt.datetime.now()} running minimap2 indexing: {command}')
+    log.info(f'{dt.datetime.now()} running Minimap2 indexing: {command}')
     if just_print:
         return index_file
     command_output = run(command, shell=True, capture_output=True)
     if command_output.returncode:
-        logging.error(f'minimap2 stderr: {command_output.stderr}')
+        logging.error(f'Minimap2 stderr: {command_output.stderr}')
+        raise Exception('Minimap2 failed to run. GInGeR will abort.')
     else:
-        logging.info(f'minimap2 run successfully. stdout: {command_output.stdout}')
+        logging.info(f'Minimap2 run successfully. stdout: {command_output.stdout}')
     return index_file
 
 
-def map_contigs_to_bugs(contigs_path, reference_path, contigs_to_bugs_path,
-                        just_print=JUST_PRINT_DEFAULT, nthreads=N_THREADS_DEFAULT):
+def map_contexts_to_bugs(contigs_path, reference_path, contigs_to_bugs_path,
+                         just_print=JUST_PRINT_DEFAULT, nthreads=N_THREADS_DEFAULT):
     return _run_minimap2_paf(contigs_path, reference_path, CONTIGS_TO_BUGS_PRESET, contigs_to_bugs_path, just_print,
                              nthreads)
 
 
-def map_genes_to_contigs(genes_path, contigs_path, genes_to_contigs_path,
-                         just_print=JUST_PRINT_DEFAULT, nthreads=N_THREADS_DEFAULT):
+def map_genes_to_contexts(genes_path, contigs_path, genes_to_contigs_path,
+                          just_print=JUST_PRINT_DEFAULT, nthreads=N_THREADS_DEFAULT):
     return _run_minimap2_paf(genes_path, contigs_path, GENES_TO_CONTIGS_PRESET, genes_to_contigs_path, just_print,
                              nthreads)
 
@@ -113,7 +104,7 @@ def map_genes_to_reference(args_path, reference_path, genes_to_reference_path,
 
 def _run_minimap2_paf(query, target, preset, out_file, just_print=JUST_PRINT_DEFAULT, nthreads=1):
     command = MINIMAP2_COMMAND.format(preset=preset, target=target, query=query, out_file=out_file, nthreads=nthreads)
-    check_and_makedir_with_file_name(out_file)
+    pu.check_and_makedir(out_file)
     logging.info(f'running minimap2: {command}')
     if just_print:
         return out_file
@@ -158,22 +149,28 @@ def filter_contigs_in_bugs(df, query_field, pident_filtering_th, alignment_lengt
             df[f'matches_{query_field}_length_ratio'] > pident_filtering_th)]
 
 
-def read_and_filter_minimap_matches(match_object_constructor: callable, alignment_path, pident_filtering_th,
-                                    verbose=True):
+def read_and_filter_minimap_matches(match_object_constructor: callable, alignment_path: str,
+                                    pident_filtering_th: float):
     if os.path.getsize(alignment_path) == 0:
         return None
 
-    minimap_results = (match_object_constructor(gene_to_contig) for gene_to_contig in
-                       parse_paf(open(alignment_path, 'r')))
+    minimap_results = [match_object_constructor(gene_to_contig) for gene_to_contig in
+                       parse_paf(open(alignment_path, 'r'))]
 
     if log.level == logging.DEBUG:
-        minimap_results = list(minimap_results)
+        minimap_results = minimap_results
         log.debug(
             f'{dt.datetime.now()} {len(minimap_results)} alignments for {len(set([match.gene for match in minimap_results]))} genes were found in {alignment_path}')
-    filtered_minimap_results = (paf_line for paf_line in minimap_results if paf_line.match_score > pident_filtering_th)
+    filtered_minimap_results = [paf_line for paf_line in minimap_results if paf_line.match_score > pident_filtering_th]
 
     if log.level == logging.DEBUG:
-        filtered_minimap_results = list(filtered_minimap_results)
         log.debug(
             f'{dt.datetime.now()} {len(filtered_minimap_results)} alignments for {len(set([match.gene for match in filtered_minimap_results]))} genes were left after filtering ')
     return filtered_minimap_results
+
+
+@pu.step_timing
+def map_in_and_out_contexts_to_ref(in_paths_fasta, out_paths_fasta, reference_path, in_mapping_to_bugs_path,
+                                   out_mapping_to_bugs_path, n_minimap_threads):
+    map_contexts_to_bugs(in_paths_fasta, reference_path, in_mapping_to_bugs_path, nthreads=n_minimap_threads)
+    map_contexts_to_bugs(out_paths_fasta, reference_path, out_mapping_to_bugs_path, nthreads=n_minimap_threads)

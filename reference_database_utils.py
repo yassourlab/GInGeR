@@ -6,27 +6,28 @@ from glob import glob
 import urllib
 import gzip
 import logging
+import pipeline_utils as pu
 
 log = logging.getLogger(__name__)
 TOOLS = '/sci/labs/morani/morani/icore-data/lab/Tools'
-KRAKEN_PATH = f'{TOOLS}/kraken2/kraken2'
+KRAKEN_PATH = f'kraken2'
 KRAKEN_DB = f'{TOOLS}/kraken2_db/UnifiedHumanGastrointestinalGenome'
-KRAKEN_COMMAND = '{kraken_path} --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {output} --use-names'  # --report {report}
+KRAKEN_COMMAND = '{kraken_path} --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {output_path} --use-names'  # --report {report}
 KRAKEN_OUTPUT_HEADER = ['classified', 'read', 'genome', 'reads_len', 'mapping_str']
 
 READ_STATUS_INDEX = 0
 SPECIES_NAME_INDEX = 2
 
 
-# TODO - write tests
-# TODO - make it possible to run this on a database different than UHGG
-def run_kraken(reads_1, reads_2, threads, output):
+# TODO do I need to constantly log minimap's output (see assembly_utils) or is it enough to just log it in the end
+def run_kraken(reads_1, reads_2, threads, output_path):
     command = KRAKEN_COMMAND.format(kraken_path=KRAKEN_PATH, kraken_db=KRAKEN_DB, reads_1=reads_1, reads_2=reads_2,
-                                    threads=threads, output=output)
+                                    threads=threads, output_path=output_path)
     log.info(f'running kraken: {command}')
     command_output = run(command, shell=True, capture_output=True)
     if command_output.returncode:
         log.error(command_output.stderr)
+        raise Exception('GInGeR failed to run Kraken2. The pipeline will abort')
     else:
         log.info(command_output.stdout)
 
@@ -89,9 +90,14 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
     return merged_filtered_fasta
 
 
+@pu.step_timing
 def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_path, reads_ratio_th, metadata_path,
-                                     references_folder, merged_filtered_fasta):
+                                     references_folder, merged_filtered_fasta, max_species_representatives):
+    pu.check_and_makedir(kraken_output_path)
+    pu.check_and_make_dir_no_file_name(references_folder)
     run_kraken(reads_1, reads_2, threads, kraken_output_path)
     top_species = get_list_of_top_species_by_kraken(kraken_output_path, reads_ratio_th)
     generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path, references_folder,
-                                                               merged_filtered_fasta)
+                                                               merged_filtered_fasta,
+                                                               max_refs_per_species=max_species_representatives)
+    return merged_filtered_fasta
