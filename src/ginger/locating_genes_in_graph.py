@@ -5,7 +5,7 @@ import sequence_alignment_utils as sau
 import matches_classes as mc
 import constants as c
 from Bio import SeqIO
-from typing import Dict, Iterator, Tuple
+from typing import Dict, Iterator
 import networkx as nx
 
 log = logging.getLogger(__name__)

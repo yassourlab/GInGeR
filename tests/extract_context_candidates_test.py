@@ -1,8 +1,8 @@
 import unittest
-import extract_contexts_candidates as ecc
 import locating_genes_in_graph as lg
 import sequence_alignment_utils as sau
 import constants as c
+import extract_contexts_candidates as ecc
 import matches_classes as mc
 import pyfastg
 
