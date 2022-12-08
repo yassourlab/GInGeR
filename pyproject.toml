@@ -19,3 +19,6 @@ classifiers = [
 [project.urls]
 "Homepage" = "https://github.com/yassourlab/GInGeR"
 "Bug Tracker" = "https://github.com/yassourlab/GInGeR/issues"
+
+[project.scripts]
+ginger = 'src.ginger:run_ginger_e2e'
