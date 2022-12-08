@@ -1,6 +1,6 @@
 from subprocess import run, Popen, PIPE
 import sys
-import pipeline_utils as pu
+from ginger import pipeline_utils as pu
 import logging
 
 log = logging.getLogger(__name__)

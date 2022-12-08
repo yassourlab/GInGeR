@@ -2,9 +2,9 @@ import logging
 from collections import defaultdict
 import datetime as dt
 
-import sequence_alignment_utils as sau
-import matches_classes as mc
-import pipeline_utils as pu
+from ginger import sequence_alignment_utils as sau
+from ginger import matches_classes as mc
+from ginger import pipeline_utils as pu
 
 log = logging.getLogger(__name__)
 

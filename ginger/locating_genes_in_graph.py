@@ -1,9 +1,9 @@
 import pyfastg
-import pipeline_utils as pu
+from ginger import pipeline_utils as pu
 import logging
-import sequence_alignment_utils as sau
-import matches_classes as mc
-import constants as c
+from ginger import sequence_alignment_utils as sau
+from ginger import matches_classes as mc
+from ginger import constants as c
 from Bio import SeqIO
 from typing import Dict, Iterator
 import networkx as nx

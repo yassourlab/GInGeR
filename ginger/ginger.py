@@ -3,14 +3,14 @@ import logging
 import click
 from Bio import SeqIO
 
-import locating_genes_in_graph as lg
-import reference_database_utils as rdu
-import assembly_utils as au
-import extract_contexts_candidates as ecc
-import sequence_alignment_utils as sau
-import verify_context_candidates as vcc
-import pipeline_utils as pu
-import constants as c
+from ginger import locating_genes_in_graph as lg
+from ginger import reference_database_utils as rdu
+from ginger import assembly_utils as au
+from ginger import extract_contexts_candidates as ecc
+from ginger import sequence_alignment_utils as sau
+from ginger import verify_context_candidates as vcc
+from ginger import pipeline_utils as pu
+from ginger import constants as c
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)
