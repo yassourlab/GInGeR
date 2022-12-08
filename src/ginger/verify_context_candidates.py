@@ -1,16 +1,10 @@
-import math
 import logging
 from collections import defaultdict
-import pyfastg
 import datetime as dt
-import networkx as nx
 
-import extract_contexts_candidates as ecc
-
-import matches_classes as mc
 import sequence_alignment_utils as sau
+import matches_classes as mc
 import pipeline_utils as pu
-from typing import Dict, List, Tuple
 
 log = logging.getLogger(__name__)
 
