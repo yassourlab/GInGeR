@@ -1,5 +1,5 @@
 import networkx as nx
-import pipeline_utils as pu
+from ginger import pipeline_utils as pu
 import math
 import logging
 import datetime as dt

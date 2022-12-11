@@ -6,7 +6,7 @@ from glob import glob
 import urllib
 import gzip
 import logging
-import pipeline_utils as pu
+from ginger import pipeline_utils as pu
 
 log = logging.getLogger(__name__)
 TOOLS = '/sci/labs/morani/morani/icore-data/lab/Tools'

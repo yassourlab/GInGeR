@@ -1,5 +1,5 @@
 import unittest
-import src.ginger.pipeline_utils as pu
+import ginger.pipeline_utils as pu
 
 class MyTestCase(unittest.TestCase):
     def test_ginger_e2e_skip_kraken(self):

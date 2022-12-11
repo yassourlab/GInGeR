@@ -1,6 +1,6 @@
 from subprocess import run
 from readpaf import parse_paf
-import pipeline_utils as pu
+from ginger import pipeline_utils as pu
 import os
 import datetime as dt
 import logging
