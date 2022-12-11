@@ -21,4 +21,4 @@ classifiers = [
 "Bug Tracker" = "https://github.com/yassourlab/GInGeR/issues"
 
 [project.scripts]
-ginger_cli = 'ginger.ginger:run_ginger_e2e'
+ginger_cli = 'ginger.ginger_runner:run_ginger_e2e'
