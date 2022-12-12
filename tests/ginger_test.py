@@ -1,5 +1,5 @@
 import unittest
-import ginger
+from ginger import pipeline_utils as pu
 import pickle
 
 LAB = '/Volumes/netta.barak/lab'
@@ -20,11 +20,11 @@ class GingerTest(unittest.TestCase):
         with open('context_level_output.pkl', 'wb') as f:
             pickle.dump(test_dict, f)
 
-        ginger.write_context_level_output_to_csv(test_dict,
+        pu.write_context_level_output_to_csv(test_dict,
                                                  f'{LAB}/Projects/hybrid_assembler/GInGeR/test_outputs/context_level_output_test.csv')
 
     def test_aggregate_context_level_output_to_species_level_output_and_write_csv(self):
-        ginger.aggregate_context_level_output_to_species_level_output_and_write_csv(
+        pu.aggregate_context_level_output_to_species_level_output_and_write_csv(
             'test_files/context_level_output_test.csv', METADATA_PATH,
             f'{LAB}/Projects/hybrid_assembler/GInGeR/test_outputs/species_level_output_test.csv')
 

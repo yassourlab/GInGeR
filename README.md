@@ -12,17 +12,21 @@ species.
    installed, [follow the directions](https://docs.anaconda.com/anaconda/install/index.html) to install conda or
    miniconda (recommended).
 1. Clone the repository using `git clone`.
-2. Use the conda environment file given in the repository to create GInGeR's conda
-   environment `conda env create -f ginger.yml`.
-3. To verify your installation, activate the environment and run the simple end-to-end test:
+2. Use the conda environment file given in the repository to create and activate GInGeR's conda environment:
+    * `conda env create -f ginger.yml`.
     * `conda activate ginger_env`
-    * `python3 ginger.py tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.fasta e2e_test_output --reads-ratio-th 0.1 --max-species-representatives 10`
+3. install the ginger package on your conda env:
+    * `cd GInGeR`
+    * `python -m pip install .`
+4. To verify your installation run ginger on a test dataset:
+    * `run_ginger tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.fasta e2e_temp_output --max-species-representatives`
     * **Note that due to Kraken2's memory requirements, you'd need to allocate at least 16G of memory for the pipeline
-      to run successfully**.
+      to run successfully**. In case you would like to test ginger but skip the step using Kraken, you can
+      run: `run_ginger tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.fasta e2e_temp_output --merged-filtered-fasta tests/test_files/merged_filtered_ref_db.fasta.gz`
 
 # Running GInGeR
 
-## supported sequencing data types
+## Supported sequencing data types
 
 GInGer requires Illumina **paired-end** sequencing data in a fastq format (zipped fastq files are also excepted). In
 addition to the short paired-end reads, it excepts long Oxford NanoPore reads (optional).

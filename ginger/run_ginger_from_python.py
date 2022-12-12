@@ -1,4 +1,4 @@
-import ginger
+from ginger import ginger_runner
 import pickle
 
 if __name__ == "__main__":
@@ -30,11 +30,11 @@ if __name__ == "__main__":
     skip_reference_indexing = False
     skip_assembly = False
 
-    ginger_results = ginger.run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads,
-                                           kraken_output_path,
-                                           reads_ratio_th, metadata_path, references_folder, merged_filtered_fasta,
-                                           genes_path, depth_limit, maximal_gap_ratio, max_context_len,
-                                           gene_pident_filtering_th,
-                                           paths_pident_filtering_th, skip_assembly)
+    ginger_results = ginger_runner.run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads,
+                                               kraken_output_path,
+                                               reads_ratio_th, metadata_path, references_folder, merged_filtered_fasta,
+                                               genes_path, depth_limit, maximal_gap_ratio, max_context_len,
+                                               gene_pident_filtering_th,
+                                               paths_pident_filtering_th, skip_assembly)
     with open(f'{out_dir}/output_pickled.pkl', 'wb') as pickle_out_file:
         pickle.dump(ginger_results, pickle_out_file)
