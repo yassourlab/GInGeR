@@ -1,4 +1,4 @@
-import verify_context_candidates as pcc
+from ginger import verify_context_candidates as pcc
 from Bio import SeqIO
 
 

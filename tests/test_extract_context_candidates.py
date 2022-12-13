@@ -1,9 +1,9 @@
 import unittest
-import locating_genes_in_graph as lg
-import sequence_alignment_utils as sau
-import constants as c
-import extract_contexts_candidates as ecc
-import matches_classes as mc
+from ginger import locating_genes_in_graph as lg
+from ginger import sequence_alignment_utils as sau
+from ginger import constants as c
+from ginger import extract_contexts_candidates as ecc
+from ginger import matches_classes as mc
 import pyfastg
 
 

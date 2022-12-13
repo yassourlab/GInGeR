@@ -1,6 +1,6 @@
 import unittest
-import sequence_alignment_utils as sau
-import matches_classes as mc
+from ginger import sequence_alignment_utils as sau
+from ginger import matches_classes as mc
 
 
 class MyTestCase(unittest.TestCase):

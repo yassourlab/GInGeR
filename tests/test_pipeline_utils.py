@@ -1,5 +1,5 @@
 import unittest
-import pipeline_utils as pu
+from ginger import pipeline_utils as pu
 
 
 class MyTestCase(unittest.TestCase):

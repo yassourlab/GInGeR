@@ -1,5 +1,5 @@
 import unittest
-import locating_genes_in_graph as lg
+from ginger import locating_genes_in_graph as lg
 
 ASSEMBLY_DIR = 'test_files/assembly_dir'
 GENE_PIDENT_FILTERING_TH = 0.9
