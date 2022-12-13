@@ -44,7 +44,8 @@ def extract_genes_lengths(genes_path):
               help='The minimal % of reads that need to be mapped to a certain species for it to be included in the analysis')
 @click.option('--max-species-representatives', type=int, default=100,
               help='The maximal references per species that will be downloaded from UHGG and taken into account in the aggregation of results at the species level')
-@click.option('--metadata-path', type=click.Path(), default='ginger/UHGG-metadata.tsv',
+@click.option('--metadata-path', type=click.Path(),
+              default=os.path.join(os.path.dirname(__file__), 'UHGG-metadata.tsv'),
               help='The path to the reference database metadata table')  # TODO figure out how do I give it the correct default path when I don't run GInGeR from the GInGeR dir
 @click.option('--references-dir', type=click.Path(), default='references_dir',
               help='The directory to which GInGeR will download missing reference genomes from UHGG. This folder can be shared for all runs of GInGer in order to avoid the same file being  downloaded and saved multiple times')
