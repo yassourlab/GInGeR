@@ -1,0 +1,36 @@
+Command line: /cs/usr/netta.barak/miniconda3/envs/ginger_env/bin/spades.py	--meta	-1	/sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/tests/test_files/ecoli_1K_1.fq.gz	-2	/sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/tests/test_files/ecoli_1K_2.fq.gz	-o	/sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes	-t	1	
+
+System information:
+  SPAdes version: 3.15.5
+  Python version: 3.10.8
+  OS: Linux-5.10.104-aufs-3-x86_64-with-glibc2.28
+
+Output dir: /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes
+Mode: read error correction and assembling
+Debug mode is turned OFF
+
+Dataset parameters:
+  Metagenomic mode
+  Reads:
+    Library number: 1, library type: paired-end
+      orientation: fr
+      left reads: ['/sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/tests/test_files/ecoli_1K_1.fq.gz']
+      right reads: ['/sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/tests/test_files/ecoli_1K_2.fq.gz']
+      interlaced reads: not specified
+      single reads: not specified
+      merged reads: not specified
+Read error correction parameters:
+  Iterations: 1
+  PHRED offset will be auto-detected
+  Corrected reads will be compressed
+Assembly parameters:
+  k: [21, 33, 55]
+  Repeat resolution is enabled
+  Mismatch careful mode is turned OFF
+  MismatchCorrector will be SKIPPED
+  Coverage cutoff is turned OFF
+Other parameters:
+  Dir for temp files: /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/tmp
+  Threads: 1
+  Memory limit (in Gb): 250
+

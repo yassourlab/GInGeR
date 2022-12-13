@@ -1,0 +1,144 @@
+- STAGE: Before start
+  args: []
+  config_dir: ''
+  del_after: []
+  output_files: []
+  path: 'true'
+  short_name: before_start
+- STAGE: Read error correction
+  args: []
+  config_dir: ''
+  del_after: []
+  output_files: []
+  path: 'true'
+  short_name: ec_start
+- STAGE: Read error correction
+  args:
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/corrected/configs/config.info
+  config_dir: corrected
+  del_after:
+  - tmp/hammer_x4xcubxv
+  output_files:
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/corrected/corrected.yaml
+  path: /cs/usr/netta.barak/miniconda3/envs/ginger_env/bin/spades-hammer
+  short_name: ec_runtool
+- STAGE: corrected reads compression
+  args:
+  - /cs/usr/netta.barak/miniconda3/envs/ginger_env/share/spades/spades_pipeline/scripts/compress_all.py
+  - --input_file
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/corrected/corrected.yaml
+  - --ext_python_modules_home
+  - /cs/usr/netta.barak/miniconda3/envs/ginger_env/share/spades
+  - --max_threads
+  - '1'
+  - --output_dir
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/corrected
+  - --gzip_output
+  config_dir: ''
+  del_after: []
+  output_files: []
+  path: /cs/usr/netta.barak/miniconda3/envs/ginger_env/bin/python
+  short_name: ec_compress
+- STAGE: Read error correction
+  args: []
+  config_dir: ''
+  del_after: []
+  output_files: []
+  path: 'true'
+  short_name: ec_finish
+- STAGE: Assembling
+  args: []
+  config_dir: ''
+  del_after: []
+  output_files: []
+  path: 'true'
+  short_name: as_start
+- STAGE: K21
+  args:
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K21/configs/config.info
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K21/configs/mda_mode.info
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K21/configs/meta_mode.info
+  config_dir: K21
+  del_after: []
+  output_files: []
+  path: /cs/usr/netta.barak/miniconda3/envs/ginger_env/bin/spades-core
+  short_name: k21
+- STAGE: K33
+  args:
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K33/configs/config.info
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K33/configs/mda_mode.info
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K33/configs/meta_mode.info
+  config_dir: K33
+  del_after: []
+  output_files: []
+  path: /cs/usr/netta.barak/miniconda3/envs/ginger_env/bin/spades-core
+  short_name: k33
+- STAGE: K55
+  args:
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K55/configs/config.info
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K55/configs/mda_mode.info
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K55/configs/meta_mode.info
+  config_dir: K55
+  del_after: []
+  output_files: []
+  path: /cs/usr/netta.barak/miniconda3/envs/ginger_env/bin/spades-core
+  short_name: k55
+- STAGE: Copy files
+  args:
+  - /cs/usr/netta.barak/miniconda3/envs/ginger_env/share/spades/spades_pipeline/scripts/copy_files.py
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K55/before_rr.fasta
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/before_rr.fasta
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K55/assembly_graph_after_simplification.gfa
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/assembly_graph_after_simplification.gfa
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K55/final_contigs.fasta
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/contigs.fasta
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K55/first_pe_contigs.fasta
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/first_pe_contigs.fasta
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K55/strain_graph.gfa
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/strain_graph.gfa
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K55/scaffolds.fasta
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/scaffolds.fasta
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K55/scaffolds.paths
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/scaffolds.paths
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K55/assembly_graph_with_scaffolds.gfa
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/assembly_graph_with_scaffolds.gfa
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K55/assembly_graph.fastg
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/assembly_graph.fastg
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/K55/final_contigs.paths
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/contigs.paths
+  config_dir: ''
+  del_after:
+  - .bin_reads
+  - tmp/spades_dn_64e7d
+  output_files: []
+  path: /cs/usr/netta.barak/miniconda3/envs/ginger_env/bin/python
+  short_name: copy_files
+- STAGE: Assembling
+  args: []
+  config_dir: ''
+  del_after: []
+  output_files: []
+  path: 'true'
+  short_name: as_finish
+- STAGE: Breaking scaffolds
+  args:
+  - /cs/usr/netta.barak/miniconda3/envs/ginger_env/share/spades/spades_pipeline/scripts/breaking_scaffolds_script.py
+  - --result_scaffolds_filename
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/scaffolds.fasta
+  - --misc_dir
+  - /sci/labs/morani/morani/icore-data/lab/Projects/hybrid_assembler/GInGeR/e2e_temp_output/SPAdes/misc
+  - --threshold_for_breaking_scaffolds
+  - '3'
+  config_dir: ''
+  del_after: []
+  output_files: []
+  path: /cs/usr/netta.barak/miniconda3/envs/ginger_env/bin/python
+  short_name: bs
+- STAGE: Terminate
+  args: []
+  config_dir: ''
+  del_after:
+  - configs
+  output_files: []
+  path: 'true'
+  short_name: terminate

@@ -1,6 +1,5 @@
 from subprocess import run, Popen, PIPE
 import sys
-from ginger import pipeline_utils as pu
 import logging
 
 log = logging.getLogger(__name__)
@@ -8,7 +7,6 @@ META_SPADES_COMMAND = "spades.py --meta -1 {short_reads_1} -2 {short_reads_2} {o
 OPTIONAL_LONG_READS_ADDITION = "--nanopore {long_reads} "
 
 
-@pu.step_timing
 def run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, output_folder, threads):
     long_reads_str = ''
     if long_reads:

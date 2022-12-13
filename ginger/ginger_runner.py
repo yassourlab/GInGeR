@@ -2,6 +2,7 @@ import sys
 import logging
 import click
 from Bio import SeqIO
+import os
 
 from ginger import locating_genes_in_graph as lg
 from ginger import reference_database_utils as rdu

@@ -1,0 +1,9 @@
+gene,reference_contig,in_context,out_context,in_context_start,gene_start,gene_end,out_context_end,match_score,Genome,species
+test_gene,MGYG000029367_1,test_gene_nodes_5+_path_5+,test_gene_nodes_5+_path_5+,3784179,3784578,3784778,3785178,0.98625,MGYG000029367,Escherichia coli_D
+test_gene,MGYG000175483_1,test_gene_nodes_5+_path_5+,test_gene_nodes_5+_path_5+,3961264,3961064,3961264,3961064,0.99,MGYG000175483,Escherichia coli_D
+test_gene,MGYG000222001_62,test_gene_nodes_5+_path_5+,test_gene_nodes_5+_path_5+,5289,5089,5289,5089,0.99,MGYG000222001,Escherichia coli_D
+test_gene,MGYG000005504.fa_1,test_gene_nodes_5+_path_5+,test_gene_nodes_5+_path_5+,239147,238947,239147,238947,0.97625,MGYG000005504,Escherichia coli_D
+test_gene,MGYG000136185_1,test_gene_nodes_5+_path_5+,test_gene_nodes_5+_path_5+,4425287,4425087,4425287,4425087,0.9775,MGYG000136185,Escherichia coli_D
+test_gene,MGYG000132142_114,test_gene_nodes_5+_path_5+,test_gene_nodes_5+_path_5+,15092,14892,15092,14892,0.9775,MGYG000132142,Escherichia coli_D
+test_gene,MGYG000260594_1,test_gene_nodes_5+_path_5+,test_gene_nodes_5+_path_5+,5078172,5077972,5078172,5077972,0.9775,MGYG000260594,Escherichia coli_D
+test_gene,MGYG000273917_1,test_gene_nodes_5+_path_5+,test_gene_nodes_5+_path_5+,5079933,5079733,5079933,5079733,0.98125,MGYG000273917,Escherichia coli_D
