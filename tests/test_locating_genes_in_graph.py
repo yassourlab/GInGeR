@@ -10,5 +10,6 @@ class LocatingGenesInGraphTest(unittest.TestCase):
         nodes_with_edges_and_sequences = lg.get_nodes_dict_from_fastg_file('test_files/SPAdes/assembly_graph.fastg')
         self.assertEqual(len(nodes_with_edges_and_sequences), 2)
 
+
 if __name__ == '__main__':
     unittest.main()
