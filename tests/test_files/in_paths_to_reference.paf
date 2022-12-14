@@ -1,0 +1,2 @@
+test_gene_nodes_5+_path_5+	400	0	400	-	MGYG000260594_1	5942969	5078172	5078572	395	400	0	NM:i:5	ms:i:375	AS:i:375	nn:i:0	tp:A:S	cm:i:53	s1:i:348	de:f:0.0125	rl:i:0	cg:Z:400M
+test_gene_nodes_5+_path_5+	400	3	400	-	MGYG000077121_281	95733	69795	70191	382	397	0	NM:i:15	ms:i:318	AS:i:318	nn:i:0	tp:A:S	cm:i:44	s1:i:308	de:f:0.0378	rl:i:0	cg:Z:90M1I306M

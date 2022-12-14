@@ -4,7 +4,7 @@ import os
 from ginger import pipeline_utils as pu
 
 
-class MyTestCase(unittest.TestCase):
+class PipelineUtilsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.context_level_output_path = 'test_files/context_level_matches.csv'

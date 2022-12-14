@@ -14,7 +14,7 @@ def run_meta_or_hybrid_spades_mock(short_reads_1, short_reads_2, long_reads, out
     return output_folder
 
 
-class MyTestCase(unittest.TestCase):
+class GingerRunnerTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -23,6 +23,7 @@ class MyTestCase(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         rmtree(cls.ginger_out_dir)
+        os.remove('test_files/merged_filtered_ref_db.mmi')
 
     @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
     def test_ginger_e2e_skip_kraken(self):
