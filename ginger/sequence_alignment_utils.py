@@ -153,9 +153,8 @@ def read_and_filter_minimap_matches(match_object_constructor: callable, alignmen
                                     pident_filtering_th: float):
     if os.path.getsize(alignment_path) == 0:
         return None
-
-    minimap_results = [match_object_constructor(gene_to_contig) for gene_to_contig in
-                       parse_paf(open(alignment_path, 'r'))]
+    with open(alignment_path, 'r') as f:
+        minimap_results = [match_object_constructor(gene_to_contig) for gene_to_contig in parse_paf(f)]
 
     if log.level == logging.DEBUG:
         minimap_results = minimap_results

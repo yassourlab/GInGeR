@@ -11,10 +11,10 @@ log = logging.getLogger(__name__)
 def step_timing(func):
     def wrapper_lot_and_time(*args):
         start = timeit.default_timer()
-        func(*args)
+        func_return_vals = func(*args)
         stop = timeit.default_timer()
         log.info(f'{RUNTIME_PRINTS_PATTERN} {func} took {(stop - start) / 60} minutes {RUNTIME_PRINTS_PATTERN}')
-
+        return func_return_vals
     return wrapper_lot_and_time
 
 

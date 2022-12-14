@@ -5,19 +5,17 @@ from shutil import rmtree
 from click.testing import CliRunner
 from ginger.ginger_runner import run_ginger_e2e
 import os
-from typing import List
 
 SPADES_OUTPUT = 'test_files/SPAdes'
 
 
 def run_meta_or_hybrid_spades_mock(short_reads_1, short_reads_2, long_reads, output_folder, threads):
     copy_tree('test_files/SPAdes', output_folder)
-    # os.symlink('../ginger/UHGG-metadata.tsv', 'UHGG-metadata.tsv')
-
     return output_folder
 
 
 class MyTestCase(unittest.TestCase):
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.ginger_out_dir = 'e2e_test_output_skip_kraken'
@@ -25,7 +23,6 @@ class MyTestCase(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         rmtree(cls.ginger_out_dir)
-        # os.unlink('UHGG-metadata.tsv')
 
     @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
     def test_ginger_e2e_skip_kraken(self):

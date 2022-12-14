@@ -1,37 +1,61 @@
 import unittest
-import locating_genes_in_graph as lg
-import sequence_alignment_utils as sau
-import constants as c
-import extract_contexts_candidates as ecc
-import matches_classes as mc
-import pyfastg
+from shutil import rmtree
+import pickle
+import os
+
+import ginger.extract_contexts_candidates as ecc
 
 
 class TestExtractContextsCandidates(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.test_outputs_dir = 'extraction_candidates_tests_output'
+        cls.in_paths_fasta = f'{cls.test_outputs_dir}/test_in_paths_fasta.fasta'
+        cls.out_paths_fasta = f'{cls.test_outputs_dir}/test_out_paths_fasta.fasta'
+        os.mkdir(cls.test_outputs_dir)
+        cls.context_len = 100
+
+    @classmethod
+    def tearDownClass(cls):
+        pass
+        rmtree(cls.test_outputs_dir)
+
     def test_extract_all_in_out_paths_and_write_them_to_fastas(self):
-        # TODO - you are here - find this bug
-        # out_dir = 'test_outputs'
-        # assembly_graph_path = 'assembly_dir/assembly_graph.fastg'
-        out_dir = '/ginger_output_'
-        assembly_dir = '/ginger_output_/SPAdes'
-        assembly_graph_path = f'{assembly_dir}/assembly_graph.fastg'
-        genes_to_contigs_path = '/ginger_output_/genes_to_contigs.paf'
-        assembly_graph = pyfastg.parse_fastg(assembly_graph_path)
-        nodes_with_edges_and_sequences = lg.get_nodes_dict_from_fastg_file(assembly_graph_path)
-        genes_to_contigs = sau.read_and_filter_minimap_matches(mc.GeneContigMatch, genes_to_contigs_path,
-                                                               0.9)
-        genes_with_location_in_graph = lg.get_genes_to_contigs_with_nodes_list(genes_to_contigs, assembly_graph,
-                                                                               nodes_with_edges_and_sequences,
-                                                                               assembly_dir)
-        in_paths_fasta = c.IN_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
-        out_paths_fasta = c.OUT_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
+        with open('test_files/assembly_graph.pkl', 'rb') as f:
+            assembly_graph = pickle.load(f)
+        with open('test_files/nodes_with_edges_and_sequences.pkl', 'rb') as f:
+            nodes_with_edges_and_sequences = pickle.load(f)
+        with open('test_files/genes_with_location_in_graph.pkl', 'rb') as f:
+            genes_with_location_in_graph = pickle.load(f)
+
         gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                                              nodes_with_edges_and_sequences,
                                                                              genes_with_location_in_graph,
                                                                              12,
-                                                                             2500,
-                                                                             in_paths_fasta, out_paths_fasta)
-        print(gene_lengths)
+                                                                             self.context_len,
+                                                                             self.in_paths_fasta, self.out_paths_fasta)
+        self.assertTrue(os.path.exists(self.in_paths_fasta))
+        self.assertTrue(os.path.exists(self.out_paths_fasta))
+
+        with open(self.in_paths_fasta) as f:
+            lines = f.readlines()
+            self.assertListEqual(lines,
+                                 ['>test_gene_nodes_5+_path_5+\n',
+                                  'CTTTTTTTTTCGACCAAAGGTAACGAGGTAACAACCATGCGAGTGTTGAAGTTCGGCGGTACATCAGTGGCAAATGCAGAACGTTTTCTGCGTGTTGCCG\n'],
+                                 'Wrong incoming contexts extracted')
+            # the -1 is beacuse of the \n in the end of the line
+            self.assertEqual(len(lines[1]) - 1, self.context_len, 'Incoming context are not of correct length')
+
+        with open(self.out_paths_fasta) as f:
+            lines = f.readlines()
+
+            self.assertListEqual(lines,
+                                 ['>test_gene_nodes_5+_path_5+\n',
+                                  'CAATTGAAAACTTTCGTCGATCAGGAATTTGCCCAAATAAAACATGTCCTGCATGGCATTAGTTTGTTGGGGCAGTGCCCGGATAGCATCAACGCTGCGC\n'],
+                                 'Wrong outgoing contexts extracted')
+            self.assertEqual(len(lines[1]) - 1, self.context_len, 'Outgoing context are not of correct length')
+
+        self.assertDictEqual(gene_lengths, {'test_gene': 200}, 'Genes length dictionary is incorrect')
 
 
 if __name__ == '__main__':
