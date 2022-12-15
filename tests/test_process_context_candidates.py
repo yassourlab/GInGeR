@@ -4,12 +4,15 @@ import pickle
 
 from ginger import verify_context_candidates as pcc
 
+from tests import helper
+
+TEST_FILES = helper.get_filedir()
 
 class ProcessContextCandidatesTest(unittest.TestCase):
 
     def test_process_in_and_out_paths_to_results(self):
-        in_path_mapping_to_bugs = f'test_files/in_paths_to_reference.paf'
-        out_path_mapping_to_bugs = f'test_files/out_paths_to_reference.paf'
+        in_path_mapping_to_bugs = f'{TEST_FILES}/in_paths_to_reference.paf'
+        out_path_mapping_to_bugs = f'{TEST_FILES}/out_paths_to_reference.paf'
 
         genes_lengths = {'test_gene': 200}
         paths_pident_filtering_th = 0.9
@@ -20,7 +23,7 @@ class ProcessContextCandidatesTest(unittest.TestCase):
                                                                                paths_pident_filtering_th,
                                                                                minimal_gap_ratio, maximal_gap_ratio)
 
-        with open('test_files/matches_per_gene_no_overlaps.pkl', 'rb') as f:
+        with open(f'{TEST_FILES}/matches_per_gene_no_overlaps.pkl', 'rb') as f:
             expected_matches_per_gene_no_overlaps = pickle.load(f)
         self.assertEqual(len(matches_per_gene_no_overlaps), len(expected_matches_per_gene_no_overlaps))
         self.assertListEqual(list(matches_per_gene_no_overlaps.keys()),
