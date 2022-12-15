@@ -21,6 +21,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
         rmtree(cls.test_outputs_dir)
 
     def test_extract_all_in_out_paths_and_write_them_to_fastas(self):
+        print('os.getcwd()', os.getcwd())
         with open('data/assembly_graph.pkl', 'rb') as f:
             assembly_graph = pickle.load(f)
         with open('data/nodes_with_edges_and_sequences.pkl', 'rb') as f:

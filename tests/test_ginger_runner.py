@@ -6,8 +6,6 @@ from click.testing import CliRunner
 from ginger.ginger_runner import run_ginger_e2e
 import os
 
-SPADES_OUTPUT = 'test_files/SPAdes'
-
 
 def run_meta_or_hybrid_spades_mock(short_reads_1, short_reads_2, long_reads, output_folder, threads):
     copy_tree('data/SPAdes', output_folder)
@@ -29,7 +27,7 @@ class GingerRunnerTest(unittest.TestCase):
     def test_ginger_e2e_skip_kraken(self):
         runner = CliRunner()
         result = runner.invoke(run_ginger_e2e,
-                               f'test_files/ecoli_1K_1.fq.gz test_files/ecoli_1K_2.fq.gz test_files/test_gene.fasta {self.ginger_out_dir} --merged-filtered-fasta test_files/merged_filtered_ref_db.fasta.gz --metadata-path ../ginger/UHGG-metadata.tsv --max-species-representatives 1'.split(
+                               f'data/ecoli_1K_1.fq.gz data/ecoli_1K_2.fq.gz data/test_gene.fasta {self.ginger_out_dir} --merged-filtered-fasta data/merged_filtered_ref_db.fasta.gz --metadata-path ../ginger/UHGG-metadata.tsv --max-species-representatives 1'.split(
                                    ' '))
         self.assertEqual(result.exit_code, 0, str(result.exception))
         self.assertTrue(os.path.exists(f'{self.ginger_out_dir}/context_level_matches.csv'))
