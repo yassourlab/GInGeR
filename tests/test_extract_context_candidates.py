@@ -2,6 +2,7 @@ import unittest
 from shutil import rmtree
 import pickle
 import os
+from tests import helper
 
 import ginger.extract_contexts_candidates as ecc
 
@@ -9,6 +10,7 @@ import ginger.extract_contexts_candidates as ecc
 class TestExtractContextsCandidates(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
+        cls.data_dir = helper.get_test_data_dir()
         cls.test_outputs_dir = 'extraction_candidates_tests_output'
         cls.in_paths_fasta = f'{cls.test_outputs_dir}/test_in_paths_fasta.fasta'
         cls.out_paths_fasta = f'{cls.test_outputs_dir}/test_out_paths_fasta.fasta'
@@ -22,11 +24,11 @@ class TestExtractContextsCandidates(unittest.TestCase):
 
     def test_extract_all_in_out_paths_and_write_them_to_fastas(self):
         print('os.getcwd()', os.getcwd())
-        with open('data/assembly_graph.pkl', 'rb') as f:
+        with open(f'{self.data_dir}/assembly_graph.pkl', 'rb') as f:
             assembly_graph = pickle.load(f)
-        with open('data/nodes_with_edges_and_sequences.pkl', 'rb') as f:
+        with open(f'{self.data_dir}/nodes_with_edges_and_sequences.pkl', 'rb') as f:
             nodes_with_edges_and_sequences = pickle.load(f)
-        with open('data/genes_with_location_in_graph.pkl', 'rb') as f:
+        with open(f'{self.data_dir}/genes_with_location_in_graph.pkl', 'rb') as f:
             genes_with_location_in_graph = pickle.load(f)
 
         gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,

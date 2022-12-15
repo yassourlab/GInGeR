@@ -1,11 +1,12 @@
 import unittest
 from ginger import sequence_alignment_utils as sau
 from ginger import matches_classes as mc
+from tests.helper import get_test_data_dir
 
 
 class SequenceAlignmentUtilsTest(unittest.TestCase):
     def test_read_and_filter_minimap_matches(self):
-        genes_to_contigs_path = 'data/genes_to_contigs.paf'
+        genes_to_contigs_path = f'{get_test_data_dir()}/genes_to_contigs.paf'
         pident_filtering_th = 0.9
         genes_to_contigs = sau.read_and_filter_minimap_matches(mc.GeneContigMatch, genes_to_contigs_path,
                                                                pident_filtering_th)
