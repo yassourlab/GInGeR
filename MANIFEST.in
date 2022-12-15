@@ -1,1 +1,2 @@
 include ginger/UHGG-metadata.tsv
+recursive-include tests/test_files
