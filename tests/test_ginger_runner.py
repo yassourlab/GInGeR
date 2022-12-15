@@ -10,7 +10,7 @@ SPADES_OUTPUT = 'test_files/SPAdes'
 
 
 def run_meta_or_hybrid_spades_mock(short_reads_1, short_reads_2, long_reads, output_folder, threads):
-    copy_tree('test_files/SPAdes', output_folder)
+    copy_tree('data/SPAdes', output_folder)
     return output_folder
 
 
@@ -23,7 +23,7 @@ class GingerRunnerTest(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         rmtree(cls.ginger_out_dir)
-        os.remove('test_files/merged_filtered_ref_db.mmi')
+        os.remove('data/merged_filtered_ref_db.mmi')
 
     @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
     def test_ginger_e2e_skip_kraken(self):
@@ -36,13 +36,13 @@ class GingerRunnerTest(unittest.TestCase):
         self.assertTrue(os.path.exists(f'{self.ginger_out_dir}/species_level_matches.csv'))
 
         with open(f'{self.ginger_out_dir}/context_level_matches.csv', 'r') as f1, open(
-                'test_files/context_level_matches.csv', 'r') as f2:
+                'data/context_level_matches.csv', 'r') as f2:
             lines_1 = f1.readlines()
             lines_2 = f2.readlines()
         self.assertListEqual(lines_1, lines_2)
 
         with open(f'{self.ginger_out_dir}/species_level_matches.csv', 'r') as f1, open(
-                'test_files/species_level_matches.csv', 'r') as f2:
+                'data/species_level_matches.csv', 'r') as f2:
             lines_1 = f1.readlines()
             lines_2 = f2.readlines()
         self.assertListEqual(lines_1, lines_2)

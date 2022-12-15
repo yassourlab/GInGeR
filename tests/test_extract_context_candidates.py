@@ -21,11 +21,11 @@ class TestExtractContextsCandidates(unittest.TestCase):
         rmtree(cls.test_outputs_dir)
 
     def test_extract_all_in_out_paths_and_write_them_to_fastas(self):
-        with open('test_files/assembly_graph.pkl', 'rb') as f:
+        with open('data/assembly_graph.pkl', 'rb') as f:
             assembly_graph = pickle.load(f)
-        with open('test_files/nodes_with_edges_and_sequences.pkl', 'rb') as f:
+        with open('data/nodes_with_edges_and_sequences.pkl', 'rb') as f:
             nodes_with_edges_and_sequences = pickle.load(f)
-        with open('test_files/genes_with_location_in_graph.pkl', 'rb') as f:
+        with open('data/genes_with_location_in_graph.pkl', 'rb') as f:
             genes_with_location_in_graph = pickle.load(f)
 
         gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,

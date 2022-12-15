@@ -7,7 +7,7 @@ from ginger import pipeline_utils as pu
 class PipelineUtilsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.context_level_output_path = 'test_files/context_level_matches.csv'
+        cls.context_level_output_path = 'data/context_level_matches.csv'
         cls.metadata_path = '../ginger/UHGG-metadata.tsv'
         cls.species_level_output_path = 'test_species_level_matches.csv'
 
@@ -22,7 +22,7 @@ class PipelineUtilsTest(unittest.TestCase):
         self.assertTrue(os.path.exists(self.species_level_output_path))
 
         with open(self.species_level_output_path, 'r') as f1, open(
-                'test_files/species_level_matches.csv', 'r') as f2:
+                'data/species_level_matches.csv', 'r') as f2:
             lines_1 = f1.readlines()
             lines_2 = f2.readlines()
         self.assertListEqual(lines_1, lines_2)
