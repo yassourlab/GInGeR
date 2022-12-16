@@ -1,16 +1,16 @@
 import unittest
 import os
-from helper import get_test_data_dir
+from helper import get_test_data_dir,get_test_output_dir
 from ginger import pipeline_utils as pu
-
+from pathlib import Path
 
 class PipelineUtilsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.data_dir = get_test_data_dir()
         cls.context_level_output_path = f'{cls.data_dir}/context_level_matches.csv'
-        cls.metadata_path = '../ginger/UHGG-metadata.tsv'
-        cls.species_level_output_path = 'test_species_level_matches.csv'
+        cls.metadata_path = f'{Path(__file__).resolve().parent.parent}/ginger/UHGG-metadata.tsv'
+        cls.species_level_output_path = f'{get_test_output_dir()}/test_species_level_matches.csv'
 
     @classmethod
     def tearDownClass(cls) -> None:
