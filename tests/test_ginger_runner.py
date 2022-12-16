@@ -4,12 +4,12 @@ from distutils.dir_util import copy_tree
 from shutil import rmtree
 from click.testing import CliRunner
 from ginger.ginger_runner import run_ginger_e2e
-from tests.helper import get_test_data_dir
+from tests.helper import get_test_data_dir, get_test_output_dir
 import os
 
 
 def run_meta_or_hybrid_spades_mock(short_reads_1, short_reads_2, long_reads, output_folder, threads):
-    copy_tree('data/SPAdes', output_folder)
+    copy_tree(f'{get_test_data_dir()}/SPAdes', output_folder)
     return output_folder
 
 
@@ -18,7 +18,7 @@ class GingerRunnerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.data_dir = get_test_data_dir()
-        cls.ginger_out_dir = 'e2e_test_output_skip_kraken'
+        cls.ginger_out_dir = f'{get_test_output_dir}/e2e_test_output_skip_kraken'
 
     @classmethod
     def tearDownClass(cls):
