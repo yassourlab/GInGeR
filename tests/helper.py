@@ -6,4 +6,4 @@ def get_test_data_dir() -> str:
 
 
 def get_test_output_dir() -> str:
-    return f"{Path(__file__).resolve().parent}/tests_outputs"
+    return Path(__file__).resolve().parent
