@@ -1,15 +1,16 @@
 import unittest
 import os
-
+from helper import get_test_data_dir,get_test_output_dir
 from ginger import pipeline_utils as pu
-
+from pathlib import Path
 
 class PipelineUtilsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.context_level_output_path = 'test_files/context_level_matches.csv'
-        cls.metadata_path = '../ginger/UHGG-metadata.tsv'
-        cls.species_level_output_path = 'test_species_level_matches.csv'
+        cls.data_dir = get_test_data_dir()
+        cls.context_level_output_path = f'{cls.data_dir}/context_level_matches.csv'
+        cls.metadata_path = f'{Path(__file__).resolve().parent.parent}/ginger/UHGG-metadata.tsv'
+        cls.species_level_output_path = f'{get_test_output_dir()}/test_species_level_matches.csv'
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -22,7 +23,7 @@ class PipelineUtilsTest(unittest.TestCase):
         self.assertTrue(os.path.exists(self.species_level_output_path))
 
         with open(self.species_level_output_path, 'r') as f1, open(
-                'test_files/species_level_matches.csv', 'r') as f2:
+                f'{self.data_dir}/species_level_matches.csv', 'r') as f2:
             lines_1 = f1.readlines()
             lines_2 = f2.readlines()
         self.assertListEqual(lines_1, lines_2)
