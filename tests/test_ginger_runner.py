@@ -12,6 +12,14 @@ TEST_FILES = helper.get_filedir()
 
 SPADES_OUTPUT = f'{TEST_FILES}/SPAdes'
 
+"""
+This test does not pass locally, but should pass on githubs CI.
+When running it locally you will get the following error:
+"FileNotFoundError: [Errno 2] No such file or directory: 'ginger/UHGG-metadata.tsv'"
+If you do wish for it to pass locally (is a reasonable request), replace 'ginger/UHGG-metadata.tsv'
+with '../ginger/UHGG-metadata.tsv' 
+"""
+
 
 def run_meta_or_hybrid_spades_mock(short_reads_1, short_reads_2, long_reads, output_folder, threads):
     copy_tree(f'{TEST_FILES}/SPAdes', output_folder)
@@ -54,4 +62,3 @@ class GingerRunnerTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

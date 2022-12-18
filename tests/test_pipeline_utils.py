@@ -7,11 +7,21 @@ from tests import helper
 
 TEST_FILES = helper.get_filedir()
 
+"""
+This test does not pass locally, but should pass on githubs CI.
+When running it locally you will get the following error:
+"FileNotFoundError: [Errno 2] No such file or directory: 'ginger/UHGG-metadata.tsv'"
+If you do wish for it to pass locally (is a reasonable request), replace "cls.metadata_path = 'ginger/UHGG-metadata.tsv'"
+with cls.metadata_path = '../ginger/UHGG-metadata.tsv' 
+"""
+
+
 class PipelineUtilsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.context_level_output_path = f'{TEST_FILES}/context_level_matches.csv'
         cls.metadata_path = 'ginger/UHGG-metadata.tsv'
+        # cls.metadata_path = '../ginger/UHGG-metadata.tsv' use this for running the test locally
         cls.species_level_output_path = 'test_species_level_matches.csv'
 
     @classmethod
