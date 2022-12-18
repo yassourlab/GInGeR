@@ -6,6 +6,7 @@ from tests import helper
 
 TEST_FILES = helper.get_filedir()
 
+
 class SequenceAlignmentUtilsTest(unittest.TestCase):
     def test_read_and_filter_minimap_matches(self):
         genes_to_contigs_path = f'{TEST_FILES}/genes_to_contigs.paf'
