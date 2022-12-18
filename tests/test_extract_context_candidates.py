@@ -5,6 +5,9 @@ import os
 
 import ginger.extract_contexts_candidates as ecc
 
+from tests import helper
+
+TEST_FILES = helper.get_filedir()
 
 class TestExtractContextsCandidates(unittest.TestCase):
     @classmethod
@@ -21,11 +24,11 @@ class TestExtractContextsCandidates(unittest.TestCase):
         rmtree(cls.test_outputs_dir)
 
     def test_extract_all_in_out_paths_and_write_them_to_fastas(self):
-        with open('test_files/assembly_graph.pkl', 'rb') as f:
+        with open(f'{TEST_FILES}/assembly_graph.pkl', 'rb') as f:
             assembly_graph = pickle.load(f)
-        with open('test_files/nodes_with_edges_and_sequences.pkl', 'rb') as f:
+        with open(f'{TEST_FILES}/nodes_with_edges_and_sequences.pkl', 'rb') as f:
             nodes_with_edges_and_sequences = pickle.load(f)
-        with open('test_files/genes_with_location_in_graph.pkl', 'rb') as f:
+        with open(f'{TEST_FILES}/genes_with_location_in_graph.pkl', 'rb') as f:
             genes_with_location_in_graph = pickle.load(f)
 
         gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
@@ -60,3 +63,5 @@ class TestExtractContextsCandidates(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
