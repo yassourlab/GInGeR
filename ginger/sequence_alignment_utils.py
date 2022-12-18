@@ -1,5 +1,5 @@
 from subprocess import run
-from readpaf import parse_paf
+from pafpy import PafFile
 from ginger import pipeline_utils as pu
 import os
 import datetime as dt
@@ -116,24 +116,24 @@ def _run_minimap2_paf(query, target, preset, out_file, just_print=JUST_PRINT_DEF
     # TODO make this method return the parsed file (had issues with running it on the cluster because I couldn't generate a conda environment)
     return out_file
 
-
-def read_and_preprocess_alignment_results(alignment_path, renaming_dict, query_field, pident_filtering_th,
-                                          alignment_length_filtering_th, filtering_function):
-    if os.path.getsize(alignment_path) == 0:
-        return None
-    # try:
-    minimap_results = parse_paf(open(alignment_path, 'r'), dataframe=True)[list(renaming_dict)].rename(
-        columns=renaming_dict)
-    # except Exception as e:
-    #     print(f'{alignment_path} cannot be parsed properly, it is probably empty\n - {str(e)}')
-    #     return None
-    log.info(
-        f'{dt.datetime.now()} {len(minimap_results)} alignments for {minimap_results[query_field].nunique()} {query_field}s were found in {alignment_path}')
-    filtered_minimap_results = filtering_function(minimap_results, query_field, pident_filtering_th,
-                                                  alignment_length_filtering_th)
-    log.info(
-        f'{dt.datetime.now()} {len(filtered_minimap_results)} alignments for {filtered_minimap_results[query_field].nunique()} {query_field}s were left after filtering ')
-    return filtered_minimap_results
+#
+# def read_and_preprocess_alignment_results(alignment_path, renaming_dict, query_field, pident_filtering_th,
+#                                           alignment_length_filtering_th, filtering_function):
+#     if os.path.getsize(alignment_path) == 0:
+#         return None
+#     # try:
+#     minimap_results = parse_paf(open(alignment_path, 'r'), dataframe=True)[list(renaming_dict)].rename(
+#         columns=renaming_dict)
+#     # except Exception as e:
+#     #     print(f'{alignment_path} cannot be parsed properly, it is probably empty\n - {str(e)}')
+#     #     return None
+#     log.info(
+#         f'{dt.datetime.now()} {len(minimap_results)} alignments for {minimap_results[query_field].nunique()} {query_field}s were found in {alignment_path}')
+#     filtered_minimap_results = filtering_function(minimap_results, query_field, pident_filtering_th,
+#                                                   alignment_length_filtering_th)
+#     log.info(
+#         f'{dt.datetime.now()} {len(filtered_minimap_results)} alignments for {filtered_minimap_results[query_field].nunique()} {query_field}s were left after filtering ')
+#     return filtered_minimap_results
 
 
 def filter_genes_in_contigs(df, query_field, pident_filtering_th, alignment_length_filtering_th):
@@ -154,7 +154,7 @@ def read_and_filter_minimap_matches(match_object_constructor: callable, alignmen
     if os.path.getsize(alignment_path) == 0:
         return None
     with open(alignment_path, 'r') as f:
-        minimap_results = [match_object_constructor(gene_to_contig) for gene_to_contig in parse_paf(f)]
+        minimap_results = [match_object_constructor(gene_to_contig) for gene_to_contig in PafFile(f)]
 
     if log.level == logging.DEBUG:
         minimap_results = minimap_results
