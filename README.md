@@ -4,7 +4,9 @@ GInGeR is a tool for analyzing the genomic regions of genes of interest in metag
 sequencing data (paired-end short reads and optionally also Oxford Nanopore long reads) and a set of genes of interest.
 GInGeR constructs and assembly graph, locates the genes of interest in the assembly graph, identifies their potential
 genomic contexts in the graph and uses a reference genomes database to verify the contexts and assign them to carrier
-species.
+species. 
+
+**Note that a paper describing GInGeR was not yet published. If you're interested in using it for your research, please email netta.barak@mail.huji.ac.il**
 
 # Installation using conda:
 
@@ -189,7 +191,8 @@ Used for selecting only the references of the species that are found in the samp
 Used for searching for locating the genes in the assembly graphs (by searching for them in the assembly contigs and
 inferring their location in the graph)
 
-
+# Acknowledgements
+GInGer is open source and available thanks to the hard work of [Haimasree Bhattacharya](https://github.com/haimasree)
 
 
 
