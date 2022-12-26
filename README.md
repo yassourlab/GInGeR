@@ -39,7 +39,7 @@ To run GInGeR, you can type (note that if you don't skip the database filtering 
 memory for the pipeline to run successfully):
 
 ``` bash
-python3 ginger.py <SHORT_READS_1> <SHORT_READS_2> <GENES_PATH> <OUT_DIR>
+run_ginger <SHORT_READS_1> <SHORT_READS_2> <GENES_PATH> <OUT_DIR>
 ```
 
 where `<SHORT_READS_1>` and `<SHORT_READS_2>` are fastq (or fastq.gz) files of sequencing data, `<GENES_PATH>` is the
