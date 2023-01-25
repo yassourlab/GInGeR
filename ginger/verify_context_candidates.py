@@ -38,6 +38,8 @@ def get_in_out_match(i, o, gene_length, minimal_gap_ratio, maximal_gap_ratio):
 def read_and_filter_path_matches_per_gene(match_object_constructor: callable, alignment_path, pident_filtering_th):
     parsed_as_iterator = sau.read_and_filter_minimap_matches(match_object_constructor, alignment_path,
                                                              pident_filtering_th)
+    if parsed_as_iterator is None:
+        return []
     genes_to_matches = defaultdict(list)
     for match in parsed_as_iterator:
         genes_to_matches[(match.gene, match.bug)].append(match)
@@ -91,6 +93,9 @@ def process_in_and_out_paths_to_results(in_path_mapping_to_bugs, out_path_mappin
     parsed_out_path_to_bugs_by_gene_and_bug = read_and_filter_path_matches_per_gene(mc.PathBugMatch,
                                                                                     out_path_mapping_to_bugs,
                                                                                     paths_pident_filtering_th)
+    if len(parsed_in_path_to_bugs_by_gene_and_bug)==0 or len(parsed_out_path_to_bugs_by_gene_and_bug)==0:
+        log.info(f'GInGeR found {len(parsed_in_path_to_bugs_by_gene_and_bug)=} matches for incoming paths and {len(parsed_out_path_to_bugs_by_gene_and_bug)=} matches for outgoing paths. No results will be produced')
+        return []
     log.info(f'{dt.datetime.now()} generating in-out matches')
     matches_per_gene = get_all_in_out_matches(parsed_in_path_to_bugs_by_gene_and_bug,
                                               parsed_out_path_to_bugs_by_gene_and_bug,

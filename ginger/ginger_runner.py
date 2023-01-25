@@ -125,6 +125,9 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_d
     genes_lengths = extract_genes_lengths(genes_path)
     results = vcc.process_in_and_out_paths_to_results(in_contexts_to_bugs, out_contexts_to_bugs, genes_lengths,
                                                       paths_pident_filtering_th, 0, maximal_gap_ratio)
+    if len(results) == 0:
+        log.info('GInGeR could not find the requested genes in the samples')  # TODO make this more informative if I can
+        return
     context_level_output_path = c.CONTEXT_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     species_level_output_path = c.SPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     pu.write_context_level_output_to_csv(results, context_level_output_path, metadata_path)
