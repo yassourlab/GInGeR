@@ -130,7 +130,7 @@ GInGeR's outputs two results files:
 
 By default, GInGeR uses the Unified Human Gastrointestinal Genome collection (UHGG,
 see [genome catalog](http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0/README_v2.0.txt) and
-[Publication by Almeida et al.](https://www.nature.com/articles/s41587-020-0603-3)) as a reference database. When
+[Almeida et al.](https://www.nature.com/articles/s41587-020-0603-3)) as a reference database. When
 running GInGer, it first detects the dominant species in the sample using Kraken2, and then downloads missing
 references (a limited number of references per species) for these species from UHGG to the `--references-dir` and
 combining them into a reference database customized for the given sample. It is recommended to use a
