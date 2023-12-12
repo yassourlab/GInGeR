@@ -36,15 +36,16 @@ class GingerRunnerTest(unittest.TestCase):
         cls.threads = 1
         cls.genes_path = f'{TEST_FILES}/test_gene.fasta'
         cls.merged_filtered_fasta = f'{TEST_FILES}/merged_filtered_ref_db.fasta.gz'
-        cls.metadata_path = '../ginger/UHGG-metadata.tsv'
+        cls.metadata_path = 'ginger/UHGG-metadata.tsv'  # for running on github CI
+        # cls.metadata_path = '../ginger/UHGG-metadata.tsv' # for running locally
         cls.max_species_representatives = 1
-
+    #
     @classmethod
     def tearDownClass(cls):
         if os.path.exists(cls.out_dir):
             rmtree(cls.out_dir)
 
-    @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
+    # @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
     def test_ginger_e2e_command_skip_kraken(self):
         run_ginger_e2e(None, self.short_reads_1, self.short_reads_2, self.out_dir, None, self.threads,
                        None,
@@ -52,14 +53,12 @@ class GingerRunnerTest(unittest.TestCase):
                        self.genes_path, 12, 1.5, 2500, 0.9,
                        0.9, False, self.max_species_representatives)
 
-    @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
+    # @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
     def test_ginger_e2e_command_skip_kraken(self):
         runner = CliRunner()
-        # metadata_path = 'ginger/UHGG-metadata.tsv'
-        metadata_path = '../ginger/UHGG-metadata.tsv'
 
         result = runner.invoke(run_ginger_e2e,
-                               f'{TEST_FILES}/ecoli_1K_1.fq.gz {TEST_FILES}/ecoli_1K_2.fq.gz {TEST_FILES}/test_gene.fasta {self.out_dir} --merged-filtered-fasta {TEST_FILES}/merged_filtered_ref_db.fasta.gz --metadata-path {metadata_path} --max-species-representatives 1'.split(
+                               f'{TEST_FILES}/ecoli_1K_1.fq.gz {TEST_FILES}/ecoli_1K_2.fq.gz {TEST_FILES}/test_gene.fasta {self.out_dir} --merged-filtered-fasta {TEST_FILES}/merged_filtered_ref_db.fasta.gz --metadata-path {self.metadata_path} --max-species-representatives 1'.split(
                                    ' '))
         self.assertEqual(result.exit_code, 0, str(result.exception))
         self.assertTrue(os.path.exists(f'{self.out_dir}/context_level_matches.csv'))
