@@ -1,6 +1,6 @@
 from subprocess import run, Popen, PIPE
-import sys
 import logging
+from tqdm import tqdm
 
 log = logging.getLogger(__name__)
 META_SPADES_COMMAND = "spades.py --meta -1 {short_reads_1} -2 {short_reads_2} {optional_long_reads}-o {output_folder} -t {threads}"
@@ -16,6 +16,5 @@ def run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, output_f
                                          threads=threads)
     log.info(f'running MetaSPAdes - {command}')
     spades_process = Popen(command.split(' '), stdout=PIPE)
-    for output_char in iter(lambda: spades_process.stdout.read(1), b""):
-        sys.stdout.buffer.write(output_char)
+    output_lines = [output_line for output_line in tqdm(iter(lambda: spades_process.stdout.readline(), b""))]
     return output_folder

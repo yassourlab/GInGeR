@@ -1,5 +1,5 @@
 import urllib.request
-from subprocess import run
+from subprocess import run,Popen,PIPE
 from collections import defaultdict
 import pandas as pd
 from glob import glob
@@ -7,6 +7,7 @@ import urllib
 import gzip
 import logging
 from ginger import pipeline_utils as pu
+from tqdm import tqdm
 
 log = logging.getLogger(__name__)
 TOOLS = '/sci/labs/morani/morani/icore-data/lab/Tools'
@@ -24,12 +25,14 @@ def run_kraken(reads_1, reads_2, threads, output_path):
     command = KRAKEN_COMMAND.format(kraken_path=KRAKEN_PATH, kraken_db=KRAKEN_DB, reads_1=reads_1, reads_2=reads_2,
                                     threads=threads, output_path=output_path)
     log.info(f'running kraken: {command}')
-    command_output = run(command, shell=True, capture_output=True)
-    if command_output.returncode:
-        log.error(command_output.stderr)
+    # command_output = run(command, shell=True, capture_output=True)
+    kraken_process = Popen(command.split(' '), stdout=PIPE)
+    output_lines = [output_line for output_line in tqdm(iter(lambda: kraken_process.stdout.readline(), b""))]
+    if kraken_process.returncode:
+        log.error(kraken_process.stderr)
         raise Exception('GInGeR failed to run Kraken2. The pipeline will abort')
     else:
-        log.info(command_output.stdout)
+        log.info(kraken_process.stdout)
 
 
 def get_list_of_top_species_by_kraken(kraken_output_path, reads_ratio_th):
