@@ -2,12 +2,13 @@ import unittest
 from shutil import rmtree
 import pickle
 import os
-
+# TODO - test fails
 import ginger.extract_contexts_candidates as ecc
 
 from tests import helper
 
 TEST_FILES = helper.get_filedir()
+
 
 class TestExtractContextsCandidates(unittest.TestCase):
     @classmethod
@@ -15,6 +16,8 @@ class TestExtractContextsCandidates(unittest.TestCase):
         cls.test_outputs_dir = 'extraction_candidates_tests_output'
         cls.in_paths_fasta = f'{cls.test_outputs_dir}/test_in_paths_fasta.fasta'
         cls.out_paths_fasta = f'{cls.test_outputs_dir}/test_out_paths_fasta.fasta'
+        if os.path.exists(cls.test_outputs_dir):
+            rmtree(cls.test_outputs_dir)
         os.mkdir(cls.test_outputs_dir)
         cls.context_len = 100
 
@@ -63,5 +66,3 @@ class TestExtractContextsCandidates(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
-

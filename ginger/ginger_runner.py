@@ -81,6 +81,16 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_d
     OUT_DIR - A path specifying where to save GInGeR's output
 
     """
+    return ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
+                           reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta,
+                           genes_path, depth_limit, maximal_gap_ratio, max_context_len, gene_pident_filtering_th,
+                           paths_pident_filtering_th, skip_assembly, max_species_representatives)
+
+
+def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
+                    reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta,
+                    genes_path, depth_limit, maximal_gap_ratio, max_context_len, gene_pident_filtering_th,
+                    paths_pident_filtering_th, skip_assembly, max_species_representatives):
     print('metadata_path: ', metadata_path)
     # filter reference database using kraken
     if merged_filtered_fasta is None:

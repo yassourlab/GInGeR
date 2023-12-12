@@ -173,8 +173,8 @@ def aggregate_context_level_output_to_species_level_output_and_write_csv(context
                                               on=['Genome', 'species'],
                                               how='left')
 
-    genomes_per_species = metadata_df.species.value_counts().to_frame().rename(columns={'species': 'species_instances'})
-    genomes_per_species['species_instances'] = genomes_per_species['species_instances'].apply(
+    genomes_per_species = metadata_df.species.value_counts().to_frame()
+    genomes_per_species['species_instances'] = genomes_per_species['count'].apply(
         lambda x: min(x, max_species_representatives))
     agg_output = context_level_df_with_metadata.groupby(['gene', 'species']).aggregate(
         {'Genome': ['count'], 'match_score': ['max']})

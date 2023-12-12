@@ -21,12 +21,13 @@ class PipelineUtilsTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.context_level_output_path = f'{TEST_FILES}/context_level_matches.csv'
         cls.metadata_path = 'ginger/UHGG-metadata.tsv'
-        # cls.metadata_path = '../ginger/UHGG-metadata.tsv' use this for running the test locally
+        # cls.metadata_path = '../ginger/UHGG-metadata.tsv' # use this for running the test locally
         cls.species_level_output_path = 'test_species_level_matches.csv'
 
     @classmethod
     def tearDownClass(cls) -> None:
-        os.remove(cls.species_level_output_path)
+        if os.path.exists(cls.species_level_output_path):
+            os.remove(cls.species_level_output_path)
 
     def test_aggregate_context_level_output_to_species_level_output_and_write_csv(self):
         pu.aggregate_context_level_output_to_species_level_output_and_write_csv(self.context_level_output_path,
