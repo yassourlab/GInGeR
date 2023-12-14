@@ -113,7 +113,7 @@ def locate_genes_in_graph(assembly_dir: str, gene_pident_filtering_th: float, ge
                           temp_folder: str):  # -> Tuple[networkx.DiGraph,??? ,Dict[str, SeqIO.SeqRecord]]
     contigs_path = c.CONTIGS_PATH_TEMPLATE.format(assembly_dir=assembly_dir)
     assembly_graph_path = c.ASSEMBLY_GRAPH_PATH_TEMPLATE.format(assembly_dir=assembly_dir)
-    nodes_with_edges_and_sequences = get_nodes_dict_from_fastg_file(assembly_graph_path)
+    assembly_graph_nodes = get_nodes_dict_from_fastg_file(assembly_graph_path)
 
     genes_to_contigs = find_genes_in_contigs(temp_folder, genes_path, contigs_path, n_minimap_threads,
                                              gene_pident_filtering_th)
@@ -122,5 +122,7 @@ def locate_genes_in_graph(assembly_dir: str, gene_pident_filtering_th: float, ge
 
     assembly_graph = pyfastg.parse_fastg(assembly_graph_path)
     genes_with_location_in_graph = get_genes_to_contigs_with_nodes_list(genes_to_contigs, assembly_graph,
-                                                                        nodes_with_edges_and_sequences, assembly_dir)
-    return assembly_graph, genes_with_location_in_graph, nodes_with_edges_and_sequences
+                                                                        assembly_graph_nodes, assembly_dir)
+
+    return assembly_graph, genes_with_location_in_graph, assembly_graph_nodes
+

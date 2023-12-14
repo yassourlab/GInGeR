@@ -3,7 +3,7 @@ from unittest.mock import patch
 from distutils.dir_util import copy_tree
 from shutil import rmtree
 from click.testing import CliRunner
-from ginger.ginger_runner import run_ginger_e2e
+from ginger.ginger_runner import ginger_e2e_func, run_ginger_e2e
 import os
 
 from tests import helper
@@ -47,7 +47,7 @@ class GingerRunnerTest(unittest.TestCase):
 
     # @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
     def test_ginger_e2e_command_skip_kraken(self):
-        run_ginger_e2e(None, self.short_reads_1, self.short_reads_2, self.out_dir, None, self.threads,
+        ginger_e2e_func(None, self.short_reads_1, self.short_reads_2, self.out_dir, None, self.threads,
                        None,
                        0.01, self.metadata_path, 'references_dir', self.merged_filtered_fasta,
                        self.genes_path, 12, 1.5, 2500, 0.9,
@@ -64,17 +64,17 @@ class GingerRunnerTest(unittest.TestCase):
         self.assertTrue(os.path.exists(f'{self.out_dir}/context_level_matches.csv'))
         self.assertTrue(os.path.exists(f'{self.out_dir}/species_level_matches.csv'))
 
-        with open(f'{self.out_dir}/context_level_matches.csv', 'r') as f1, open(
-                f'{TEST_FILES}/context_level_matches.csv', 'r') as f2:
-            lines_1 = f1.readlines()
-            lines_2 = f2.readlines()
-        self.assertListEqual(lines_1, lines_2)
+        with open(f'{self.out_dir}/context_level_matches.csv', 'r') as test_out, open(
+                f'{TEST_FILES}/context_level_matches.csv', 'r') as gt:
+            lines_out = test_out.readlines()
+            lines_gt = gt.readlines()
+        self.assertListEqual(lines_out, lines_gt)
 
-        with open(f'{self.out_dir}/species_level_matches.csv', 'r') as f1, open(
-                f'{TEST_FILES}/species_level_matches.csv', 'r') as f2:
-            lines_1 = f1.readlines()
-            lines_2 = f2.readlines()
-        self.assertListEqual(lines_1, lines_2)
+        with open(f'{self.out_dir}/species_level_matches.csv', 'r') as test_out, open(
+                f'{TEST_FILES}/species_level_matches.csv', 'r') as gt:
+            lines_out = test_out.readlines()
+            lines_gt = gt.readlines()
+        self.assertListEqual(lines_out, lines_gt)
 
 
 if __name__ == '__main__':
