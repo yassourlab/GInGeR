@@ -40,21 +40,21 @@ class PipelineUtilsTest(unittest.TestCase):
                                                                                 self.species_level_output_path, 1)
         self.assertTrue(os.path.exists(self.species_level_output_path))
 
-        with open(self.species_level_output_path, 'r') as f1, open(self.species_level_output_path_gt, 'r') as f2:
-            lines_1 = f1.readlines()
-            lines_2 = f2.readlines()
-        self.assertListEqual(lines_1, lines_2)
+        with open(self.species_level_output_path, 'r') as out_f, open(self.species_level_output_path_gt, 'r') as gt_f:
+            out_lines = out_f.readlines()
+            gt_lines = gt_f.readlines()
+        self.assertListEqual(out_lines, gt_lines)
 
         pu.aggregate_context_level_output_to_species_level_output_and_write_csv(
             self.context_level_output_path_with_dups,
             self.metadata_path,
             self.species_level_output_path_with_dups, 1)
 
-        with open(self.species_level_output_path_with_dups, 'r') as f1, open(
-                self.species_level_output_path_with_dups_gt, 'r') as f2:
-            lines_1 = f1.readlines()
-            lines_2 = f2.readlines()
-        self.assertListEqual(lines_1, lines_2)
+        with open(self.species_level_output_path_with_dups, 'r') as out_f, open(
+                self.species_level_output_path_with_dups_gt, 'r') as gt_f:
+            out_lines = out_f.readlines()
+            gt_lines = gt_f.readlines()
+        self.assertListEqual(out_lines, gt_lines)
 
 
 if __name__ == '__main__':
