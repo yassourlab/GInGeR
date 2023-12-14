@@ -12,13 +12,13 @@ log = logging.getLogger(__name__)
 # TODO go over all functions and see if they are used and or should be re written
 # TODO proper logging
 
-def extract_start_and_end(i_start, i_end, o_start, o_end, strand):
-    if strand == '+':
-        start = i_end
-        end = o_start
+def extract_start_and_end(in_match: mc.PathBugMatch , out_match:mc.PathBugMatch) -> tuple:
+    if in_match.strand == '+':
+        start = in_match.bug_end
+        end = out_match.bug_start
     else:
-        start = o_end
-        end = i_start
+        start = out_match.bug_end
+        end = in_match.bug_start
     return start, end
 
 
@@ -26,7 +26,7 @@ def get_in_out_match(i, o, gene_length, minimal_gap_ratio, maximal_gap_ratio):
     for field in ['gene', 'nodes_list', 'bug', 'strand']:
         if getattr(i, field) != getattr(o, field):
             return None
-    start, end = extract_start_and_end(i.bug_start, i.bug_end, o.bug_start, o.bug_end, i.strand)
+    start, end = extract_start_and_end(i, o)
     start_end_diff = end - start
     gap_ratio = start_end_diff / gene_length
     match_score = (i.match_score * i.path_length + o.match_score * o.path_length) / (i.path_length + o.path_length)
@@ -57,9 +57,10 @@ def get_all_in_out_matches(in_paths_by_gene_and_bug, out_paths_by_gene_and_bug, 
             out_paths = out_paths_by_gene_and_bug[gene_bug]
             for i in in_paths:
                 for o in out_paths:
-                    in_out_match = get_in_out_match(i, o, genes_lengths[i.gene], minimal_gap_ratio, maximal_gap_ratio)
-                    if in_out_match is not None:
-                        matches_per_gene_and_bug[gene_bug].append(in_out_match)
+                    if i.strand == o.strand:
+                        in_out_match = get_in_out_match(i, o, genes_lengths[i.gene], minimal_gap_ratio, maximal_gap_ratio)
+                        if in_out_match is not None:
+                            matches_per_gene_and_bug[gene_bug].append(in_out_match)
     log.info(
         f"found {sum((len(m) for m in matches_per_gene_and_bug.values()))} matches for {len(matches_per_gene_and_bug)} gene-bug pairs")
     return matches_per_gene_and_bug

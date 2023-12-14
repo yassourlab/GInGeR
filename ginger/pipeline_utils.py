@@ -136,9 +136,9 @@ def interval_iou(start1, end1, start2, end2):
     return output
 
 
-def is_similar_to_representatives(representatives, record, iou_th):
+def is_similar_to_representatives(representatives, gene_paths_to_bug_match, iou_th):
     for rep in representatives:
-        if interval_iou(record.start, record.end, rep.start, rep.end) > iou_th:
+        if interval_iou(gene_paths_to_bug_match.start, gene_paths_to_bug_match.end, rep.start, rep.end) > iou_th:
             return True
     return False
 
@@ -152,10 +152,15 @@ def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str)
             results_dict['reference_contig'].append(reference)
             results_dict['in_context'].append(match.in_path.query_name)
             results_dict['out_context'].append(match.out_path.query_name)
-            results_dict['in_context_start'].append(match.in_path.bug_start)
+            if match.in_path.strand == '+':
+                results_dict['in_context_start'].append(match.in_path.bug_start)
+                results_dict['out_context_end'].append(match.out_path.bug_end)
+            else:
+                results_dict['in_context_start'].append(match.out_path.bug_start)
+                results_dict['out_context_end'].append(match.in_path.bug_end)
             results_dict['gene_start'].append(match.start)
             results_dict['gene_end'].append(match.end)
-            results_dict['out_context_end'].append(match.out_path.bug_end)
+
             results_dict['match_score'].append(match.match_score)
 
     metadata_df = pd.read_csv(metadata_path, sep='\t')
@@ -177,8 +182,8 @@ def aggregate_context_level_output_to_species_level_output_and_write_csv(context
     genomes_per_species['species_instances'] = genomes_per_species['count'].apply(
         lambda x: min(x, max_species_representatives))
     agg_output = context_level_df_with_metadata.groupby(['gene', 'species']).aggregate(
-        {'Genome': ['count'], 'match_score': ['max']})
+        {'Genome': ['nunique'], 'match_score': ['max']})
     agg_output.columns = ['_'.join(col) for col in agg_output.columns.values]
     agg_output = agg_output.merge(genomes_per_species, left_on='species', right_index=True, how='left')
-    agg_output['references_ratio'] = agg_output['Genome_count'] / agg_output['species_instances']
+    agg_output['references_ratio'] = agg_output['Genome_nunique'] / agg_output['species_instances']
     agg_output[['references_ratio', 'match_score_max', 'species_instances']].to_csv(species_level_output_path)

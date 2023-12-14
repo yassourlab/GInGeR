@@ -20,9 +20,14 @@ class PipelineUtilsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.context_level_output_path = f'{TEST_FILES}/context_level_matches.csv'
-        cls.metadata_path = 'ginger/UHGG-metadata.tsv'
+        cls.context_level_output_path_with_dups = f'{TEST_FILES}/context_level_matches_with_dups.csv'  # dups means that the same gene is matched to the same genome twice
+        cls.metadata_path = 'ginger/UHGG-metadata.tsv' # use this for running tests on github CI
         # cls.metadata_path = '../ginger/UHGG-metadata.tsv' # use this for running the test locally
         cls.species_level_output_path = 'test_species_level_matches.csv'
+        cls.species_level_output_path_with_dups = f'test_species_level_matches_with_dups.csv'  # dups means that the same gene is matched to the same genome twice
+        # GT files
+        cls.species_level_output_path_gt = f'{TEST_FILES}/species_level_matches.csv'
+        cls.species_level_output_path_with_dups_gt = f'{TEST_FILES}/species_level_matches_with_dups.csv'
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -35,8 +40,18 @@ class PipelineUtilsTest(unittest.TestCase):
                                                                                 self.species_level_output_path, 1)
         self.assertTrue(os.path.exists(self.species_level_output_path))
 
-        with open(self.species_level_output_path, 'r') as f1, open(
-                f'{TEST_FILES}/species_level_matches.csv', 'r') as f2:
+        with open(self.species_level_output_path, 'r') as f1, open(self.species_level_output_path_gt, 'r') as f2:
+            lines_1 = f1.readlines()
+            lines_2 = f2.readlines()
+        self.assertListEqual(lines_1, lines_2)
+
+        pu.aggregate_context_level_output_to_species_level_output_and_write_csv(
+            self.context_level_output_path_with_dups,
+            self.metadata_path,
+            self.species_level_output_path_with_dups, 1)
+
+        with open(self.species_level_output_path_with_dups, 'r') as f1, open(
+                self.species_level_output_path_with_dups_gt, 'r') as f2:
             lines_1 = f1.readlines()
             lines_2 = f2.readlines()
         self.assertListEqual(lines_1, lines_2)

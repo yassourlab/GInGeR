@@ -110,7 +110,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
         au.run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, assembly_dir, threads)
     # run tool
 
-    assembly_graph, genes_with_location_in_graph, records_dict = lg.locate_genes_in_graph(assembly_dir,
+    assembly_graph, genes_with_location_in_graph, assembly_graph_nodes = lg.locate_genes_in_graph(assembly_dir,
                                                                                           gene_pident_filtering_th,
                                                                                           genes_path, threads, out_dir)
     if genes_with_location_in_graph is None:
@@ -120,7 +120,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     # get in and out paths
     in_paths_fasta = c.IN_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
     out_paths_fasta = c.OUT_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
-    _ = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, records_dict,
+    _ = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, assembly_graph_nodes,
                                                               genes_with_location_in_graph, depth_limit,
                                                               max_context_len, in_paths_fasta,
                                                               out_paths_fasta)
@@ -133,14 +133,14 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
 
     # merge and get results
     genes_lengths = extract_genes_lengths(genes_path)
-    results = vcc.process_in_and_out_paths_to_results(in_contexts_to_bugs, out_contexts_to_bugs, genes_lengths,
+    context_level_results = vcc.process_in_and_out_paths_to_results(in_contexts_to_bugs, out_contexts_to_bugs, genes_lengths,
                                                       paths_pident_filtering_th, 0, maximal_gap_ratio)
-    if len(results) == 0:
+    if len(context_level_results) == 0:
         log.info('GInGeR could not find the requested genes in the samples')  # TODO make this more informative if I can
         return
     context_level_output_path = c.CONTEXT_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     species_level_output_path = c.SPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
-    pu.write_context_level_output_to_csv(results, context_level_output_path, metadata_path)
+    pu.write_context_level_output_to_csv(context_level_results, context_level_output_path, metadata_path)
     pu.aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path, metadata_path,
                                                                             species_level_output_path,
                                                                             max_species_representatives)
