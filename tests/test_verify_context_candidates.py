@@ -3,7 +3,6 @@ from shutil import rmtree
 import pickle
 import os
 import ginger.verify_context_candidates as vcc
-from ginger.matches_classes import GeneRefGTMatch
 
 from tests import helper
 

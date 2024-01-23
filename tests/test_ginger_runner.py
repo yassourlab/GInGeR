@@ -36,8 +36,8 @@ class GingerRunnerTest(unittest.TestCase):
         cls.threads = 1
         cls.genes_path = f'{TEST_FILES}/test_gene.fasta'
         cls.merged_filtered_fasta = f'{TEST_FILES}/merged_filtered_ref_db.fasta.gz'
-        cls.metadata_path = 'ginger/UHGG-metadata.tsv'  # for running on github CI
-        # cls.metadata_path = '../ginger/UHGG-metadata.tsv' # for running locally
+        # cls.metadata_path = 'ginger/UHGG-metadata.tsv'  # for running on github CI
+        cls.metadata_path = '../ginger/UHGG-metadata.tsv' # for running locally
         cls.max_species_representatives = 1
     #
     @classmethod

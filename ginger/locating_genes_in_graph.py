@@ -102,9 +102,9 @@ def find_genes_in_contigs(temp_dir: str, genes_path: str, contigs_path: str, n_m
                           pident_filtering_th: float) -> Iterator[mc.GeneContigMatch]:
     genes_to_contigs_path = c.GENES_TO_CONTIGS_TEMPLATE.format(temp_files_path=temp_dir)
 
-    genes_to_contigs_path = sau.map_genes_to_contexts(genes_path, contigs_path, genes_to_contigs_path,
-                                                      nthreads=n_minimap_threads)
-    genes_to_contigs = sau.read_and_filter_minimap_matches(mc.GeneContigMatch, genes_to_contigs_path,
+    genes_to_contigs_path = sau.map_genes_to_contigs(genes_path, contigs_path, genes_to_contigs_path,
+                                                     nthreads=n_minimap_threads)
+    genes_to_contigs = sau.read_and_filter_mmseq2_matches(mc.GeneContigMatch, genes_to_contigs_path,
                                                            pident_filtering_th)
     return genes_to_contigs
 
@@ -125,4 +125,3 @@ def locate_genes_in_graph(assembly_dir: str, gene_pident_filtering_th: float, ge
                                                                         assembly_graph_nodes, assembly_dir)
 
     return assembly_graph, genes_with_location_in_graph, assembly_graph_nodes
-

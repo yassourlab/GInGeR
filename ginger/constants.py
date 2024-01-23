@@ -6,6 +6,6 @@ IN_PATHS_FASTA_TEMPLATE = "{temp_folder}/all_in_paths.fasta"
 OUT_PATHS_FASTA_TEMPLATE = "{temp_folder}/all_out_paths.fasta"
 IN_MAPPING_TO_BUGS_PATH_TEMPLATE = '{temp_folder}/in_paths_to_reference.paf'
 OUT_MAPPING_TO_BUGS_PATH_TEMPLATE = '{temp_folder}/out_paths_to_reference.paf'
-GENES_TO_CONTIGS_TEMPLATE = '{temp_files_path}/genes_to_contigs.paf'
+GENES_TO_CONTIGS_TEMPLATE = '{temp_files_path}/genes_to_contigs.m8'
 CONTEXT_LEVEL_OUTPUT_TEMPLATE = '{out_dir}/context_level_matches.csv'
 SPECIES_LEVEL_OUTPUT_TEMPLATE = '{out_dir}/species_level_matches.csv'
