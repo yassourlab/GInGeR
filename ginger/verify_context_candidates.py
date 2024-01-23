@@ -66,11 +66,11 @@ def get_all_in_out_matches(in_paths_by_gene_and_bug, out_paths_by_gene_and_bug, 
     return matches_per_gene_and_bug
 
 
-def keep_best_matches_per_gene_bug_pair(matches_per_gene) -> defaultdict:
-    best_matches_per_gene = defaultdict()
-    for gene, matches in matches_per_gene.items():
-        best_matches_per_gene[gene] = keep_best_matches(matches, iou_th=0.5)
-    return best_matches_per_gene
+def keep_best_matches_per_gene_bug_pair(matches_per_gene_and_bug) -> defaultdict:
+    best_matches_per_gene_and_bug = defaultdict()
+    for gene_bug, matches in matches_per_gene_and_bug.items():
+        best_matches_per_gene_and_bug[gene_bug] = keep_best_matches(matches, iou_th=0.5)
+    return best_matches_per_gene_and_bug
 
 
 def keep_best_matches(matches, iou_th: float = 0):  # -> Dict[Tuple[str,str]:List[mc.InOutPathsMatch]]

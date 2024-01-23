@@ -2,7 +2,6 @@ import unittest
 from shutil import rmtree
 import pickle
 import os
-# TODO - test fails
 import ginger.extract_contexts_candidates as ecc
 
 from tests import helper

@@ -39,8 +39,8 @@ class GeneRefGTMatch:
 
         self.bug = paf_line.tname
         self.bug_length = paf_line.tlen
-        self.bug_start = paf_line.tstart
-        self.bug_end = paf_line.tend
+        self.start = paf_line.tstart
+        self.end = paf_line.tend
 
         self.match_score = paf_line.mlen / self.gene_with_context_length
 
