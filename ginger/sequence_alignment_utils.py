@@ -10,7 +10,7 @@ log = logging.getLogger(__name__)
 JUST_PRINT_DEFAULT = False
 # MMSEQS:
 MMSEQ2_OUTPUT_FORMAT = "'target,query,tstart,tend,nident,qlen'"
-MMSEQ2_COMMAND = f"mmseqs easy-search {{query}} {{target}} {{out_file}} mmseqs2_tmp --search-type 2 -a --format-mode 4 --format-output {MMSEQ2_OUTPUT_FORMAT} -c 0.8 --cov-mode 2 --threads {{nthreads}}"
+MMSEQ2_COMMAND = f"mmseqs easy-search {{query}} {{target}} {{out_file}} mmseqs2_tmp --search-type 2 -a --format-mode 4 --format-output {MMSEQ2_OUTPUT_FORMAT} -c 0.8 --cov-mode 2 --threads {{nthreads}} --mask 0"
 MMSEQS_GENES_TO_CONTIGS_HEADER_CONVERSION = {'target': 'contig',
                                              'query': 'gene',
                                              'tstart': 'contig_start',
@@ -114,9 +114,9 @@ def _run_mmseqs2(query, target, out_file, nthreads=1):
     logging.info(f'running mmseq2: {command}')
     command_output = run(command, shell=True, capture_output=True)
     if command_output.returncode:
-        logging.error(f'minimap2 stderr: {command_output.stderr}')
+        logging.error(f'mmseq2 stderr: {command_output.stderr}')
     else:
-        logging.info(f'minimap2 run successfully. stdout: {command_output.stdout}')
+        logging.info(f'mmseq2 run successfully')
     return out_file
 
 

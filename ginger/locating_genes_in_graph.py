@@ -31,8 +31,8 @@ def get_short_node_name(long_node_name):
 
 def add_nodes_list_and_start_location_to_gene_contig_match(nodes_sequences_dict, nodes_in_path, gene_contig_match):
     #  this is not the exact start but it's good enough
-    contig_start = gene_contig_match.contig_start
-    contig_end = gene_contig_match.contig_end
+    contig_start = gene_contig_match.start
+    contig_end = gene_contig_match.end
     if not nodes_in_path:
         return gene_contig_match
     elif len(nodes_in_path) == 1:

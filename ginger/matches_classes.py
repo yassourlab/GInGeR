@@ -52,21 +52,21 @@ class GeneContigMatch:
     def __init__(self, mmseq_line: str):
         # TODO make the list of fields shared with the one in sequence_alignment_utils.py
         target, query, tstart, tend, nident, qlen = mmseq_line.split('\t')
-        self.gene_species_start_end = query
-        self.gene_with_context_length = qlen
+        # self.gene_species_start_end = query
+        self.gene_length = int(qlen)
         # self.gene_with_context_start = paf_line.qstart
         # self.gene_with_context_end = paf_line.qend
 
-        self.gene = self.gene_species_start_end.split('|')[0]
+        self.gene = query
 
         self.strand = '+' if int(tstart) < int(tend) else '-'
 
         self.contig = target
         # self.bug_length = paf_line.tlen
-        self.start = tstart
-        self.end = tend
+        self.start = int(tstart)
+        self.end = int(tend)
 
-        self.match_score = nident / qlen
+        self.match_score = int(nident) / int(qlen)
         self.nodes_list = None
         self.start_in_first_node = None
 

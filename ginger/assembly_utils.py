@@ -15,6 +15,6 @@ def run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, output_f
                                          optional_long_reads=long_reads_str, output_folder=output_folder,
                                          threads=threads)
     log.info(f'running MetaSPAdes - {command}')
-    spades_process = Popen(command.split(' '), stdout=PIPE)
-    output_lines = [output_line for output_line in tqdm(iter(lambda: spades_process.stdout.readline(), b""))]
+    with Popen(command.split(' '), stdout=PIPE) as p:
+        output_lines = [output_line for output_line in tqdm(iter(lambda: p.stdout.readline(), b""))]
     return output_folder
