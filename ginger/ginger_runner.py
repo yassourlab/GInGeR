@@ -97,10 +97,10 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
         merged_filtered_fasta = f'{references_dir}/merged_filtered_ref_db.fasta'
         if kraken_output_path is None:
             kraken_output_path = f'{out_dir}/kraken_output_file.tsv'
-        rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads,
-                                             kraken_output_path, reads_ratio_th,
-                                             metadata_path, references_dir,
-                                             merged_filtered_fasta, max_species_representatives)
+            rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads,
+                                                 kraken_output_path, reads_ratio_th,
+                                                 metadata_path, references_dir,
+                                                 merged_filtered_fasta, max_species_representatives)
     indexed_reference = sau.generate_index(merged_filtered_fasta, preset=sau.INDEXING_PRESET,
                                            just_print=sau.JUST_PRINT_DEFAULT)
     # run assembly

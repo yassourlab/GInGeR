@@ -26,8 +26,8 @@ def run_kraken(reads_1, reads_2, threads, output_path):
                                     threads=threads, output_path=output_path)
     log.info(f'running kraken: {command}')
     # command_output = run(command, shell=True, capture_output=True)
-    kraken_process = Popen(command.split(' '), stdout=PIPE)
-    output_lines = [output_line for output_line in tqdm(iter(lambda: kraken_process.stdout.readline(), b""))]
+    with Popen(command.split(' '), stdout=PIPE) as kraken_process:
+        output_lines = [output_line for output_line in tqdm(iter(lambda: kraken_process.stdout.readline(), b""))]
     if kraken_process.returncode:
         log.error(kraken_process.stderr)
         raise Exception('GInGeR failed to run Kraken2. The pipeline will abort')
@@ -41,8 +41,8 @@ def get_list_of_top_species_by_kraken(kraken_output_path, reads_ratio_th):
     with open(kraken_output_path) as kraken_f:
         for line in kraken_f:
             line_split = line.split('\t')
-            reads_count += 1
             if line_split[READ_STATUS_INDEX] == 'C':
+                reads_count += 1
                 species_dict[line_split[SPECIES_NAME_INDEX]] += 1
     top_species = [species.split(' (')[0] for species, c in species_dict.items() if
                    c / reads_count > reads_ratio_th]
