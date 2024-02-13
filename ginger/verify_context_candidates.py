@@ -8,11 +8,12 @@ from ginger import pipeline_utils as pu
 
 log = logging.getLogger(__name__)
 
-
 # TODO go over all functions and see if they are used and or should be re written
 # TODO proper logging
+IOU_TH = 0.5
 
-def extract_start_and_end(in_match: mc.PathBugMatch , out_match:mc.PathBugMatch) -> tuple:
+
+def extract_start_and_end(in_match: mc.PathBugMatch, out_match: mc.PathBugMatch) -> tuple:
     if in_match.strand == '+':
         start = in_match.bug_end
         end = out_match.bug_start
@@ -58,7 +59,8 @@ def get_all_in_out_matches(in_paths_by_gene_and_bug, out_paths_by_gene_and_bug, 
             for i in in_paths:
                 for o in out_paths:
                     if i.strand == o.strand:
-                        in_out_match = get_in_out_match(i, o, genes_lengths[i.gene], minimal_gap_ratio, maximal_gap_ratio)
+                        in_out_match = get_in_out_match(i, o, genes_lengths[i.gene], minimal_gap_ratio,
+                                                        maximal_gap_ratio)
                         if in_out_match is not None:
                             matches_per_gene_and_bug[gene_bug].append(in_out_match)
     log.info(
@@ -69,13 +71,14 @@ def get_all_in_out_matches(in_paths_by_gene_and_bug, out_paths_by_gene_and_bug, 
 def keep_best_matches_per_gene_bug_pair(matches_per_gene_and_bug) -> defaultdict:
     best_matches_per_gene_and_bug = defaultdict()
     for gene_bug, matches in matches_per_gene_and_bug.items():
-        best_matches_per_gene_and_bug[gene_bug] = keep_best_matches(matches, iou_th=0.5)
+        best_matches_per_gene_and_bug[gene_bug] = keep_best_matches(matches, iou_th=IOU_TH)
     return best_matches_per_gene_and_bug
 
 
-def keep_best_matches(matches, iou_th: float = 0):  # -> Dict[Tuple[str,str]:List[mc.InOutPathsMatch]]
+def keep_best_matches(matches, sorting_func=lambda x: (x.score, x.end - x.start, x.start, x.gene),
+                      iou_th=IOU_TH, ):  # -> Dict[Tuple[str,str]:List[mc.InOutPathsMatch]]
     # TODO double check that I can get more than one match
-    sorted_matches = sorted(matches, key=lambda x: x.match_score, reverse=True)
+    sorted_matches = sorted(matches, key=sorting_func, reverse=True)
     representative_matches = []
     for match in sorted_matches:
         if not pu.is_similar_to_representatives(representative_matches, match, iou_th):
@@ -94,8 +97,9 @@ def process_in_and_out_paths_to_results(in_path_mapping_to_bugs, out_path_mappin
     parsed_out_path_to_bugs_by_gene_and_bug = read_and_filter_path_matches_per_gene(mc.PathBugMatch,
                                                                                     out_path_mapping_to_bugs,
                                                                                     paths_pident_filtering_th)
-    if len(parsed_in_path_to_bugs_by_gene_and_bug)==0 or len(parsed_out_path_to_bugs_by_gene_and_bug)==0:
-        log.info(f'GInGeR found {len(parsed_in_path_to_bugs_by_gene_and_bug)=} matches for incoming paths and {len(parsed_out_path_to_bugs_by_gene_and_bug)=} matches for outgoing paths. No results will be produced')
+    if len(parsed_in_path_to_bugs_by_gene_and_bug) == 0 or len(parsed_out_path_to_bugs_by_gene_and_bug) == 0:
+        log.info(
+            f'GInGeR found {len(parsed_in_path_to_bugs_by_gene_and_bug)=} matches for incoming paths and {len(parsed_out_path_to_bugs_by_gene_and_bug)=} matches for outgoing paths. No results will be produced')
         return []
     log.info(f'{dt.datetime.now()} generating in-out matches')
     matches_per_gene = get_all_in_out_matches(parsed_in_path_to_bugs_by_gene_and_bug,

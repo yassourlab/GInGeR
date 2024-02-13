@@ -53,7 +53,7 @@ class GeneContigMatch:
         # TODO make the list of fields shared with the one in sequence_alignment_utils.py
         target, query, tstart, tend, nident, qlen = mmseq_line.split('\t')
         # self.gene_species_start_end = query
-        self.gene_length = int(qlen)
+        self.gene_length = int(qlen) * 3
         # self.gene_with_context_start = paf_line.qstart
         # self.gene_with_context_end = paf_line.qend
 
