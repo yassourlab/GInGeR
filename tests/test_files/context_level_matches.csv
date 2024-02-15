@@ -1,2 +1,2 @@
-gene,reference_contig,in_context,out_context,in_context_start,out_context_end,gene_start,gene_end,match_score,Genome,species
-test_gene,MGYG000260594_1,test_gene_nodes_5+_path_5+,test_gene_nodes_5+_path_5+,5077572,5078572,5077972,5078172,0.9775,MGYG000260594,Escherichia coli_D
+gene,reference_contig,in_context,out_context,in_context_start,out_context_end,gene_start,gene_end,score,Genome,species
+test_gene,MGYG000260594_1,test_gene_nodes_5+_path_5+,test_gene_nodes_5+_path_5+,5077572,5078572,5077951,5078235,0.970873786407767,MGYG000260594,Escherichia coli_D

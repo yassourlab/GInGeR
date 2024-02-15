@@ -32,7 +32,7 @@ class ProcessContextCandidatesTest(unittest.TestCase):
         self.assertEqual(match.bug, 'MGYG000260594_1')
         self.assertEqual(match.gene, 'test_gene')
         self.assertEqual(match.gene_length, 200)
-        self.assertEqual(match.match_score, 0.9775)
+        self.assertEqual(match.score, 0.9775)
         self.assertEqual(match.start, 5077972)
         self.assertEqual(match.end, 5078172)
 

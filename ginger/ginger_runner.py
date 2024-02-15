@@ -18,11 +18,12 @@ log = logging.getLogger(__name__)
 
 
 def extract_genes_lengths(genes_path):
+    # TODO why do I ned to extract genes length if I have this from mmseq?
     gene_lengths = {}
     with open(genes_path) as f:
         fasta_sequences = SeqIO.parse(f, 'fasta')
         for s in fasta_sequences:
-            gene_length = len(s.seq)
+            gene_length = len(s.seq) * 3
             gene_name = s.id
 
             gene_lengths[gene_name] = gene_length
@@ -97,10 +98,10 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
         merged_filtered_fasta = f'{references_dir}/merged_filtered_ref_db.fasta'
         if kraken_output_path is None:
             kraken_output_path = f'{out_dir}/kraken_output_file.tsv'
-        rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads,
-                                             kraken_output_path, reads_ratio_th,
-                                             metadata_path, references_dir,
-                                             merged_filtered_fasta, max_species_representatives)
+            rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads,
+                                                 kraken_output_path, reads_ratio_th,
+                                                 metadata_path, references_dir,
+                                                 merged_filtered_fasta, max_species_representatives)
     indexed_reference = sau.generate_index(merged_filtered_fasta, preset=sau.INDEXING_PRESET,
                                            just_print=sau.JUST_PRINT_DEFAULT)
     # run assembly
