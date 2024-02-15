@@ -1,3 +1,3 @@
-gene,reference_contig,in_context,out_context,in_context_start,gene_start,gene_end,out_context_end,match_score,Genome,species
+gene,reference_contig,in_context,out_context,in_context_start,gene_start,gene_end,out_context_end,score,Genome,species
 gb|AE006468|+|3570463-3572006|ARO:3003512|Salmonella,MGYG000002515_1,gb|AE006468|+|3570463-3572006|ARO:3003512|Salmonella_nodes_9877+_path_11191-_36139-_1387-_72565-_9877+,gb|AE006468|+|3570463-3572006|ARO:3003512|Salmonella_nodes_9877+_path_9877+_16753-_293852-_205558+_9919-_1111-,3717357,3715801,3717357,3715801,0.9792,MGYG000002515,Escherichia fergusonii
 gb|AE006468|+|3570463-3572006|ARO:3003512|Salmonella,MGYG000002515_1,gb|AE006468|+|3570463-3572006|ARO:3003512|Salmonella_nodes_9877+_path_204685+_6085-_213272-_199191-_9877+,gb|AE006468|+|3570463-3572006|ARO:3003512|Salmonella_nodes_9877+_path_9877+_16753-_293852-_191053+_99907+_9923-_1111-,3841067,3839511,3841067,3839511,0.9752,MGYG000002515,Escherichia fergusonii

@@ -159,7 +159,7 @@ def read_and_filter_mmseq2_matches(match_object_constructor: callable, alignment
     if log.level == logging.DEBUG:
         log.debug(
             f'{dt.datetime.now()} {len(mmseq2_results)} alignments for {len(set([match.gene for match in mmseq2_results]))} genes were found in {alignment_path}')
-    filtered_mmseq2_results = [paf_line for paf_line in mmseq2_results if paf_line.match_score > pident_filtering_th]
+    filtered_mmseq2_results = [paf_line for paf_line in mmseq2_results if paf_line.score > pident_filtering_th]
 
     if log.level == logging.DEBUG:
         log.debug(
@@ -178,7 +178,7 @@ def read_and_filter_minimap_matches(match_object_constructor: callable, alignmen
         minimap_results = minimap_results
         log.debug(
             f'{dt.datetime.now()} {len(minimap_results)} alignments for {len(set([match.gene for match in minimap_results]))} genes were found in {alignment_path}')
-    filtered_minimap_results = [paf_line for paf_line in minimap_results if paf_line.match_score > pident_filtering_th]
+    filtered_minimap_results = [paf_line for paf_line in minimap_results if paf_line.score > pident_filtering_th]
 
     if log.level == logging.DEBUG:
         log.debug(

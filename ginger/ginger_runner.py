@@ -18,11 +18,12 @@ log = logging.getLogger(__name__)
 
 
 def extract_genes_lengths(genes_path):
+    # TODO why do I ned to extract genes length if I have this from mmseq?
     gene_lengths = {}
     with open(genes_path) as f:
         fasta_sequences = SeqIO.parse(f, 'fasta')
         for s in fasta_sequences:
-            gene_length = len(s.seq)
+            gene_length = len(s.seq) * 3
             gene_name = s.id
 
             gene_lengths[gene_name] = gene_length

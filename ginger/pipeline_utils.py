@@ -161,7 +161,7 @@ def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str)
             results_dict['gene_start'].append(match.start)
             results_dict['gene_end'].append(match.end)
 
-            results_dict['match_score'].append(match.match_score)
+            results_dict['score'].append(match.score)
 
     metadata_df = pd.read_csv(metadata_path, sep='\t')
     results_df = pd.DataFrame(results_dict)
@@ -182,8 +182,8 @@ def aggregate_context_level_output_to_species_level_output_and_write_csv(context
     genomes_per_species['species_instances'] = genomes_per_species['count'].apply(
         lambda x: min(x, max_species_representatives))
     agg_output = context_level_df_with_metadata.groupby(['gene', 'species']).aggregate(
-        {'Genome': ['nunique'], 'match_score': ['max']})
+        {'Genome': ['nunique'], 'score': ['max']})
     agg_output.columns = ['_'.join(col) for col in agg_output.columns.values]
     agg_output = agg_output.merge(genomes_per_species, left_on='species', right_index=True, how='left')
     agg_output['references_ratio'] = agg_output['Genome_nunique'] / agg_output['species_instances']
-    agg_output[['references_ratio', 'match_score_max', 'species_instances']].to_csv(species_level_output_path)
+    agg_output[['references_ratio', 'score_max', 'species_instances']].to_csv(species_level_output_path)

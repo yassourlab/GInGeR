@@ -30,9 +30,9 @@ def get_in_out_match(i, o, gene_length, minimal_gap_ratio, maximal_gap_ratio):
     start, end = extract_start_and_end(i, o)
     start_end_diff = end - start
     gap_ratio = start_end_diff / gene_length
-    match_score = (i.match_score * i.path_length + o.match_score * o.path_length) / (i.path_length + o.path_length)
+    score = (i.score * i.path_length + o.score * o.path_length) / (i.path_length + o.path_length)
     if minimal_gap_ratio < gap_ratio < maximal_gap_ratio:
-        return mc.InOutPathsMatch(i, o, start, end, gap_ratio, match_score, gene_length)
+        return mc.InOutPathsMatch(i, o, start, end, gap_ratio, score, gene_length)
     return None
 
 

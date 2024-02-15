@@ -1,2 +1,2 @@
-gene,species,references_ratio,match_score_max,species_instances
-test_gene,Escherichia coli_D,1.0,0.980154355016538,1
+gene,species,references_ratio,score_max,species_instances
+test_gene,Escherichia coli_D,1.0,0.970873786407767,1
