@@ -111,12 +111,14 @@ def map_genes_to_reference(args_path, reference_path, genes_to_reference_path,
 
 def _run_mmseqs2(query, target, out_file, nthreads=1):
     command = MMSEQ2_COMMAND.format(target=target, query=query, out_file=out_file, nthreads=nthreads)
+    pu.check_and_makedir(out_file)
     logging.info(f'running mmseq2: {command}')
     command_output = run(command, shell=True, capture_output=True)
     if command_output.returncode:
         logging.error(f'mmseq2 stderr: {command_output.stderr}')
+        raise Exception('mmseq2 failed to run. GInGeR will abort.')
     else:
-        logging.info(f'mmseq2 run successfully')
+        logging.info(f'mmseq2 ran successfully')
     return out_file
 
 

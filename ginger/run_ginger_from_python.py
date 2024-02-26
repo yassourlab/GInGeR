@@ -1,6 +1,6 @@
 from ginger import ginger_runner
 import pickle
-
+ # TODO this file should be deleted
 if __name__ == "__main__":
     LAB = '/sci/labs/morani/morani/icore-data/lab'
     # LAB = '/Volumes/netta.barak/lab'

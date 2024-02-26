@@ -51,7 +51,7 @@ def extract_genes_lengths(genes_path):
 @click.option('--references-dir', type=click.Path(), default='references_dir',
               help='The directory to which GInGeR will download missing reference genomes from UHGG. This folder can be shared for all runs of GInGer in order to avoid the same file being  downloaded and saved multiple times')
 @click.option('--merged-filtered-fasta', type=click.Path(), default=None,
-              help='A fasta or fasta.gz file that will be used a reference database (using this will skip the stages of creating a sample specific database based on the species detected in the sample by Kraken2)')
+              help='A fasta, fasta.gz or mmi (minimap indexed) file that will be used a reference database (using this will skip the stages of creating a sample specific database based on the species detected in the sample by Kraken2)')
 @click.option('--depth-limit', type=int, default=12,
               help='The maximal depth for paths describing context candidates in the assembly graph')
 @click.option('--maximal-gap-ratio', type=float, default=1.5,
@@ -102,8 +102,11 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                  kraken_output_path, reads_ratio_th,
                                                  metadata_path, references_dir,
                                                  merged_filtered_fasta, max_species_representatives)
-    indexed_reference = sau.generate_index(merged_filtered_fasta, preset=sau.INDEXING_PRESET,
-                                           just_print=sau.JUST_PRINT_DEFAULT)
+    if not merged_filtered_fasta.endswith('mmi'):
+        indexed_reference = sau.generate_index(merged_filtered_fasta, preset=sau.INDEXING_PRESET,
+                                               just_print=sau.JUST_PRINT_DEFAULT)
+    else:
+        indexed_reference = merged_filtered_fasta
     # run assembly
     if assembly_dir is None:
         assembly_dir = f'{out_dir}/SPAdes'
