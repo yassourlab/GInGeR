@@ -15,7 +15,7 @@ def save_paths_to_fasta_io_paths_approach(paths, paths_fasta_name, records_dict,
     # print(f'{dt.datetime.now()} saving paths to {paths_fasta_name}')
     in_paths_lengths = {}
     node_locations = {}
-    with open(paths_fasta_name, 'a') as f:
+    with open(paths_fasta_name, 'a') as f: # there is an 'a' here because I call this function once per gene location in the graph
         for path in paths:
             seq, node_start = pu.generate_str_from_list_of_nodes(records_dict, path, node_to_find)
             node_locations['_'.join(path)] = node_start
@@ -64,10 +64,9 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
     gene_lengths = {}
     for gene_contigs_match in genes_to_contigs:
         gene_and_nodes_path_str = f"{gene_contigs_match.gene}_nodes_{'_'.join(gene_contigs_match.nodes_list)}"
-        if gene_and_nodes_path_str in gene_and_nodes_path_set or gene_contigs_match.start_in_first_node is None:  # I already ran the pipeline for this and there is no need to do it again
-            log.debug(
-                f'{dt.datetime.now()} pipeline did not run for {gene_and_nodes_path_str} {gene_contigs_match.start_in_first_node}')
-        else:
+        if gene_contigs_match.start_in_first_node is None:  # I already ran the pipeline for this and there is no need to do it again
+            log.info( f'{dt.datetime.now()} pipeline did not run for {gene_and_nodes_path_str} {gene_contigs_match.start_in_first_node} because start_in_first_node is None')
+        elif gene_and_nodes_path_str not in gene_and_nodes_path_set:
             # unpacking variables
             gene_and_nodes_path_set.add(gene_and_nodes_path_str)
             first_node = gene_contigs_match.nodes_list[0]
@@ -106,6 +105,6 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                                          gene_and_node=gene_and_nodes_path_str)
             gene_lengths[gene_name] = gene_length
             if len(in_paths) == 0 or len(out_paths) == 0:
-                log.debug(f'{gene_contigs_match} in {len(in_paths)} out {len(out_paths)}')
+                log.info(f'{gene_contigs_match} in {len(in_paths)} out {len(out_paths)}')
 
     return gene_lengths

@@ -103,8 +103,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                  metadata_path, references_dir,
                                                  merged_filtered_fasta, max_species_representatives)
     if not merged_filtered_fasta.endswith('mmi'):
-        indexed_reference = sau.generate_index(merged_filtered_fasta, preset=sau.INDEXING_PRESET,
-                                               just_print=sau.JUST_PRINT_DEFAULT)
+        indexed_reference = sau.generate_index(merged_filtered_fasta, sau.INDEXING_PRESET)
     else:
         indexed_reference = merged_filtered_fasta
     # run assembly
@@ -138,7 +137,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     # merge and get results
     genes_lengths = extract_genes_lengths(genes_path)
     context_level_results = vcc.process_in_and_out_paths_to_results(in_contexts_to_bugs, out_contexts_to_bugs, genes_lengths,
-                                                      paths_pident_filtering_th, 0, maximal_gap_ratio)
+                                                      paths_pident_filtering_th, 0, maximal_gap_ratio, metadata_path)
     if len(context_level_results) == 0:
         log.info('GInGeR could not find the requested genes in the samples')  # TODO make this more informative if I can
         return

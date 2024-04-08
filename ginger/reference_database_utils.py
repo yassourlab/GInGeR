@@ -28,11 +28,11 @@ def run_kraken(reads_1, reads_2, threads, output_path):
     # command_output = run(command, shell=True, capture_output=True)
     with Popen(command.split(' '), stdout=PIPE) as kraken_process:
         output_lines = [output_line for output_line in tqdm(iter(lambda: kraken_process.stdout.readline(), b""))]
-    if kraken_process.returncode:
-        log.error(kraken_process.stderr)
-        raise Exception('GInGeR failed to run Kraken2. The pipeline will abort')
-    else:
-        log.info(kraken_process.stdout)
+        if kraken_process.returncode:
+            log.error(kraken_process.stderr)
+            raise Exception('GInGeR failed to run Kraken2. The pipeline will abort')
+        else:
+            log.info(kraken_process.stdout)
 
 
 def get_list_of_top_species_by_kraken(kraken_output_path, reads_ratio_th):
@@ -57,9 +57,9 @@ def download_and_write_content_to_file(references_folder, references_folder_cont
     # download file from FTP if needed
 
     if mgyg_file in references_folder_content:
-        log.info(f'{mgyg_file} in {references_folder}')
+        log.info(f'{mgyg_file} already in {references_folder}. File will not be downloaded')
     else:
-        log.info(f'{mgyg_file} not in {references_folder}')
+        log.info(f'{mgyg_file} not in {references_folder}. File will be downloaded')
 
         data = urllib.request.urlopen(ftp_download_str).read()
         with open(local_tar_gz_path, 'wb') as f:

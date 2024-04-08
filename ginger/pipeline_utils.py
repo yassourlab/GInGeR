@@ -7,7 +7,7 @@ from collections import defaultdict
 RUNTIME_PRINTS_PATTERN = '$$$$$$$$$$'
 log = logging.getLogger(__name__)
 
-
+# TODO - write a function here that runs an external tool and present the output using tqdm (I coppied and pasted it multiple times already)
 def step_timing(func):
     def wrapper_lot_and_time(*args):
         start = timeit.default_timer()
@@ -142,7 +142,7 @@ def is_similar_to_representatives(representatives, gene_paths_to_bug_match, iou_
             return True
     return False
 
-
+@step_timing
 def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str):
     results_dict = defaultdict(list)
     for gene_species_tuple, matches_list in output.items():
@@ -168,7 +168,7 @@ def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str)
     results_df['Genome'] = results_df['reference_contig'].apply(lambda x: x.split('_')[0].split('.')[0])
     results_df.merge(metadata_df[['Genome', 'species']], on='Genome', how='left').to_csv(csv_path, index=False)
 
-
+@step_timing
 def aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path, metadata_path,
                                                                          species_level_output_path,
                                                                          max_species_representatives: int):

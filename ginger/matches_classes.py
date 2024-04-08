@@ -1,14 +1,14 @@
 from pafpy import PafRecord
-
+import re
 
 class PathBugMatch:
-    def __init__(self, paf_line: PafRecord):
+    def __init__(self, paf_line: PafRecord, contigs_to_species: dict):
         query_name_splt = paf_line.qname.split('_path_')
         gene_and_nodes_list = query_name_splt[0].split('_nodes_')
         self.query_name = paf_line.qname
-        self.path = query_name_splt[1]
-        self.gene = gene_and_nodes_list[0]
-        self.nodes_list = gene_and_nodes_list[1]
+        self.path = query_name_splt[1] if len(query_name_splt) > 1 else None
+        self.gene = gene_and_nodes_list[0].split('|')[0]
+        self.nodes_list = gene_and_nodes_list[1] if len(gene_and_nodes_list) > 1 else None
         self.path_length = paf_line.qlen
         self.path_start = paf_line.qstart
         self.path_end = paf_line.qend
@@ -16,6 +16,7 @@ class PathBugMatch:
         self.strand = paf_line.strand
 
         self.bug = paf_line.tname
+        self.species = contigs_to_species.get(self.bug.split('_')[0],f'unknown_{self.bug}') # fix this for cases with . etc
         self.bug_length = paf_line.tlen
         self.bug_start = paf_line.tstart
         self.bug_end = paf_line.tend
@@ -23,7 +24,7 @@ class PathBugMatch:
         self.score = paf_line.mlen / self.path_length
 
     def __str__(self):
-        return f'{self.gene} nodes: {self.nodes_list} path: {self.path} match score:{self.score} strand: {self.strand} {self.bug_start} to {self.bug_end}'
+        return f'{self.bug} {self.species} {self.gene} nodes: {self.nodes_list} path: {self.path} match score:{self.score} strand: {self.strand} {self.bug_start} to {self.bug_end}'
 
 
 # class GeneRefGTMatch:

@@ -24,7 +24,7 @@ def extract_start_and_end(in_match: mc.PathBugMatch, out_match: mc.PathBugMatch)
 
 
 def get_in_out_match(i, o, gene_length, minimal_gap_ratio, maximal_gap_ratio):
-    for field in ['gene', 'nodes_list', 'bug', 'strand']:
+    for field in ['gene', 'bug', 'strand']:
         if getattr(i, field) != getattr(o, field):
             return None
     start, end = extract_start_and_end(i, o)
@@ -36,13 +36,14 @@ def get_in_out_match(i, o, gene_length, minimal_gap_ratio, maximal_gap_ratio):
     return None
 
 
-def read_and_filter_path_matches_per_gene(match_object_constructor: callable, alignment_path, pident_filtering_th):
+def read_and_filter_path_matches_per_gene(match_object_constructor: callable, alignment_path, pident_filtering_th, ref_species_dict):
     parsed_as_iterator = sau.read_and_filter_minimap_matches(match_object_constructor, alignment_path,
-                                                             pident_filtering_th)
+                                                             pident_filtering_th, ref_species_dict)
     if parsed_as_iterator is None:
         return []
     genes_to_matches = defaultdict(list)
     for match in parsed_as_iterator:
+        # print(match)
         genes_to_matches[(match.gene, match.bug)].append(match)
     log.info(
         f"found {sum(len(v) for v in genes_to_matches.values())} matches for {len(genes_to_matches)} gene-bug pairs")
@@ -86,17 +87,29 @@ def keep_best_matches(matches, sorting_func=lambda x: (x.score, x.end - x.start,
     return representative_matches
 
 
+def get_bug_species_dict_from_metadata_path(metadata_path):
+    bug_species_dict = {}
+    with open(metadata_path, 'r') as f:
+        for line in f:
+            genome, _, _, _, species = line.split('\t')
+            bug_species_dict[genome] = species
+    return bug_species_dict
+
+@pu.step_timing
 def process_in_and_out_paths_to_results(in_path_mapping_to_bugs, out_path_mapping_to_bugs, genes_lengths,
                                         paths_pident_filtering_th, minimal_gap_ratio,
-                                        maximal_gap_ratio):
+                                        maximal_gap_ratio, metadata_path):
     # TODO get rid of pandas here (the tables have millions of entries and can potentially grow bigger)
     log.info(f'{dt.datetime.now()} parsing the mapping of in and out paths')
+    ref_species_dict = get_bug_species_dict_from_metadata_path(metadata_path)
     parsed_in_path_to_bugs_by_gene_and_bug = read_and_filter_path_matches_per_gene(mc.PathBugMatch,
                                                                                    in_path_mapping_to_bugs,
-                                                                                   paths_pident_filtering_th)
+                                                                                   paths_pident_filtering_th,
+                                                                                   ref_species_dict)
     parsed_out_path_to_bugs_by_gene_and_bug = read_and_filter_path_matches_per_gene(mc.PathBugMatch,
                                                                                     out_path_mapping_to_bugs,
-                                                                                    paths_pident_filtering_th)
+                                                                                    paths_pident_filtering_th,
+                                                                                    ref_species_dict)
     if len(parsed_in_path_to_bugs_by_gene_and_bug) == 0 or len(parsed_out_path_to_bugs_by_gene_and_bug) == 0:
         log.info(
             f'GInGeR found {len(parsed_in_path_to_bugs_by_gene_and_bug)=} matches for incoming paths and {len(parsed_out_path_to_bugs_by_gene_and_bug)=} matches for outgoing paths. No results will be produced')
