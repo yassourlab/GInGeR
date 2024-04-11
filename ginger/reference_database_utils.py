@@ -66,6 +66,10 @@ def download_and_write_content_to_file(references_folder, references_folder_cont
             f.write(data)
 
     # read tar.gt file and add it's content to the merged filtered fasta
+    gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f)
+
+
+def gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f):
     with gzip.open(local_tar_gz_path, 'rt') as gzip_fin:
         fasta_part = False
         for line in gzip_fin:

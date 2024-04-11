@@ -99,6 +99,22 @@ class GingerRunnerTest(unittest.TestCase):
             lines_gt = gt.readlines()
         self.assertListEqual(lines_out, lines_gt)
 
+    # def test_debug_ginger_march_14(self):
+    #     ginger_e2e_func(
+    #         '/sci/labs/morani/morani/icore-data/lab/Data/mock_communities/atcc_1006_2006/nanopore/SRR9847864.fastq.gz',
+    #         '/sci/labs/morani/morani/icore-data/lab/Data/mock_communities/atcc_1006_2006/short_reads/MSA-1006_1_R1_1M_sample.fastq',
+    #         '/sci/labs/morani/morani/icore-data/lab/Data/mock_communities/atcc_1006_2006/short_reads/MSA-1006_1_R2_1M_sample.fastq',
+    #         '/sci/backup/morani/lab/Projects/GInGeR/ginger-analysis/temp_dir/out_dir',
+    #         '/sci/backup/morani/lab/Projects/GInGeR/analysis_data/SPAdes',
+    #         8,
+    #         None,
+    #         self.read_ratio_th, self.metadata_path,
+    #         '/sci/backup/morani/lab/Projects/GInGeR/analysis_data/analysis_references_dir',
+    #         '/sci/backup/morani/lab/Projects/GInGeR/analysis_data/analysis_references_dir/merged_filtered_ref_db.mmi',
+    #         '/sci/labs/morani/morani/icore-data/lab/Data/BacterialGenes/IGC_proteins_no_dups.fasta',
+    #         12, 1.5, 2500, 0.9,
+    #         0.9, True, 10)
+
 
 if __name__ == '__main__':
     unittest.main()

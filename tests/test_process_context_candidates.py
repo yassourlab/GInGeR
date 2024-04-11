@@ -8,7 +8,12 @@ from tests import helper
 
 TEST_FILES = helper.get_filedir()
 
+
 class ProcessContextCandidatesTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.metadata_path = 'ginger/UHGG-metadata.tsv'  # for running on github CI
+        # cls.metadata_path = '../ginger/UHGG-metadata.tsv'  # for running locally
 
     def test_process_in_and_out_paths_to_results(self):
         in_path_mapping_to_bugs = f'{TEST_FILES}/in_paths_to_reference.paf'
@@ -21,7 +26,8 @@ class ProcessContextCandidatesTest(unittest.TestCase):
         matches_per_gene_no_overlaps = pcc.process_in_and_out_paths_to_results(in_path_mapping_to_bugs,
                                                                                out_path_mapping_to_bugs, genes_lengths,
                                                                                paths_pident_filtering_th,
-                                                                               minimal_gap_ratio, maximal_gap_ratio)
+                                                                               minimal_gap_ratio, maximal_gap_ratio,
+                                                                               self.metadata_path)
 
         with open(f'{TEST_FILES}/matches_per_gene_no_overlaps.pkl', 'rb') as f:
             expected_matches_per_gene_no_overlaps = pickle.load(f)
