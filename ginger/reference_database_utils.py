@@ -68,7 +68,7 @@ def download_and_write_content_to_file(references_folder, references_folder_cont
     # read tar.gt file and add it's content to the merged filtered fasta
     gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f)
 
-
+# TODO sed -n '/>MGYG000005036.fa_1/,$p' MGYG000005036.gff > MGYG000005036.fasta works in command line. Can I use it here?
 def gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f):
     with gzip.open(local_tar_gz_path, 'rt') as gzip_fin:
         fasta_part = False

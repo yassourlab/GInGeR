@@ -13,10 +13,10 @@ class PathBugMatch:
         self.path_start = paf_line.qstart
         self.path_end = paf_line.qend
 
-        self.strand = paf_line.strand
+        self.strand = str(paf_line.strand)
 
         self.bug = paf_line.tname
-        self.species = contigs_to_species.get(self.bug.split('_')[0],f'unknown_{self.bug}') # fix this for cases with . etc
+        self.species = contigs_to_species.get(re.split(self.bug,'[\._]')[0],f'unknown_{self.bug}') # fix this for cases with . etc
         self.bug_length = paf_line.tlen
         self.bug_start = paf_line.tstart
         self.bug_end = paf_line.tend
