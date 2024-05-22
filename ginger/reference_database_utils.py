@@ -83,11 +83,11 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
                                                                merged_filtered_fasta, max_refs_per_species=10):
     # TODO - move max refs per species to external parameters
     metadata = pd.read_csv(metadata_path, sep='\t')
-    metadata['species'] = metadata.Lineage.apply(lambda x: x.split('s__')[-1])
+    # metadata['species'] = metadata.Lineage.apply(lambda x: x.split('s__')[-1])
     references_folder_content = [x.split('/')[-1] for x in glob(references_folder + '/*')]
     with open(merged_filtered_fasta, 'w') as merged_filtered_fasta_f:
         for s in top_species:
-            single_species_table = metadata[metadata.species == s].sort_values('Length', ascending=False).head(
+            single_species_table = metadata[metadata.species == s].sort_values('Completeness', ascending=False).head(
                 max_refs_per_species)
             single_species_table.apply(
                 lambda x: download_and_write_content_to_file(references_folder, references_folder_content,

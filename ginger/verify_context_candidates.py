@@ -91,7 +91,7 @@ def get_bug_species_dict_from_metadata_path(metadata_path):
     bug_species_dict = {}
     with open(metadata_path, 'r') as f:
         for line in f:
-            genome, _, _, _, species = line.split('\t')
+            genome, _, _, species = line.split('\t')
             bug_species_dict[genome] = species
     return bug_species_dict
 

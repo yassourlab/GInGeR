@@ -7,6 +7,7 @@ from collections import defaultdict
 RUNTIME_PRINTS_PATTERN = '$$$$$$$$$$'
 log = logging.getLogger(__name__)
 
+
 # TODO - write a function here that runs an external tool and present the output using tqdm (I coppied and pasted it multiple times already)
 def step_timing(func):
     def wrapper_lot_and_time(*args):
@@ -15,6 +16,7 @@ def step_timing(func):
         stop = timeit.default_timer()
         log.info(f'{RUNTIME_PRINTS_PATTERN} {func} took {(stop - start) / 60} minutes {RUNTIME_PRINTS_PATTERN}')
         return func_return_vals
+
     return wrapper_lot_and_time
 
 
@@ -142,6 +144,7 @@ def is_similar_to_representatives(representatives, gene_paths_to_bug_match, iou_
             return True
     return False
 
+
 @step_timing
 def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str):
     results_dict = defaultdict(list)
@@ -168,6 +171,7 @@ def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str)
     results_df['Genome'] = results_df['reference_contig'].apply(lambda x: x.split('_')[0].split('.')[0])
     results_df.merge(metadata_df[['Genome', 'species']], on='Genome', how='left').to_csv(csv_path, index=False)
 
+
 @step_timing
 def aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path, metadata_path,
                                                                          species_level_output_path,
@@ -186,4 +190,7 @@ def aggregate_context_level_output_to_species_level_output_and_write_csv(context
     agg_output.columns = ['_'.join(col) for col in agg_output.columns.values]
     agg_output = agg_output.merge(genomes_per_species, left_on='species', right_index=True, how='left')
     agg_output['references_ratio'] = agg_output['Genome_nunique'] / agg_output['species_instances']
-    agg_output[['references_ratio', 'score_max', 'species_instances']].to_csv(species_level_output_path)
+    species_level_output = agg_output[['references_ratio', 'score_max', 'species_instances']]
+    if species_level_output_path is not None:
+        species_level_output.to_csv(species_level_output_path)
+    return species_level_output

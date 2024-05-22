@@ -21,7 +21,7 @@ class PathBugMatch:
         self.bug_start = paf_line.tstart
         self.bug_end = paf_line.tend
 
-        self.score = paf_line.mlen / self.path_length
+        self.score = paf_line.mlen / min(self.path_length, self.bug_end, self.bug_length-self.bug_start)
 
     def __str__(self):
         return f'{self.bug} {self.species} {self.gene} nodes: {self.nodes_list} path: {self.path} match score:{self.score} strand: {self.strand} {self.bug_start} to {self.bug_end}'
