@@ -103,6 +103,7 @@ def find_genes_in_contigs(temp_dir: str, genes_path: str, contigs_path: str, n_m
                           pident_filtering_th: float) -> Iterator[mc.GeneContigMatch]:
     genes_to_contigs_path = c.GENES_TO_CONTIGS_TEMPLATE.format(temp_files_path=temp_dir)
     if not os.path.exists(genes_to_contigs_path) or not os.path.isfile(genes_to_contigs_path):
+        log.info(f'running minimap2 to find genes in contigs')
         genes_to_contigs_path = sau.map_genes_to_contigs(genes_path, contigs_path, genes_to_contigs_path,
                                                          nthreads=n_minimap_threads)
     genes_to_contigs = sau.read_and_filter_mmseq2_matches(mc.GeneContigMatch, genes_to_contigs_path,
