@@ -57,6 +57,7 @@ def extract_genes_lengths(genes_path):
 @click.option('--maximal-gap-ratio', type=float, default=1.5,
               help="The maximal ratio between the length of the gene and the gap between it's contexts in the database")
 @click.option('--max-context-len', type=int, default=2500, help='The maximal length for context candidates')
+@click.option('--min-context-len', type=int, default=0, help='The minimal length for context candidates')
 @click.option('--gene-pident-filtering-th', type=float, default=0.9,
               help='The minimal % of matched base pairs required for locating a gene in the graph')
 @click.option('--paths-pident-filtering-th', type=float, default=0.9,
@@ -65,7 +66,7 @@ def extract_genes_lengths(genes_path):
               help='A flag that indicates whether or not to skip the assembly step. If the flag is set to True, the argument --assembly--dir must be supplied and direct to the results of a SPAdes run')
 def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                    reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta,
-                   genes_path, depth_limit, maximal_gap_ratio, max_context_len, gene_pident_filtering_th,
+                   genes_path, depth_limit, maximal_gap_ratio, max_context_len,min_context_len, gene_pident_filtering_th,
                    paths_pident_filtering_th, skip_assembly, max_species_representatives):
     """GInGeR - A tool for analyzing the genomic contexts of genes in metagenomic samples.
 
@@ -84,13 +85,13 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_d
     """
     return ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                            reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta,
-                           genes_path, depth_limit, maximal_gap_ratio, max_context_len, gene_pident_filtering_th,
+                           genes_path, depth_limit, maximal_gap_ratio, max_context_len,min_context_len, gene_pident_filtering_th,
                            paths_pident_filtering_th, skip_assembly, max_species_representatives)
 
 
 def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                     reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta,
-                    genes_path, depth_limit, maximal_gap_ratio, max_context_len, gene_pident_filtering_th,
+                    genes_path, depth_limit, maximal_gap_ratio, max_context_len,min_context_len, gene_pident_filtering_th,
                     paths_pident_filtering_th, skip_assembly, max_species_representatives):
     print('metadata_path: ', metadata_path)
     # filter reference database using kraken
