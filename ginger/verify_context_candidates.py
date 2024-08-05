@@ -83,8 +83,9 @@ def keep_best_matches(matches:List, sorting_func=lambda x: (-x.score, -(x.end - 
 def get_bug_species_dict_from_metadata_path(metadata_path):
     bug_species_dict = {}
     with open(metadata_path, 'r') as f:
+        # TODO need to skip header
         for line in f:
-            genome, _, _, species = line.split('\t')
+            genome, _, _, species = line[:-1].split('\t')
             bug_species_dict[genome] = species
     return bug_species_dict
 

@@ -10,12 +10,14 @@ log = logging.getLogger(__name__)
 
 
 def save_paths_to_fasta_io_paths_approach(paths, paths_fasta_name, records_dict, node_to_find=None,
-                                          max_context_len=math.inf, min_context_len=0,in_or_out=None, covered_by_gene=0, gene_and_node=''):
+                                          max_context_len=math.inf, min_context_len=0, in_or_out=None,
+                                          covered_by_gene=0, gene_and_node=''):
     # TODO I think I don't really need the outputs of this function anymore
     # print(f'{dt.datetime.now()} saving paths to {paths_fasta_name}')
     in_paths_lengths = {}
     node_locations = {}
-    with open(paths_fasta_name, 'a') as f: # there is an 'a' here because I call this function once per gene location in the graph
+    with open(paths_fasta_name,
+              'a') as f:  # there is an 'a' here because I call this function once per gene location in the graph
         for path in paths:
             seq, node_start = pu.generate_str_from_list_of_nodes(records_dict, path, node_to_find)
             if len(seq) > min_context_len:
@@ -38,7 +40,6 @@ def save_paths_to_fasta_io_paths_approach(paths, paths_fasta_name, records_dict,
 
 
 def paths_enumerator(graph, stack, max_depth, max_length, neighbors_func, reverse=False, covered_by_gene=0):
-    # TODO in cases where there are no incoming or out coming paths, I think that we don't take the path that consists only of the node itself into account - for example gene_Subject_11486372__Scaffold_30890__Start_212__End_556_nodes_722037+ in the graph with just 1M short reads
     out_paths = []
     while stack:
         (vertex, path) = stack.pop()
@@ -58,15 +59,15 @@ def paths_enumerator(graph, stack, max_depth, max_length, neighbors_func, revers
 @pu.step_timing
 def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                       nodes_with_edges_and_sequences: Dict[str, SeqIO.SeqRecord],
-                                                      genes_to_contigs, depth_limit,
-                                                      max_context_len,
+                                                      genes_to_contigs, depth_limit,min_context_len,max_context_len,
                                                       in_paths_fasta, out_paths_fasta):
     gene_and_nodes_path_set = set()
     gene_lengths = {}
     for gene_contigs_match in genes_to_contigs:
         gene_and_nodes_path_str = f"{gene_contigs_match.gene}_nodes_{'_'.join(gene_contigs_match.nodes_list)}"
         if gene_contigs_match.start_in_first_node is None:  # I already ran the pipeline for this and there is no need to do it again
-            log.info( f'{dt.datetime.now()} pipeline did not run for {gene_and_nodes_path_str} {gene_contigs_match.start_in_first_node} because start_in_first_node is None')
+            log.info(
+                f'{dt.datetime.now()} pipeline did not run for {gene_and_nodes_path_str} {gene_contigs_match.start_in_first_node} because start_in_first_node is None')
         elif gene_and_nodes_path_str not in gene_and_nodes_path_set:
             # unpacking variables
             gene_and_nodes_path_set.add(gene_and_nodes_path_str)
@@ -87,6 +88,7 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
             in_paths_lengths, _ = save_paths_to_fasta_io_paths_approach(in_paths, in_paths_fasta,
                                                                         nodes_with_edges_and_sequences,
                                                                         max_context_len=max_context_len,
+                                                                        min_context_len=min_context_len,
                                                                         in_or_out='in',
                                                                         covered_by_gene=in_covered_by_gene,
                                                                         gene_and_node=gene_and_nodes_path_str)
@@ -101,7 +103,9 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                          nx.DiGraph.successors, covered_by_gene=out_covered_by_gene)
             out_paths_lengths, _ = save_paths_to_fasta_io_paths_approach(out_paths, out_paths_fasta,
                                                                          nodes_with_edges_and_sequences,
-                                                                         max_context_len=max_context_len, in_or_out='out',
+                                                                         max_context_len=max_context_len,
+                                                                         min_context_len=min_context_len,
+                                                                         in_or_out='out',
                                                                          covered_by_gene=out_covered_by_gene,
                                                                          gene_and_node=gene_and_nodes_path_str)
             gene_lengths[gene_name] = gene_length

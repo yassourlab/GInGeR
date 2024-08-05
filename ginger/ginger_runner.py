@@ -65,8 +65,8 @@ def extract_genes_lengths(genes_path):
 @click.option('--skip-assembly', is_flag=True, default=False,
               help='A flag that indicates whether or not to skip the assembly step. If the flag is set to True, the argument --assembly--dir must be supplied and direct to the results of a SPAdes run')
 def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                   reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta,
-                   genes_path, depth_limit, maximal_gap_ratio, max_context_len,min_context_len, gene_pident_filtering_th,
+                   reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path, depth_limit,
+                   maximal_gap_ratio, max_context_len, min_context_len, gene_pident_filtering_th,
                    paths_pident_filtering_th, skip_assembly, max_species_representatives):
     """GInGeR - A tool for analyzing the genomic contexts of genes in metagenomic samples.
 
@@ -84,16 +84,18 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_d
 
     """
     return ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                           reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta,
-                           genes_path, depth_limit, maximal_gap_ratio, max_context_len,min_context_len, gene_pident_filtering_th,
+                           reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path,
+                           depth_limit, maximal_gap_ratio, max_context_len, min_context_len, gene_pident_filtering_th,
                            paths_pident_filtering_th, skip_assembly, max_species_representatives)
 
 
 def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                    reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta,
-                    genes_path, depth_limit, maximal_gap_ratio, max_context_len,min_context_len, gene_pident_filtering_th,
+                    reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path, depth_limit,
+                    maximal_gap_ratio, max_context_len, min_context_len, gene_pident_filtering_th,
                     paths_pident_filtering_th, skip_assembly, max_species_representatives):
     print('metadata_path: ', metadata_path)
+    # create output directory if it doesn't exist
+    pu.check_and_make_dir_no_file_name(out_dir)
     # filter reference database using kraken
     if merged_filtered_fasta is None:
         merged_filtered_fasta = f'{references_dir}/merged_filtered_ref_db.fasta'
@@ -115,8 +117,9 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     # run tool
 
     assembly_graph, genes_with_location_in_graph, assembly_graph_nodes = lg.locate_genes_in_graph(assembly_dir,
-                                                                                          gene_pident_filtering_th,
-                                                                                          genes_path, threads, out_dir)
+                                                                                                  gene_pident_filtering_th,
+                                                                                                  genes_path, threads,
+                                                                                                  out_dir)
     if genes_with_location_in_graph is None:
         log.info('Genes of interest were not detected in assembly. No results will be generated')
         return
@@ -126,7 +129,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     out_paths_fasta = c.OUT_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
     _ = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, assembly_graph_nodes,
                                                               genes_with_location_in_graph, depth_limit,
-                                                              max_context_len, in_paths_fasta,
+                                                              min_context_len, max_context_len, in_paths_fasta,
                                                               out_paths_fasta)
     # map them to the reference
     in_contexts_to_bugs = c.IN_MAPPING_TO_BUGS_PATH_TEMPLATE.format(temp_folder=out_dir)
@@ -137,8 +140,9 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
 
     # merge and get results
     genes_lengths = extract_genes_lengths(genes_path)
-    context_level_results = vcc.process_in_and_out_paths_to_results(in_contexts_to_bugs, out_contexts_to_bugs, genes_lengths,
-                                                      paths_pident_filtering_th, 0, maximal_gap_ratio, metadata_path)
+    context_level_results = vcc.process_in_and_out_paths_to_results(in_contexts_to_bugs, out_contexts_to_bugs,
+                                                                    genes_lengths, paths_pident_filtering_th, 0,
+                                                                    maximal_gap_ratio, metadata_path)
     if len(context_level_results) == 0:
         log.info('GInGeR could not find the requested genes in the samples')  # TODO make this more informative if I can
         return
