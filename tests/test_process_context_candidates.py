@@ -12,8 +12,8 @@ TEST_FILES = helper.get_filedir()
 class ProcessContextCandidatesTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.metadata_path = 'ginger/UHGG-metadata.tsv'  # for running on github CI
-        # cls.metadata_path = '../ginger/UHGG-metadata.tsv'  # for running locally
+        # cls.metadata_path = 'ginger/UHGG-metadata.tsv'  # for running on github CI
+        cls.metadata_path = '../ginger/UHGG-metadata.tsv'  # for running locally
 
     def test_process_in_and_out_paths_to_results(self):
         in_path_mapping_to_bugs = f'{TEST_FILES}/in_paths_to_reference.paf'

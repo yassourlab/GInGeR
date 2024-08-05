@@ -36,8 +36,8 @@ class GingerRunnerTest(unittest.TestCase):
         cls.threads = 1
         cls.genes_path = f'{TEST_FILES}/test_gene.faa'
         cls.merged_filtered_fasta = f'{TEST_FILES}/merged_filtered_ref_db.fasta.gz'
-        cls.metadata_path = 'ginger/UHGG-metadata.tsv'  # for running on github CI
-        # cls.metadata_path = '../ginger/UHGG-metadata.tsv'  # for running locally
+        # cls.metadata_path = 'ginger/UHGG-metadata.tsv'  # for running on github CI
+        cls.metadata_path = '../ginger/UHGG-metadata.tsv'  # for running locally
         cls.max_species_representatives = 1
         cls.read_ratio_th = 0.15
         if os.path.exists(cls.out_dir):
@@ -50,11 +50,9 @@ class GingerRunnerTest(unittest.TestCase):
 
     @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
     def test_ginger_e2e_func(self):
-        ginger_e2e_func(None, self.short_reads_1, self.short_reads_2, self.out_dir, None, self.threads,
-                        None,
+        ginger_e2e_func(None, self.short_reads_1, self.short_reads_2, self.out_dir, None, self.threads, None,
                         self.read_ratio_th, self.metadata_path, 'references_dir', self.merged_filtered_fasta,
-                        self.genes_path, 12, 1.5, 2500, 0.9,
-                        0.9, False, self.max_species_representatives)
+                        self.genes_path, 12, 1.5, 0, 2500, 0.9, 0.9, False, self.max_species_representatives)
 
         self.assertTrue(os.path.exists(f'{self.out_dir}/context_level_matches.csv'))
         self.assertTrue(os.path.exists(f'{self.out_dir}/species_level_matches.csv'))
@@ -98,23 +96,6 @@ class GingerRunnerTest(unittest.TestCase):
             lines_out = test_out.readlines()
             lines_gt = gt.readlines()
         self.assertListEqual(lines_out, lines_gt)
-
-    # def test_debug_ginger_march_14(self):
-    #     ginger_e2e_func(
-    #         '/sci/labs/morani/morani/icore-data/lab/Data/mock_communities/atcc_1006_2006/nanopore/SRR9847864.fastq.gz',
-    #         '/sci/labs/morani/morani/icore-data/lab/Data/mock_communities/atcc_1006_2006/short_reads/MSA-1006_1_R1_1M_sample.fastq',
-    #         '/sci/labs/morani/morani/icore-data/lab/Data/mock_communities/atcc_1006_2006/short_reads/MSA-1006_1_R2_1M_sample.fastq',
-    #         '/sci/backup/morani/lab/Projects/GInGeR/ginger-analysis/temp_dir/out_dir',
-    #         '/sci/backup/morani/lab/Projects/GInGeR/analysis_data/SPAdes',
-    #         8,
-    #         None,
-    #         self.read_ratio_th, self.metadata_path,
-    #         '/sci/backup/morani/lab/Projects/GInGeR/analysis_data/analysis_references_dir',
-    #         '/sci/backup/morani/lab/Projects/GInGeR/analysis_data/analysis_references_dir/merged_filtered_ref_db.mmi',
-    #         '/sci/labs/morani/morani/icore-data/lab/Data/BacterialGenes/IGC_proteins_no_dups.fasta',
-    #         12, 1.5, 2500, 0.9,
-    #         0.9, True, 10)
-
 
 if __name__ == '__main__':
     unittest.main()
