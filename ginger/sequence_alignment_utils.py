@@ -100,6 +100,11 @@ def map_contexts_to_bugs(contigs_path, reference_path, contigs_to_bugs_path,
     return _run_minimap2_paf(contigs_path, reference_path, contigs_to_bugs_path, CONTIGS_TO_BUGS_PRESET, just_print,
                              nthreads)
 
+def map_nodes_to_contigs(nodes_path, contigs_path, nodes_to_contigs_path,
+                         just_print=JUST_PRINT_DEFAULT, nthreads=N_THREADS_DEFAULT):
+    return _run_minimap2_paf(nodes_path, contigs_path, nodes_to_contigs_path, CONTIGS_TO_BUGS_PRESET, just_print,
+                             nthreads)
+
 
 def map_genes_to_contigs(genes_path, contigs_path, genes_to_contigs_path,
                          just_print=JUST_PRINT_DEFAULT, nthreads=N_THREADS_DEFAULT):
@@ -138,6 +143,7 @@ def _run_mmseqs2(query, target, out_file, nthreads=1):
     #     return out_file
 
 
+@pu.step_timing
 def _run_minimap2_paf(query, target, out_file, preset='asm20', just_print=JUST_PRINT_DEFAULT, nthreads=1):
     command = MINIMAP2_COMMAND.format(preset=preset, target=target, query=query, out_file=out_file,
                                       nthreads=nthreads)
@@ -161,6 +167,7 @@ def _run_minimap2_paf(query, target, out_file, preset='asm20', just_print=JUST_P
     #     return out_file
 
 
+@pu.step_timing
 def read_and_filter_mmseq2_matches(match_object_constructor: callable, alignment_path: str, pident_filtering_th: float):
     if os.path.getsize(alignment_path) == 0:
         return None
@@ -177,7 +184,7 @@ def read_and_filter_mmseq2_matches(match_object_constructor: callable, alignment
                 f'{dt.datetime.now()} {len(filtered_mmseq2_results)} alignments for {len(set([match.gene for match in filtered_mmseq2_results]))} genes were left after filtering ')
     return filtered_mmseq2_results
 
-
+@pu.step_timing
 def read_and_filter_minimap_matches(match_object_constructor: callable, alignment_path: str,
                                     pident_filtering_th: float, *argv):
     if os.path.getsize(alignment_path) == 0:

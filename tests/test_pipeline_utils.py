@@ -1,6 +1,6 @@
 import unittest
 import os
-
+import pyfastg
 from ginger import pipeline_utils as pu
 
 from tests import helper
@@ -55,6 +55,15 @@ class PipelineUtilsTest(unittest.TestCase):
             out_lines = out_f.readlines()
             gt_lines = gt_f.readlines()
         self.assertListEqual(out_lines, gt_lines)
+
+    def test_parse_paths_file(self):
+        paths_file = f'{TEST_FILES}/test_contigs.paths'
+        assembly_graph =  pyfastg.parse_fastg('/sci/backup/morani/lab/Projects/GInGeR/analysis_data/SPAdes_short_1M_long_0/assembly_graph.fastg')
+
+        parsed_paths_without_gaps, contigs_with_gaps = pu.parse_paths_file(paths_file, assembly_graph.nodes)
+        print(len(parsed_paths_without_gaps), len(contigs_with_gaps))
+        self.assertEqual(len(parsed_paths_without_gaps), 16)
+        self.assertEqual(len(contigs_with_gaps), 4)
 
 
 if __name__ == '__main__':
