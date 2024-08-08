@@ -191,13 +191,14 @@ def map_nodes_to_contigs_w_gaps(contigs_with_gaps, assembly_graph_path, contigs_
                                                      nodes_to_contigs_w_gaps_path,
                                                      nthreads=n_threads)
     nodes_to_contigs_df = pu.minimap_results_from_path(nodes_to_contigs_path)
-    nodes_to_contigs_df['node'] = nodes_to_contigs_df.qname.apply(lambda x: x[:-1].split(':')[0])
-    nodes_to_contigs_df['score'] = nodes_to_contigs_df.mlen / nodes_to_contigs_df.qlen
-    nodes_to_contigs_df = \
-        nodes_to_contigs_df[(nodes_to_contigs_df.score > 0.95)].rename(
-            columns={'tname': 'contig', 'tstart': 'contig_start', 'tend': 'contig_end'})[
-            ['contig', 'contig_start', 'contig_end', 'node', 'score', 'strand']]
-    nodes_to_contigs_df.sort_values(['score', 'node'], inplace=True, ascending=(False, True))
-    nodes_to_contigs_df.drop_duplicates(subset=['contig', 'contig_start', 'contig_end', 'score'],
-                                        keep='first', inplace=True)
+    if len(nodes_to_contigs_df):
+        nodes_to_contigs_df['node'] = nodes_to_contigs_df.qname.apply(lambda x: x[:-1].split(':')[0])
+        nodes_to_contigs_df['score'] = nodes_to_contigs_df.mlen / nodes_to_contigs_df.qlen
+        nodes_to_contigs_df = \
+            nodes_to_contigs_df[(nodes_to_contigs_df.score > 0.95)].rename(
+                columns={'tname': 'contig', 'tstart': 'contig_start', 'tend': 'contig_end'})[
+                ['contig', 'contig_start', 'contig_end', 'node', 'score', 'strand']]
+        nodes_to_contigs_df.sort_values(['score', 'node'], inplace=True, ascending=(False, True))
+        nodes_to_contigs_df.drop_duplicates(subset=['contig', 'contig_start', 'contig_end', 'score'],
+                                            keep='first', inplace=True)
     return nodes_to_contigs_df
