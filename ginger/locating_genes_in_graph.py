@@ -77,16 +77,22 @@ def format_contig_name_for_nodes_list(contig_name):
     else:
         return contig_num + '+'
 
+
 def get_start_in_first_node(gene_contig_match, top_nodes_to_contigs_match):
     if top_nodes_to_contigs_match.strand == '+':
         return gene_contig_match.start - top_nodes_to_contigs_match.contig_start
     else:
         return top_nodes_to_contigs_match.contig_end - gene_contig_match.end
 
+
 def add_location_in_graph_based_on_nodes_to_contigs(gene_contig_match, nodes_to_contigs_df):
-    filtered_nodes_to_contigs = nodes_to_contigs_df[(nodes_to_contigs_df.contig == gene_contig_match.contig) & (
-            nodes_to_contigs_df.contig_start <= gene_contig_match.start) & (
-                                                            nodes_to_contigs_df.contig_end >= gene_contig_match.end)]
+    pos_stran_conditions = ((nodes_to_contigs_df.contig_start <= gene_contig_match.start) & (
+            gene_contig_match.start <= nodes_to_contigs_df.contig_end) & (nodes_to_contigs_df.strand == '+'))
+    neg_strand_conditions = ((nodes_to_contigs_df.contig_start <= gene_contig_match.end) & (
+            gene_contig_match.end <= nodes_to_contigs_df.contig_end) & (nodes_to_contigs_df.strand == '-'))
+    or_between_conditions = pos_stran_conditions | neg_strand_conditions
+    filtered_nodes_to_contigs = nodes_to_contigs_df[
+        (nodes_to_contigs_df.contig == gene_contig_match.contig) & or_between_conditions]
 
     if filtered_nodes_to_contigs.empty:
         return None
@@ -188,10 +194,10 @@ def map_nodes_to_contigs_w_gaps(contigs_with_gaps, assembly_graph_path, contigs_
     nodes_to_contigs_df['node'] = nodes_to_contigs_df.qname.apply(lambda x: x[:-1].split(':')[0])
     nodes_to_contigs_df['score'] = nodes_to_contigs_df.mlen / nodes_to_contigs_df.qlen
     nodes_to_contigs_df = \
-    nodes_to_contigs_df[(nodes_to_contigs_df.score > 0.95)].rename(
-        columns={'tname': 'contig', 'tstart': 'contig_start', 'tend': 'contig_end'})[
-        ['contig', 'contig_start', 'contig_end', 'node', 'score','strand']]
-    nodes_to_contigs_df.sort_values(['score','node'], inplace=True, ascending=(False,True))
+        nodes_to_contigs_df[(nodes_to_contigs_df.score > 0.95)].rename(
+            columns={'tname': 'contig', 'tstart': 'contig_start', 'tend': 'contig_end'})[
+            ['contig', 'contig_start', 'contig_end', 'node', 'score', 'strand']]
+    nodes_to_contigs_df.sort_values(['score', 'node'], inplace=True, ascending=(False, True))
     nodes_to_contigs_df.drop_duplicates(subset=['contig', 'contig_start', 'contig_end', 'score'],
                                         keep='first', inplace=True)
     return nodes_to_contigs_df
