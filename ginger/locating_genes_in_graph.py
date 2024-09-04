@@ -5,8 +5,9 @@ from ginger import sequence_alignment_utils as sau
 from ginger import matches_classes as mc
 from ginger import constants as c
 from Bio import SeqIO
-from typing import Dict, Iterator
+from typing import Dict, Iterator, List
 import networkx as nx
+import pandas as pd
 import os
 
 log = logging.getLogger(__name__)
@@ -30,13 +31,11 @@ def get_short_node_name(long_node_name):
         return node_num + '+'
 
 
-def add_nodes_list_and_start_location_to_gene_contig_match(nodes_sequences_dict, nodes_in_path, gene_contig_match):
+def add_location_in_graph_based_on_contigs_paths(nodes_sequences_dict, nodes_in_path, gene_contig_match):
     #  this is not the exact start but it's good enough
     contig_start = gene_contig_match.start
     contig_end = gene_contig_match.end
-    if not nodes_in_path:
-        return gene_contig_match
-    elif len(nodes_in_path) == 1:
+    if len(nodes_in_path) == 1:
         gene_contig_match.nodes_list = nodes_in_path
         gene_contig_match.start_in_first_node = contig_start
     else:
@@ -67,23 +66,62 @@ def add_nodes_list_and_start_location_to_gene_contig_match(nodes_sequences_dict,
             prev_seq = cur_seq
         gene_contig_match.nodes_list = nodes_for_genes
         gene_contig_match.start_in_first_node = start_in_first_node
-    # TODO I'm modifying and then returning the same object. I think it's not optimal
+    # TODO I'm modifying and then returning the same object. I think it's not the best practice
     return gene_contig_match
 
 
-def get_genes_to_contigs_with_nodes_list(genes_to_contigs: Iterator[mc.GeneContigMatch], assembly_graph: nx.DiGraph,
-                                         nodes_sequences_dict: Dict[str, SeqIO.SeqRecord], assembly_dir: str):
-    contig_nodes_dict = pu.get_contig_nodes_dict(assembly_graph.nodes,
-                                                 c.PATHS_PATH_TEMPLATE.format(assembly_dir=assembly_dir),
-                                                 keep_contigs_with_gaps=False)
+def format_contig_name_for_nodes_list(contig_name):
+    contig_num = contig_name.split('_')[1]
+    if contig_num[-1] == "'":
+        return contig_num + '-'
+    else:
+        return contig_num + '+'
+
+
+def get_start_in_first_node(gene_contig_match, top_nodes_to_contigs_match):
+    if top_nodes_to_contigs_match.strand == '+':
+        return gene_contig_match.start - top_nodes_to_contigs_match.contig_start
+    else:
+        return top_nodes_to_contigs_match.contig_end - gene_contig_match.end
+
+
+def add_location_in_graph_based_on_nodes_to_contigs(gene_contig_match, nodes_to_contigs_df):
+    pos_stran_conditions = ((nodes_to_contigs_df.contig_start <= gene_contig_match.start) & (
+            gene_contig_match.start <= nodes_to_contigs_df.contig_end) & (nodes_to_contigs_df.strand == '+'))
+    neg_strand_conditions = ((nodes_to_contigs_df.contig_start <= gene_contig_match.end) & (
+            gene_contig_match.end <= nodes_to_contigs_df.contig_end) & (nodes_to_contigs_df.strand == '-'))
+    or_between_conditions = pos_stran_conditions | neg_strand_conditions
+    filtered_nodes_to_contigs = nodes_to_contigs_df[
+        (nodes_to_contigs_df.contig == gene_contig_match.contig) & or_between_conditions]
+
+    if filtered_nodes_to_contigs.empty:
+        return None
+    else:
+        top_nodes_to_contigs_match = filtered_nodes_to_contigs.iloc[0]
+        gene_contig_match.nodes_list = [format_contig_name_for_nodes_list(top_nodes_to_contigs_match.node)]
+        gene_contig_match.start_in_first_node = get_start_in_first_node(gene_contig_match, top_nodes_to_contigs_match)
+    return gene_contig_match
+
+
+def add_node_list_to_genes_to_contigs(genes_to_contigs: Iterator[mc.GeneContigMatch],
+                                      parsed_paths_without_gaps: Dict[str, List],
+                                      nodes_sequences_dict: Dict[str, SeqIO.SeqRecord],
+                                      nodes_to_contigs_df: pd.DataFrame):
     matches_with_nodes_list_and_start_location = []
-    for gene_contig_match in genes_to_contigs:  # TODO turn this to an iterator when I finish debugging
-        updated_gene_contig_match = add_nodes_list_and_start_location_to_gene_contig_match(nodes_sequences_dict,
-                                                                                           contig_nodes_dict.get(
-                                                                                               gene_contig_match.contig,
-                                                                                               None), gene_contig_match)
-        if updated_gene_contig_match.nodes_list and updated_gene_contig_match.start_in_first_node:
+
+    for gene_contig_match in genes_to_contigs:
+        contig_path_in_graph = parsed_paths_without_gaps.get(gene_contig_match.contig, None)
+        if contig_path_in_graph:
+            updated_gene_contig_match = add_location_in_graph_based_on_contigs_paths(nodes_sequences_dict,
+                                                                                     contig_path_in_graph,
+                                                                                     gene_contig_match)
+        else:
+            updated_gene_contig_match = add_location_in_graph_based_on_nodes_to_contigs(gene_contig_match,
+                                                                                        nodes_to_contigs_df)
+        if updated_gene_contig_match is not None:
             matches_with_nodes_list_and_start_location.append(updated_gene_contig_match)
+        # else:
+        #     log.warning(f'gene {gene_contig_match.gene} not found in the assembly graph')
     return matches_with_nodes_list_and_start_location
 
 
@@ -98,33 +136,69 @@ def get_nodes_dict_from_fastg_file(assembly_graph_path: str) -> Dict[str, SeqIO.
     nodes_sequences_dict = {get_short_node_name(record.name): record for record in records}
     return nodes_sequences_dict
 
+
 @pu.step_timing
 def find_genes_in_contigs(genes_path: str, contigs_path: str, n_minimap_threads: int,
-                          pident_filtering_th: float,genes_to_contigs_path:str) -> Iterator[mc.GeneContigMatch]:
+                          pident_filtering_th: float, genes_to_contigs_path: str) -> Iterator[mc.GeneContigMatch]:
     if not os.path.exists(genes_to_contigs_path) or not os.path.isfile(genes_to_contigs_path):
         log.info(f'running mmseqs2 to find genes in contigs')
         genes_to_contigs_path = sau.map_genes_to_contigs(genes_path, contigs_path, genes_to_contigs_path,
                                                          nthreads=n_minimap_threads)
     genes_to_contigs = sau.read_and_filter_mmseq2_matches(mc.GeneContigMatch, genes_to_contigs_path,
-                                                           pident_filtering_th)
+                                                          pident_filtering_th)
     return genes_to_contigs
 
+
 @pu.step_timing
-def locate_genes_in_graph(assembly_dir: str, gene_pident_filtering_th: float, genes_path: str, n_minimap_threads: int,
+def locate_genes_in_graph(assembly_dir: str, gene_pident_filtering_th: float, genes_path: str, n_threads: int,
                           temp_folder: str):  # -> Tuple[networkx.DiGraph,??? ,Dict[str, SeqIO.SeqRecord]]
     contigs_path = c.CONTIGS_PATH_TEMPLATE.format(assembly_dir=assembly_dir)
     assembly_graph_path = c.ASSEMBLY_GRAPH_PATH_TEMPLATE.format(assembly_dir=assembly_dir)
-    assembly_graph_nodes = get_nodes_dict_from_fastg_file(assembly_graph_path)
     genes_to_contigs_path = c.GENES_TO_CONTIGS_TEMPLATE.format(temp_files_path=temp_folder)
-    genes_to_contigs = find_genes_in_contigs(genes_path, contigs_path, n_minimap_threads,
-                                             gene_pident_filtering_th,genes_to_contigs_path)
-    log.info(f'found {len(set([m.gene for m in genes_to_contigs]))} genes in the assembly graph')
+    nodes_to_contigs_w_gaps_path = c.NODES_TO_CONTIGS_W_GAPS_TEMPLATE.format(temp_files_path=temp_folder)
 
+    # find genes in contigs
+    genes_to_contigs = find_genes_in_contigs(genes_path, contigs_path, n_threads,
+                                             gene_pident_filtering_th, genes_to_contigs_path)
+
+    log.info(f'found {len(set([m.gene for m in genes_to_contigs]))} genes in the assembly graph')
     if genes_to_contigs is None:
         return None, None, None
 
+    assembly_graph_nodes = get_nodes_dict_from_fastg_file(assembly_graph_path)
     assembly_graph = pyfastg.parse_fastg(assembly_graph_path)
-    genes_with_location_in_graph = get_genes_to_contigs_with_nodes_list(genes_to_contigs, assembly_graph,
-                                                                        assembly_graph_nodes, assembly_dir)
+    # find nodes in contigs with gaps
+    parsed_paths_without_gaps, contigs_with_gaps = pu.parse_paths_file(
+        c.PATHS_PATH_TEMPLATE.format(assembly_dir=assembly_dir), assembly_graph.nodes)
+    nodes_to_contigs_df = map_nodes_to_contigs_w_gaps(contigs_with_gaps, assembly_graph_path, contigs_path, n_threads,
+                                                      nodes_to_contigs_w_gaps_path)
+
+    genes_with_location_in_graph = add_node_list_to_genes_to_contigs(genes_to_contigs, parsed_paths_without_gaps,
+                                                                     assembly_graph_nodes, nodes_to_contigs_df)
     log.info(f'found locations in the assembly graph for {len(genes_with_location_in_graph)} genes')
     return assembly_graph, genes_with_location_in_graph, assembly_graph_nodes
+
+
+@pu.step_timing
+def map_nodes_to_contigs_w_gaps(contigs_with_gaps, assembly_graph_path, contigs_path, n_threads,
+                                nodes_to_contigs_w_gaps_path):
+    # filter contigs fasta to keep only contigs with gaps
+    contigs_w_gaps_path = contigs_path.replace('.fasta', '_w_gaps.fasta')
+    SeqIO.write([contig for contig in SeqIO.parse(contigs_path, 'fasta') if contig.id in contigs_with_gaps],
+                contigs_w_gaps_path, 'fasta')
+    # find nodes in contigs with gaps
+    nodes_to_contigs_path = sau.map_nodes_to_contigs(assembly_graph_path, contigs_w_gaps_path,
+                                                     nodes_to_contigs_w_gaps_path,
+                                                     nthreads=n_threads)
+    nodes_to_contigs_df = pu.minimap_results_from_path(nodes_to_contigs_path)
+    if len(nodes_to_contigs_df):
+        nodes_to_contigs_df['node'] = nodes_to_contigs_df.qname.apply(lambda x: x[:-1].split(':')[0])
+        nodes_to_contigs_df['score'] = nodes_to_contigs_df.mlen / nodes_to_contigs_df.qlen
+        nodes_to_contigs_df = \
+            nodes_to_contigs_df[(nodes_to_contigs_df.score > 0.95)].rename(
+                columns={'tname': 'contig', 'tstart': 'contig_start', 'tend': 'contig_end'})[
+                ['contig', 'contig_start', 'contig_end', 'node', 'score', 'strand']]
+        nodes_to_contigs_df.sort_values(['score', 'node'], inplace=True, ascending=(False, True))
+        nodes_to_contigs_df.drop_duplicates(subset=['contig', 'contig_start', 'contig_end', 'score'],
+                                            keep='first', inplace=True)
+    return nodes_to_contigs_df

@@ -3,6 +3,7 @@ import logging
 import pandas as pd
 import timeit
 from collections import defaultdict
+from pafpy import PafRecord, PafFile
 
 RUNTIME_PRINTS_PATTERN = '$$$$$$$$$$'
 log = logging.getLogger(__name__)
@@ -61,34 +62,53 @@ def is_contig_name_func(line):
     return line.startswith('NODE')
 
 
-def parse_paths_file(paths_file, assembly_graph_nodes, path_is_contig_name_func=is_contig_name_func,
-                     keep_contigs_with_gaps=True):
-    out = []
-    contig_name = None
-    nodes_details_list = []
-    had_gaps = False
-    for line in paths_file.readlines():
-        line_no_newline = line[:-len('\n')]
-        if path_is_contig_name_func(line_no_newline):
-            if contig_name is not None and (keep_contigs_with_gaps or not had_gaps):
-                out.append((contig_name, nodes_details_list))
-                # yield contig_name, nodes_details_list
-            contig_name = line_no_newline
-            nodes_details_list = []
-            had_gaps = False
+def paf_record_to_dict(paf_record):
+    return dict(qname=paf_record.qname, qlen=paf_record.qlen, strand=str(paf_record.strand),
+                tname=paf_record.tname, tlen=paf_record.tlen, tstart=paf_record.tstart, tend=paf_record.tend,
+                mlen=paf_record.mlen)  # blen=paf_record.blen, qstart=paf_record.qstart, qend=paf_record.qend,
+
+
+def minimap_results_from_path(path, head_size=None):
+    with open(path) as f:
+        paf_file = PafFile(f)
+        if head_size:
+            head = [next(paf_file) for _ in range(head_size)]  # paf_file
         else:
-            had_gaps = had_gaps or (';' in line)
-            nodes_details_list += parse_list_of_nodes(line_no_newline, assembly_graph_nodes)
-    out.append((contig_name, nodes_details_list))
-    return out
+            head = paf_file
+        minimap_results = pd.DataFrame([paf_record_to_dict(paf_record) for paf_record in head])
+    return minimap_results
 
 
-def get_contig_nodes_dict(assembly_graph_nodes, paths_path, keep_contigs_with_gaps=True):
-    with open(paths_path) as f:
-        # TODO - I just ignore contigs with gaps and I can technically miss matches this way
-        contig_nodes_iterator = parse_paths_file(f, assembly_graph_nodes, keep_contigs_with_gaps=keep_contigs_with_gaps)
-    contig_nodes_dict = {contig_name: nodes_list for contig_name, nodes_list in contig_nodes_iterator}
-    return contig_nodes_dict
+def parse_paths_file(paths_path, assembly_graph_nodes, path_is_contig_name_func=is_contig_name_func):
+    parsed_paths_without_gaps = {}
+    contigs_with_gaps = set()
+
+    contig_name = None
+    path_in_graph = []
+    had_gaps = False
+    with open(paths_path) as paths_file:
+        for line in paths_file.readlines():
+            line_no_newline = line[:-len('\n')]
+            if path_is_contig_name_func(line_no_newline):
+                if contig_name:  # add contig name to the dict of parsed paths or to the list of paths with gaps
+                    if had_gaps:
+                        contigs_with_gaps.add(contig_name)
+                    else:
+                        parsed_paths_without_gaps[contig_name] = path_in_graph
+
+                contig_name = line_no_newline
+                path_in_graph = []
+                had_gaps = False
+            else:
+                had_gaps = had_gaps or (';' in line)
+                if not had_gaps:
+                    path_in_graph += parse_list_of_nodes(line_no_newline, assembly_graph_nodes)
+        # add the last contig
+        if had_gaps:
+            contigs_with_gaps.add(contig_name)
+        else:
+            parsed_paths_without_gaps[contig_name] = path_in_graph
+        return parsed_paths_without_gaps, contigs_with_gaps
 
 
 def get_sequence_overlap(seq_a, seq_b):
