@@ -9,9 +9,10 @@ OPTIONAL_LONG_READS_ADDITION = "--nanopore {long_reads} "
 
 @pu.step_timing
 def run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, output_folder, threads):
-    long_reads_str = ''
     if long_reads:
         long_reads_str = OPTIONAL_LONG_READS_ADDITION.format(long_reads=long_reads)
+    else:
+        long_reads_str = ''
     command = META_SPADES_COMMAND.format(short_reads_1=short_reads_1, short_reads_2=short_reads_2,
                                          optional_long_reads=long_reads_str, output_folder=output_folder,
                                          threads=threads)

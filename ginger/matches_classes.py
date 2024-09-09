@@ -1,6 +1,7 @@
 from pafpy import PafRecord
 import re
 
+
 class PathBugMatch:
     def __init__(self, paf_line: PafRecord, contigs_to_species: dict):
         query_name_splt = paf_line.qname.split('_path_')
@@ -16,38 +17,17 @@ class PathBugMatch:
         self.strand = str(paf_line.strand)
 
         self.bug = paf_line.tname
-        self.species = contigs_to_species.get(re.split(self.bug,'[\._]')[0],f'unknown_{self.bug}') # fix this for cases with . etc
+        self.species = contigs_to_species.get(re.split(self.bug, '[\._]')[0],
+                                              f'unknown_{self.bug}')  # fix this for cases with . etc
         self.bug_length = paf_line.tlen
         self.bug_start = paf_line.tstart
         self.bug_end = paf_line.tend
 
-        self.score = paf_line.mlen / min(self.path_length, self.bug_end, self.bug_length-self.bug_start)
+        self.score = paf_line.mlen / min(self.path_length, self.bug_end, self.bug_length - self.bug_start)
 
     def __str__(self):
         return f'{self.bug} {self.species} {self.gene} nodes: {self.nodes_list} path: {self.path} match score:{self.score} strand: {self.strand} {self.bug_start} to {self.bug_end}'
 
-
-# class GeneRefGTMatch:
-#     def __init__(self, paf_line: PafRecord):
-#         self.gene_species_start_end = paf_line.qname
-#         self.gene_with_context_length = paf_line.qlen
-#         self.gene_with_context_start = paf_line.qstart
-#         self.gene_with_context_end = paf_line.qend
-#
-#         self.gene = self.gene_species_start_end.split('|')[0]
-#
-#         self.strand = paf_line.strand
-#
-#         self.bug = paf_line.tname
-#         self.bug_length = paf_line.tlen
-#         self.start = paf_line.tstart
-#         self.end = paf_line.tend
-#
-#         self.score = paf_line.mlen / self.gene_with_context_length
-#
-#     def __str__(self):
-#         return f'{self.gene_species_start_end} {self.bug} {self.score}'
-#
 
 class GeneContigMatch:
     def __init__(self, mmseq_line: str):
