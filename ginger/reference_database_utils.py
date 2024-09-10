@@ -87,7 +87,7 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
     references_folder_content = [x.split('/')[-1] for x in glob(references_folder + '/*')]
     with open(merged_filtered_fasta, 'w') as merged_filtered_fasta_f:
         for s in top_species:
-            single_species_table = metadata[metadata.species == s].sort_values('Completeness', ascending=False).head(
+            single_species_table = metadata[(metadata.species == s) & (metadata.FTP_download.str.startswith('ftp'))].sort_values('Completeness', ascending=False).head(
                 max_refs_per_species)
             single_species_table.apply(
                 lambda x: download_and_write_content_to_file(references_folder, references_folder_content,
