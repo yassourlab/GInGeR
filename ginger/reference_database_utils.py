@@ -1,5 +1,5 @@
 import urllib.request
-from subprocess import run,Popen,PIPE
+from subprocess import run, Popen, PIPE
 from collections import defaultdict
 import pandas as pd
 from glob import glob
@@ -8,23 +8,29 @@ import gzip
 import logging
 from ginger import pipeline_utils as pu
 from tqdm import tqdm
+from Bio import SeqIO
+import os
+import re
 
 log = logging.getLogger(__name__)
-TOOLS = '/sci/labs/morani/morani/icore-data/lab/Tools'
-KRAKEN_PATH = f'kraken2'
-KRAKEN_DB = f'{TOOLS}/kraken2_db/UnifiedHumanGastrointestinalGenome'
-KRAKEN_COMMAND = '{kraken_path} --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {output_path} --use-names'  # --report {report}
+KRAKEN_DB = f'/sci/labs/morani/morani/icore-data/lab/Tools/kraken2_db/UnifiedHumanGastrointestinalGenome'
+KRAKEN_COMMAND = 'kraken2 --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {kraken_output} --report {kraken_report} --use-names'  # --report {report}
+BRACKEN_COMMAND = 'bracken -d {kraken_db} -i {kraken_report} -o {bracken_output} -w {bracken_report} -r {read_len} -l S -t {min_reads_for_bracken}'
 KRAKEN_OUTPUT_HEADER = ['classified', 'read', 'genome', 'reads_len', 'mapping_str']
 
 READ_STATUS_INDEX = 0
 SPECIES_NAME_INDEX = 2
+NUM_READS_RATIO = 0.005
 
 
-# TODO do I need to constantly log minimap's output (see assembly_utils) or is it enough to just log it in the end
 def run_kraken(reads_1, reads_2, threads, output_path):
     command = KRAKEN_COMMAND.format(kraken_path=KRAKEN_PATH, kraken_db=KRAKEN_DB, reads_1=reads_1, reads_2=reads_2,
                                     threads=threads, output_path=output_path)
-    log.info(f'running kraken: {command}')
+    # if kraken db does not exist, raise an error
+    if not os.path.exists(KRAKEN_DB):
+        raise Exception(f'Kraken database does not exist in {KRAKEN_DB}')
+
+    log.info(f'running Kraken2: {command}')
     # command_output = run(command, shell=True, capture_output=True)
     with Popen(command.split(' '), stdout=PIPE) as kraken_process:
         output_lines = [output_line for output_line in tqdm(iter(lambda: kraken_process.stdout.readline(), b""))]
@@ -34,21 +40,56 @@ def run_kraken(reads_1, reads_2, threads, output_path):
         else:
             log.info(kraken_process.stdout)
 
+def get_max_read_len(fastq_file):
+    max_length = 0
+    num_reads = 0
+    if fastq_file.endswith(".gz"):
+        fastq_file = gzip.open(fastq_file, "rt")
+    for record in SeqIO.parse(fastq_file, "fastq"):
+        num_reads += 1
+        read_length = len(record.seq)
+        if read_length > max_length:
+            max_length = read_length
 
-def get_list_of_top_species_by_kraken(kraken_output_path, reads_ratio_th):
-    species_dict = defaultdict(int)
-    reads_count = 0
-    with open(kraken_output_path) as kraken_f:
-        for line in kraken_f:
-            line_split = line.split('\t')
-            if line_split[READ_STATUS_INDEX] == 'C':
-                reads_count += 1
-                species_dict[line_split[SPECIES_NAME_INDEX]] += 1
-    top_species = [species.split(' (')[0] for species, c in species_dict.items() if
-                   c / reads_count > reads_ratio_th]
+    # Output the maximum read length
+    return num_reads, max_length
+
+def get_kmer_length_options(kraken_db):
+    pattern = r'database(.*?)mers\.kraken'
+    # List to store the extracted *** parts
+    extracted_parts = []
+    # Walk through the directory
+    for filename in os.listdir(kraken_db):
+        # Check if the filename matches the pattern
+        match = re.match(pattern, filename)
+        if match:
+            # Extract the *** part and add it to the list
+            extracted_parts.append(int(match.group(1)))
+    return extracted_parts
+
+
+def run_bracken(reads_1, kraken_report, bracken_output, bracken_report):
+    num_reads, max_read_len = get_max_read_len(reads_1)
+    kmer_length_options = get_kmer_length_options(KRAKEN_DB)
+    # get the kmer length that is closest to the read length
+    read_len = min(kmer_length_options, key=lambda x: abs(int(x) - max_read_len))
+    command = BRACKEN_COMMAND.format(kraken_db=KRAKEN_DB, kraken_report=kraken_report, bracken_output=bracken_output,
+                                     bracken_report=bracken_report, read_len=read_len, min_reads_for_bracken=int(num_reads*NUM_READS_RATIO))
+    log.info(f'running Bracken: {command}')
+    # command_output = run(command, shell=True, capture_output=True)
+    with Popen(command.split(' '), stdout=PIPE) as bracken_process:
+        output_lines = [output_line for output_line in tqdm(iter(lambda: bracken_process.stdout.readline(), b""))]
+        if bracken_process.returncode:
+            log.error(bracken_process.stderr)
+            raise Exception('GInGeR failed to run bracken_process. The pipeline will abort')
+        else:
+            log.info(bracken_process.stdout)
+
+def get_list_of_top_species_by_bracken(bracken_output_path, fraction_of_reads):
+    bracken_out = pd.read_csv(bracken_output_path, sep='\t')
+    top_species = bracken_out[bracken_out['fraction_total_reads'] > fraction_of_reads]['name'].tolist()
     log.info(top_species)
     return top_species
-
 
 def download_and_write_content_to_file(references_folder, references_folder_content, ftp_download_str: str,
                                        merged_filtered_fasta_f):
@@ -68,6 +109,7 @@ def download_and_write_content_to_file(references_folder, references_folder_cont
     # read tar.gt file and add it's content to the merged filtered fasta
     gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f)
 
+
 # TODO sed -n '/>MGYG000005036.fa_1/,$p' MGYG000005036.gff > MGYG000005036.fasta works in command line. Can I use it here?
 def gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f):
     with gzip.open(local_tar_gz_path, 'rt') as gzip_fin:
@@ -80,8 +122,7 @@ def gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f):
 
 
 def generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path, references_folder,
-                                                               merged_filtered_fasta, max_refs_per_species=10):
-    # TODO - move max refs per species to external parameters
+                                                               merged_filtered_fasta, max_refs_per_species):
     metadata = pd.read_csv(metadata_path, sep='\t')
     # metadata['species'] = metadata.Lineage.apply(lambda x: x.split('s__')[-1])
     references_folder_content = [x.split('/')[-1] for x in glob(references_folder + '/*')]
@@ -103,7 +144,7 @@ def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_pa
     pu.check_and_makedir(kraken_output_path)
     pu.check_and_make_dir_no_file_name(references_folder)
     run_kraken(reads_1, reads_2, threads, kraken_output_path)
-    top_species = get_list_of_top_species_by_kraken(kraken_output_path, reads_ratio_th)
+    top_species = get_list_of_top_species_by_bracken(kraken_output_path, reads_ratio_th)
     generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path, references_folder,
                                                                merged_filtered_fasta,
                                                                max_refs_per_species=max_species_representatives)

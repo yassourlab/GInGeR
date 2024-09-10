@@ -1,0 +1,17 @@
+name	taxonomy_id	taxonomy_lvl	kraken_assigned_reads	added_reads	new_est_reads	fraction_total_reads
+Enterobacter cloacae	3510	S	39620	0	39620	0.06621
+Enterobacter kobei	503	S	181	0	181	0.00030
+Enterobacter roggenkampii	3509	S	34	0	34	0.00006
+Enterobacter sichuanensis	3508	S	27	0	27	0.00005
+Enterobacter asburiae_B	3529	S	16	0	16	0.00003
+Enterobacter mori	114	S	14	0	14	0.00002
+Enterobacter chengduensis	3512	S	7	0	7	0.00001
+Enterobacter cloacae_K	3511	S	6	0	6	0.00001
+Enterobacter hormaechei_A	3514	S	6	0	6	0.00001
+Enterobacter cloacae_O	126	S	4	0	4	0.00001
+Enterobacter ludwigii	3513	S	2	0	2	0.00000
+Enterobacter cancerogenus	2022	S	1	0	1	0.00000
+Salmonella enterica	3346	S	42197	0	42197	0.07051
+Salmonella bongori	3505	S	61	0	61	0.00010
+Yersinia enterocolitica	3307	S	27115	0	27115	0.04531
+
