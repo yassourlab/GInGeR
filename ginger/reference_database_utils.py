@@ -14,7 +14,7 @@ import re
 
 log = logging.getLogger(__name__)
 KRAKEN_DB = f'/sci/labs/morani/morani/icore-data/lab/Tools/kraken2_db/UnifiedHumanGastrointestinalGenome'
-KRAKEN_COMMAND = 'kraken2 --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {kraken_output} --report {kraken_report} --use-names'  # --report {report}
+KRAKEN_COMMAND = 'kraken2 --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {kraken_output} --report {kraken_report} --confidence 0.1 --use-names'  # --report {report}
 BRACKEN_COMMAND = 'bracken -d {kraken_db} -i {kraken_report} -o {bracken_output} -w {bracken_report} -r {read_len} -l S -t {min_reads_for_bracken}'
 KRAKEN_OUTPUT_HEADER = ['classified', 'read', 'genome', 'reads_len', 'mapping_str']
 
@@ -23,9 +23,9 @@ SPECIES_NAME_INDEX = 2
 NUM_READS_RATIO = 0.005
 
 
-def run_kraken(reads_1, reads_2, threads, output_path):
-    command = KRAKEN_COMMAND.format(kraken_path=KRAKEN_PATH, kraken_db=KRAKEN_DB, reads_1=reads_1, reads_2=reads_2,
-                                    threads=threads, output_path=output_path)
+def run_kraken(reads_1, reads_2, threads, output_path, report_path):
+    command = KRAKEN_COMMAND.format(kraken_db=KRAKEN_DB, reads_1=reads_1, reads_2=reads_2,
+                                    threads=threads, kraken_output=output_path, kraken_report=report_path)
     # if kraken db does not exist, raise an error
     if not os.path.exists(KRAKEN_DB):
         raise Exception(f'Kraken database does not exist in {KRAKEN_DB}')
@@ -40,6 +40,7 @@ def run_kraken(reads_1, reads_2, threads, output_path):
         else:
             log.info(kraken_process.stdout)
 
+
 def get_max_read_len(fastq_file):
     max_length = 0
     num_reads = 0
@@ -53,6 +54,7 @@ def get_max_read_len(fastq_file):
 
     # Output the maximum read length
     return num_reads, max_length
+
 
 def get_kmer_length_options(kraken_db):
     pattern = r'database(.*?)mers\.kraken'
@@ -74,7 +76,8 @@ def run_bracken(reads_1, kraken_report, bracken_output, bracken_report):
     # get the kmer length that is closest to the read length
     read_len = min(kmer_length_options, key=lambda x: abs(int(x) - max_read_len))
     command = BRACKEN_COMMAND.format(kraken_db=KRAKEN_DB, kraken_report=kraken_report, bracken_output=bracken_output,
-                                     bracken_report=bracken_report, read_len=read_len, min_reads_for_bracken=int(num_reads*NUM_READS_RATIO))
+                                     bracken_report=bracken_report, read_len=read_len,
+                                     min_reads_for_bracken=int(num_reads * NUM_READS_RATIO))
     log.info(f'running Bracken: {command}')
     # command_output = run(command, shell=True, capture_output=True)
     with Popen(command.split(' '), stdout=PIPE) as bracken_process:
@@ -85,11 +88,13 @@ def run_bracken(reads_1, kraken_report, bracken_output, bracken_report):
         else:
             log.info(bracken_process.stdout)
 
+
 def get_list_of_top_species_by_bracken(bracken_output_path, fraction_of_reads):
     bracken_out = pd.read_csv(bracken_output_path, sep='\t')
     top_species = bracken_out[bracken_out['fraction_total_reads'] > fraction_of_reads]['name'].tolist()
     log.info(top_species)
     return top_species
+
 
 def download_and_write_content_to_file(references_folder, references_folder_content, ftp_download_str: str,
                                        merged_filtered_fasta_f):
@@ -128,7 +133,7 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
     references_folder_content = [x.split('/')[-1] for x in glob(references_folder + '/*')]
     with open(merged_filtered_fasta, 'w') as merged_filtered_fasta_f:
         for s in top_species:
-            single_species_table = metadata[metadata.species == s].sort_values('Completeness', ascending=False).head(
+            single_species_table = metadata[(metadata.species == s) & (metadata.FTP_download.str.startswith('ftp'))].sort_values('Completeness', ascending=False).head(
                 max_refs_per_species)
             single_species_table.apply(
                 lambda x: download_and_write_content_to_file(references_folder, references_folder_content,
@@ -139,12 +144,14 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
 
 
 @pu.step_timing
-def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_path, reads_ratio_th, metadata_path,
+def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_path, kraken_report_path, bracken_output,
+                                     bracken_report, reads_ratio_th, metadata_path,
                                      references_folder, merged_filtered_fasta, max_species_representatives):
     pu.check_and_makedir(kraken_output_path)
     pu.check_and_make_dir_no_file_name(references_folder)
-    run_kraken(reads_1, reads_2, threads, kraken_output_path)
-    top_species = get_list_of_top_species_by_bracken(kraken_output_path, reads_ratio_th)
+    run_kraken(reads_1, reads_2, threads, kraken_output_path, kraken_report_path)
+    run_bracken(reads_1, kraken_report_path, bracken_output, bracken_report)
+    top_species = get_list_of_top_species_by_bracken(bracken_output, reads_ratio_th)
     generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path, references_folder,
                                                                merged_filtered_fasta,
                                                                max_refs_per_species=max_species_representatives)
