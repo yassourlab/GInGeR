@@ -85,13 +85,13 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_d
     """
     return ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                            reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path,
-                           depth_limit, maximal_gap_ratio, min_context_len,  max_context_len, gene_pident_filtering_th,
+                           depth_limit, maximal_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
                            paths_pident_filtering_th, skip_assembly, max_species_representatives)
 
 
 def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                     reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path, depth_limit,
-                    maximal_gap_ratio, min_context_len, max_context_len,  gene_pident_filtering_th,
+                    maximal_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
                     paths_pident_filtering_th, skip_assembly, max_species_representatives):
     # create output directory if it doesn't exist
     pu.check_and_make_dir_no_file_name(out_dir)
@@ -100,10 +100,13 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
         merged_filtered_fasta = f'{references_dir}/merged_filtered_ref_db.fasta'
         if kraken_output_path is None:
             kraken_output_path = f'{out_dir}/kraken_output_file.tsv'
-            rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads,
-                                                 kraken_output_path, reads_ratio_th,
-                                                 metadata_path, references_dir,
-                                                 merged_filtered_fasta, max_species_representatives)
+            kraken_report_path = f'{out_dir}/kraken_report_file.tsv'
+            bracken_output = f'{out_dir}/bracken_output_file.tsv'
+            bracken_report = f'{out_dir}/bracken_report_file.tsv'
+            rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads, kraken_output_path,
+                                                 kraken_report_path, bracken_output, bracken_report, reads_ratio_th,
+                                                 metadata_path, references_dir, merged_filtered_fasta,
+                                                 max_species_representatives)
     if not merged_filtered_fasta.endswith('mmi'):
         indexed_reference = sau.generate_index(merged_filtered_fasta, sau.INDEXING_PRESET)
     else:
@@ -117,7 +120,8 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
 
     assembly_graph, genes_with_location_in_graph, assembly_graph_nodes = lg.locate_genes_in_graph(assembly_dir,
                                                                                                   gene_pident_filtering_th,
-                                                                                                  genes_path, threads,
+                                                                                                  genes_path,
+                                                                                                  threads,
                                                                                                   out_dir)
     if genes_with_location_in_graph is None:
         log.info('Genes of interest were not detected in assembly. No results will be generated')
@@ -143,17 +147,18 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                                     genes_lengths, paths_pident_filtering_th, 0,
                                                                     maximal_gap_ratio, metadata_path)
     if len(context_level_results) == 0:
-        log.info('GInGeR could not find the requested genes in the samples')  # TODO make this more informative if I can
+        log.info(
+            'GInGeR could not find the requested genes in the samples')  # TODO make this more informative if I can
         return
     context_level_output_path = c.CONTEXT_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     species_level_output_path = c.SPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     pu.write_context_level_output_to_csv(context_level_results, context_level_output_path, metadata_path)
-    pu.aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path, metadata_path,
+    pu.aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path,
+                                                                            metadata_path,
                                                                             species_level_output_path,
                                                                             max_species_representatives)
     log.info(
         f"GInGer's run completed successfully!\nContext-level output can be found here: {context_level_output_path}, species-level output can be found here: {species_level_output_path}")
 
-
-if __name__ == "__main__":
-    run_ginger_e2e()
+    if __name__ == "__main__":
+        run_ginger_e2e()
