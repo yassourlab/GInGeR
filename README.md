@@ -12,12 +12,12 @@ genomic contexts in the graph, verifies the contexts and assigns them to carrier
    installed, follow the directions  to install [miniconda](https://docs.anaconda.com/anaconda/install/index.html) or [mamba](https://mamba.readthedocs.io/en/latest/installation/mamba-installation.html).
 1. Clone the repository using `git clone`.
 2. Use the conda environment file given in the repository to create and activate GInGeR's conda environment:
+    * `cd GInGeR`
     * `conda env create -f ginger.yml`.
     * `conda activate ginger_env`
-3. install the ginger package on your conda env:
-    * `cd GInGeR`
+4. install the ginger package on your conda env:
     * `python -m pip install .` 
-4. To verify your installation run ginger on a test dataset:
+5. To verify your installation run ginger on a test dataset:
     * `run_ginger tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.fasta e2e_test_output --max-species-representatives 1`
     * **Note that due to Kraken2's memory requirements, you'd need to allocate at least 16G of memory for the pipeline
       to run successfully**. In case you would like to test ginger but skip the step using Kraken, you can
