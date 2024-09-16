@@ -1,25 +1,22 @@
 # About GInGeR:
 
-GInGeR is a tool for analyzing the genomic regions of genes of interest in metagenomic samples given metagenomic
-sequencing data (paired-end short reads and optionally also Oxford Nanopore long reads) and a set of genes of interest.
-GInGeR constructs and assembly graph, locates the genes of interest in the assembly graph, identifies their potential
-genomic contexts in the graph and uses a reference genomes database to verify the contexts and assign them to carrier
-species. 
+GInGeR is a tool for analyzing the genomic regions of genes of interest in metagenomic samples (paired-end short reads and optionally also Oxford Nanopore long reads) and a set of genes of interest.
+GInGeR constructs an assembly graph, locates the genes of interest in the assembly graph, identifies their potential
+genomic contexts in the graph, verifies the contexts and assigns them to carrier species using a reference genomes database.
 
 **Note that a paper describing GInGeR was not yet published. If you're interested in using it for your research, please email netta.barak@mail.huji.ac.il**
 
 # Installation using conda:
 
-0. In case you don't have conda
-   installed, [follow the directions](https://docs.anaconda.com/anaconda/install/index.html) to install conda or
-   miniconda (recommended).
+0. In case you don't have conda/minicondan/mamba
+   installed, follow the directions  to install [miniconda](https://docs.anaconda.com/anaconda/install/index.html) or [mamba](https://mamba.readthedocs.io/en/latest/installation/mamba-installation.html).
 1. Clone the repository using `git clone`.
 2. Use the conda environment file given in the repository to create and activate GInGeR's conda environment:
     * `conda env create -f ginger.yml`.
     * `conda activate ginger_env`
 3. install the ginger package on your conda env:
     * `cd GInGeR`
-    * `python -m pip install .`
+    * `python -m pip install .` 
 4. To verify your installation run ginger on a test dataset:
     * `run_ginger tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.fasta e2e_test_output --max-species-representatives 1`
     * **Note that due to Kraken2's memory requirements, you'd need to allocate at least 16G of memory for the pipeline
@@ -35,8 +32,7 @@ addition to the short paired-end reads, it excepts long Oxford NanoPore reads (o
 
 ## GInGeR's command line application
 
-To run GInGeR, you can type (note that if you don't skip the database filtering step, you would need at least 16G of
-memory for the pipeline to run successfully):
+To run GInGeR run:
 
 ``` bash
 run_ginger <SHORT_READS_1> <SHORT_READS_2> <GENES_PATH> <OUT_DIR>
@@ -114,7 +110,7 @@ GInGeR's outputs two results files:
     * out_context_end - the end of the match of the outgoing context to the reference sequence
     * match_score - the match score. Namely, the % of matching base-pairs between the genomic contexts and the reference
       sequence
-    * Genome - the genome id as inferred from the reference_contig field
+    * genome - the genome id as inferred from the reference_contig field
     * species - the species name as inferred from UHGG-metadata.tsv
 
 2. species_level_matches.csv - an aggregation of the first output by gene and species, intending to summarize whether a
@@ -131,19 +127,11 @@ GInGeR's outputs two results files:
 By default, GInGeR uses the Unified Human Gastrointestinal Genome collection (UHGG,
 see [genome catalog](http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0/README_v2.0.txt) and
 [Almeida et al.](https://www.nature.com/articles/s41587-020-0603-3)) as a reference database. When
-running GInGer, it first detects the dominant species in the sample using Kraken2, and then downloads missing
-references (a limited number of references per species) for these species from UHGG to the `--references-dir` and
+running GInGer, it first detects the dominant species in the sample using Kraken2. Then it downloads missing
+references (`--max-species-representatives` of references per species) for these species from UHGG to the `--references-dir` and
 combining them into a reference database customized for the given sample. It is recommended to use a
-shared `--references-dir` for multiple samples (this is GInGeR's default behavior) in order to save time and storage by
+shared `--references-dir` for multiple samples (this is GInGeR's default behavior) to save time and storage by
 not downloading the same references multiple times.
-
-## Using a different reference database
-
-UHGG is a comprehensive and high quality database that includes over 200K assemblies of ~4.7K species found in the human
-gut. Therefore, if you work with Human gut microbiome samples, UHGG is probably a great choice of a reference database.
-In case you're working with samples from other environments, you might want to run GInGeR using a different reference
-database. In order to do so, you can choose one of two options (in both cases, you would need to adapt your database to
-match UHGG's style):
 
 ### supply GInGer with a fasta of reference species
 
@@ -153,43 +141,32 @@ Genome Length Lineage FTP_download species':
 
 - 'Genomes' should be the id of the genome as appears in your fasta file. Each contig should have the following format
   <genome_id>_<contig_num>.
-- 'Length' can be left with Null values because it is not used in this option.
-- 'Lineage' can be left with Null values because it is not used in this option.
+- 'Completeness' can be left with Null values because it is not used in this option.
 - 'FTP_download' can be left with Null values because it is not used in this option.
 - 'species' the species name of the given genome. Will be used when generating the outputs.
-
-### Use GInGer's pipeline to filter and select the relevant species from your reference database
-
-TODO - missing this part
 
 # Dependencies
 
 GInGeR requires a 64-bit Linux system and conda (or miniconda).
 
-### Python 3.10
+### Python 3.11.6
 
 The pipeline might also work on older versions of python, but they were not tested.
 
 #### python packages
 
-- biopython=1.78
-- pandas=1.4.4
-- click=8.0.4
-- pyfastg==0.1.0
-- readpaf==0.0.10
-
-### SPAdes - version 3.15.5
-
-Used for building an assembly graph for the given metagenomic sample.
-
-### Kraken2 - version 2.1.2
-
-Used for selecting only the references of the species that are found in the sample.
-
-### Minimap2 - version 2.24
-
-Used for searching for locating the genes in the assembly graphs (by searching for them in the assembly contigs and
-inferring their location in the graph)
+  - biopython=1.81
+  - pandas=2.1.4
+  - kraken2=2.1.3
+  - bracken=3.0
+  - minimap2=2.26
+  - pip=23.3.1
+  - spades=3.15.5
+  - click=8.1.7
+  - pyfastg=0.1.0
+  - pafpy=0.2.0
+  - tqdm=4.66.1
+  - mmseqs2=15.6f452
 
 # Acknowledgements
 GInGer is open source and available thanks to the hard work of [Haimasree Bhattacharya](https://github.com/haimasree)
