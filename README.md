@@ -18,10 +18,10 @@ genomic contexts in the graph, verifies the contexts and assigns them to carrier
 4. install the ginger package on your conda env:
     * `python -m pip install .` 
 5. To verify your installation run ginger on a test dataset:
-    * `run_ginger tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.fasta e2e_test_output --max-species-representatives 1`
+    * `run_ginger tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.faa e2e_test_output --max-species-representatives 1`
     * **Note that due to Kraken2's memory requirements, you'd need to allocate at least 16G of memory for the pipeline
       to run successfully**. In case you would like to test ginger but skip the step using Kraken, you can
-      run: `run_ginger tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.fasta e2e_test_output --merged-filtered-fasta tests/test_files/merged_filtered_ref_db.fasta.gz`
+      run: `run_ginger tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.faa e2e_test_output --merged-filtered-fasta tests/test_files/merged_filtered_ref_db.fasta.gz`
 
 # Running GInGeR
 
