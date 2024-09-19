@@ -162,7 +162,7 @@ def locate_genes_in_graph(assembly_dir: str, gene_pident_filtering_th: float, ge
                                              gene_pident_filtering_th, genes_to_contigs_path)
 
     log.info(f'found {len(set([m.gene for m in genes_to_contigs]))} genes in the assembly graph')
-    if genes_to_contigs is None:
+    if not genes_to_contigs:
         return None, None, None
 
     assembly_graph_nodes = get_nodes_dict_from_fastg_file(assembly_graph_path)
