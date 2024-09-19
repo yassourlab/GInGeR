@@ -97,7 +97,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     pu.check_and_make_dir_no_file_name(out_dir)
     # filter reference database using kraken
     if merged_filtered_fasta is None:
-        merged_filtered_fasta = f'{references_dir}/merged_filtered_ref_db.fasta'
+        merged_filtered_fasta = f'{out_dir}/merged_filtered_ref_db.fasta'
         if kraken_output_path is None:
             kraken_output_path = f'{out_dir}/kraken_output_file.tsv'
             kraken_report_path = f'{out_dir}/kraken_report_file.tsv'
@@ -123,8 +123,8 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                                                                   genes_path,
                                                                                                   threads,
                                                                                                   out_dir)
-    if genes_with_location_in_graph is None:
-        log.info('Genes of interest were not detected in assembly. No results will be generated')
+    if not genes_with_location_in_graph:
+        log.info('Genes of interest were not detected in assembly. GInger run will stop and no results will be generated')
         return
 
     # get in and out paths
@@ -146,7 +146,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     context_level_results = vcc.process_in_and_out_paths_to_results(in_contexts_to_bugs, out_contexts_to_bugs,
                                                                     genes_lengths, paths_pident_filtering_th, 0,
                                                                     maximal_gap_ratio, metadata_path)
-    if len(context_level_results) == 0:
+    if not context_level_results:
         log.info(
             'GInGeR could not find the requested genes in the samples')  # TODO make this more informative if I can
         return

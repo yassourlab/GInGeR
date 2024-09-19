@@ -103,13 +103,16 @@ def download_and_write_content_to_file(references_folder, references_folder_cont
     # download file from FTP if needed
 
     if mgyg_file in references_folder_content:
-        log.info(f'{mgyg_file} already in {references_folder}. File will not be downloaded')
+        log.debug(f'{mgyg_file} already in {references_folder}. File will not be downloaded')
     else:
-        log.info(f'{mgyg_file} not in {references_folder}. File will be downloaded')
-
-        data = urllib.request.urlopen(ftp_download_str).read()
-        with open(local_tar_gz_path, 'wb') as f:
-            f.write(data)
+        log.debug(f'{mgyg_file} not in {references_folder}. File will be downloaded')
+        try:
+            data = urllib.request.urlopen(ftp_download_str).read()
+            with open(local_tar_gz_path, 'wb') as f:
+                f.write(data)
+        except Exception as e:
+            log.error(f'Failed to download {ftp_download_str} with error: {e}')
+            raise e
 
     # read tar.gt file and add it's content to the merged filtered fasta
     gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f)
