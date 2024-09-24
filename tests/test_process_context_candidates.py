@@ -35,7 +35,7 @@ class ProcessContextCandidatesTest(unittest.TestCase):
         self.assertListEqual(list(matches_per_gene_no_overlaps.keys()),
                              list(expected_matches_per_gene_no_overlaps.keys()))
         match = matches_per_gene_no_overlaps['test_gene', 'MGYG000260594_1'][0]
-        self.assertEqual(match.bug, 'MGYG000260594_1')
+        self.assertEqual(match.ref_genome, 'MGYG000260594_1')
         self.assertEqual(match.gene, 'test_gene')
         self.assertEqual(match.gene_length, 200)
         self.assertEqual(match.score, 0.9775)

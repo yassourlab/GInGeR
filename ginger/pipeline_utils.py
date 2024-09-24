@@ -158,9 +158,9 @@ def interval_iou(start1, end1, start2, end2):
     return output
 
 
-def is_similar_to_representatives(representatives, gene_paths_to_bug_match, iou_th):
+def is_similar_to_representatives(representatives, gene_paths_to_ref_genome_match, iou_th):
     for rep in representatives:
-        if interval_iou(gene_paths_to_bug_match.start, gene_paths_to_bug_match.end, rep.start, rep.end) > iou_th:
+        if interval_iou(gene_paths_to_ref_genome_match.start, gene_paths_to_ref_genome_match.end, rep.start, rep.end) > iou_th:
             return True
     return False
 
@@ -176,11 +176,11 @@ def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str)
             results_dict['in_context'].append(match.in_path.query_name)
             results_dict['out_context'].append(match.out_path.query_name)
             if match.in_path.strand == '+':
-                results_dict['in_context_start'].append(match.in_path.bug_start)
-                results_dict['out_context_end'].append(match.out_path.bug_end)
+                results_dict['in_context_start'].append(match.in_path.ref_genome_start)
+                results_dict['out_context_end'].append(match.out_path.ref_genome_end)
             else:
-                results_dict['in_context_start'].append(match.out_path.bug_start)
-                results_dict['out_context_end'].append(match.in_path.bug_end)
+                results_dict['in_context_start'].append(match.out_path.ref_genome_start)
+                results_dict['out_context_end'].append(match.in_path.ref_genome_end)
             results_dict['gene_start'].append(match.start)
             results_dict['gene_end'].append(match.end)
 

@@ -12,8 +12,6 @@ log = logging.getLogger(__name__)
 def save_paths_to_fasta_io_paths_approach(paths, paths_fasta_name, records_dict, node_to_find=None,
                                           max_context_len=math.inf, min_context_len=0, in_or_out=None,
                                           covered_by_gene=0, gene_and_node=''):
-    # TODO I think I don't really need the outputs of this function anymore
-    # print(f'{dt.datetime.now()} saving paths to {paths_fasta_name}')
     in_paths_lengths = {}
     node_locations = {}
     with open(paths_fasta_name,
@@ -59,7 +57,7 @@ def paths_enumerator(graph, stack, max_depth, max_length, neighbors_func, revers
 @pu.step_timing
 def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                       nodes_with_edges_and_sequences: Dict[str, SeqIO.SeqRecord],
-                                                      genes_to_contigs, depth_limit,min_context_len,max_context_len,
+                                                      genes_to_contigs, depth_limit, min_context_len, max_context_len,
                                                       in_paths_fasta, out_paths_fasta):
     gene_and_nodes_path_set = set()
     gene_lengths = {}

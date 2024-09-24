@@ -47,7 +47,7 @@ def extract_genes_lengths(genes_path):
               help='The maximal references per species that will be downloaded from UHGG and taken into account in the aggregation of results at the species level')
 @click.option('--metadata-path', type=click.Path(),
               default=os.path.join(os.path.dirname(__file__), 'UHGG-metadata.tsv'),
-              help='The path to the reference database metadata table')  # TODO figure out how do I give it the correct default path when I don't run GInGeR from the GInGeR dir
+              help='The path to the reference database metadata table')
 @click.option('--references-dir', type=click.Path(), default='references_dir',
               help='The directory to which GInGeR will download missing reference genomes from UHGG. This folder can be shared for all runs of GInGer in order to avoid the same file being  downloaded and saved multiple times')
 @click.option('--merged-filtered-fasta', type=click.Path(), default=None,
@@ -135,20 +135,20 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                               min_context_len, max_context_len, in_paths_fasta,
                                                               out_paths_fasta)
     # map them to the reference
-    in_contexts_to_bugs = c.IN_MAPPING_TO_BUGS_PATH_TEMPLATE.format(temp_folder=out_dir)
-    out_contexts_to_bugs = c.OUT_MAPPING_TO_BUGS_PATH_TEMPLATE.format(temp_folder=out_dir)
+    in_contexts_to_ref_genomes = c.IN_MAPPING_TO_REF_GENOMES_PATH_TEMPLATE.format(temp_folder=out_dir)
+    out_contexts_to_ref_genomes = c.OUT_MAPPING_TO_REF_GENOMES_PATH_TEMPLATE.format(temp_folder=out_dir)
 
-    sau.map_in_and_out_contexts_to_ref(in_paths_fasta, out_paths_fasta, indexed_reference, in_contexts_to_bugs,
-                                       out_contexts_to_bugs, threads)
+    sau.map_in_and_out_contexts_to_ref(in_paths_fasta, out_paths_fasta, indexed_reference, in_contexts_to_ref_genomes,
+                                       out_contexts_to_ref_genomes, threads)
 
     # merge and get results
     genes_lengths = extract_genes_lengths(genes_path)
-    context_level_results = vcc.process_in_and_out_paths_to_results(in_contexts_to_bugs, out_contexts_to_bugs,
+    context_level_results = vcc.process_in_and_out_paths_to_results(in_contexts_to_ref_genomes, out_contexts_to_ref_genomes,
                                                                     genes_lengths, paths_pident_filtering_th, 0,
                                                                     maximal_gap_ratio, metadata_path)
     if not context_level_results:
         log.info(
-            'GInGeR could not find the requested genes in the samples')  # TODO make this more informative if I can
+            'GInGeR could not find the requested genes in the samples')
         return
     context_level_output_path = c.CONTEXT_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     species_level_output_path = c.SPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
