@@ -8,9 +8,6 @@ from ginger import pipeline_utils as pu
 
 from typing import Dict, List
 log = logging.getLogger(__name__)
-
-# TODO go over all functions and see if they are used and or should be re written
-# TODO proper logging
 IOU_TH = 0.5
 
 
@@ -25,7 +22,7 @@ def extract_start_and_end(in_match: mc.PathRefGenomeMatch, out_match: mc.PathRef
 
 
 def get_in_out_match(i, o, gene_length, minimal_gap_ratio, maximal_gap_ratio):
-    for field in ['gene', 'reference_genome', 'strand']:
+    for field in ['gene', 'ref_genome', 'strand']:
         if getattr(i, field) != getattr(o, field):
             return None
     start, end = extract_start_and_end(i, o)
