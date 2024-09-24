@@ -23,7 +23,7 @@ MMSEQS_GENES_TO_CONTIGS_HEADER_CONVERSION = {'target': 'contig',
 # minimap:
 MINIMAP2_INDEXING_COMMAND = 'minimap2 -x {preset} -d {index_file} {fasta_file}'
 MINIMAP2_COMMAND = 'minimap2 -cx {preset} -t {nthreads} {target} {query} > {out_file} -P'
-CONTIGS_TO_BUGS_PRESET = 'asm20'
+CONTIGS_TO_REF_GENOMES_PRESET = 'asm20'
 GENES_TO_CONTIGS_PRESET = 'asm20'
 ARGS_TO_REFERENCE_CONTIGS = 'asm20'
 INDEXING_PRESET = 'asm20'
@@ -48,10 +48,10 @@ MINIMAP_CONTIGS_TO_REFERENCE_HEADER_CONVERSION = {'query_name': 'contig',
                                                   'query_start': 'contig_start',
                                                   'query_end': 'contig_end',
                                                   'strand': 'strand',
-                                                  'target_name': 'bug',
-                                                  'target_length': 'bug_length',
-                                                  'target_start': 'bug_start',
-                                                  'target_end': 'bug_end',
+                                                  'target_name': 'ref_genome',
+                                                  'target_length': 'ref_genome_length',
+                                                  'target_start': 'ref_genome_start',
+                                                  'target_end': 'ref_genome_end',
                                                   'residue_matches': 'residue_matches',
                                                   'alignment_block_length': 'alignment_block_length',
                                                   'mapping_quality': 'mapping_quality',
@@ -62,10 +62,10 @@ MINIMAP_GT_ARGS_TO_BUGS_HEADER_CONVERSION = {'query_name': 'gene',
                                              'query_start': 'gene_start',
                                              'query_end': 'gene_end',
                                              'strand': 'strand',
-                                             'target_name': 'bug',
-                                             'target_length': 'bug_length',
-                                             'target_start': 'bug_start',
-                                             'target_end': 'bug_end',
+                                             'target_name': 'ref_genome',
+                                             'target_length': 'ref_genome_length',
+                                             'target_start': 'ref_genome_start',
+                                             'target_end': 'ref_genome_end',
                                              'residue_matches': 'residue_matches',
                                              'alignment_block_length': 'alignment_block_length',
                                              'mapping_quality': 'mapping_quality',
@@ -95,14 +95,14 @@ def generate_index(fasta_file, preset):
     return index_file
 
 
-def map_contexts_to_bugs(contigs_path, reference_path, contigs_to_bugs_path,
-                         just_print=JUST_PRINT_DEFAULT, nthreads=N_THREADS_DEFAULT):
-    return _run_minimap2_paf(contigs_path, reference_path, contigs_to_bugs_path, CONTIGS_TO_BUGS_PRESET, just_print,
+def map_contexts_to_ref_genomes(contigs_path, reference_path, contigs_to_ref_genomes_path,
+                                just_print=JUST_PRINT_DEFAULT, nthreads=N_THREADS_DEFAULT):
+    return _run_minimap2_paf(contigs_path, reference_path, contigs_to_ref_genomes_path, CONTIGS_TO_REF_GENOMES_PRESET, just_print,
                              nthreads)
 
 def map_nodes_to_contigs(nodes_path, contigs_path, nodes_to_contigs_path,
                          just_print=JUST_PRINT_DEFAULT, nthreads=N_THREADS_DEFAULT):
-    return _run_minimap2_paf(nodes_path, contigs_path, nodes_to_contigs_path, CONTIGS_TO_BUGS_PRESET, just_print,
+    return _run_minimap2_paf(nodes_path, contigs_path, nodes_to_contigs_path, CONTIGS_TO_REF_GENOMES_PRESET, just_print,
                              nthreads)
 
 
@@ -128,19 +128,6 @@ def _run_mmseqs2(query, target, out_file, nthreads=1):
     else:
         logging.info(f'mmseq2 ran successfully')
     return out_file
-
-    # I had some issues when running with Popen, python moved to the next step before mmseq2 finished running
-    # with Popen(command.split(' '), stdout=PIPE) as mmseq2_process:
-    #     for output_line in mmseq2_process.stdout:
-    #         print(output_line)
-    #     # output_lines = [output_line for output_line in tqdm(iter(lambda: mmseq2_process.stdout.readline(), b""))]
-    #     # print(output_lines)
-    #     if mmseq2_process.returncode:
-    #         logging.error(f'mmseq2 stderr: {mmseq2_process.stderr}')
-    #         raise Exception('mmseq2 failed to run. GInGeR will abort.')
-    #     else:
-    #         logging.info(f'mmseq2 ran successfully')
-    #     return out_file
 
 
 @pu.step_timing
@@ -205,7 +192,7 @@ def read_and_filter_minimap_matches(match_object_constructor: callable, alignmen
 
 
 @pu.step_timing
-def map_in_and_out_contexts_to_ref(in_paths_fasta, out_paths_fasta, reference_path, in_mapping_to_bugs_path,
-                                   out_mapping_to_bugs_path, n_minimap_threads):
-    map_contexts_to_bugs(in_paths_fasta, reference_path, in_mapping_to_bugs_path, nthreads=n_minimap_threads)
-    map_contexts_to_bugs(out_paths_fasta, reference_path, out_mapping_to_bugs_path, nthreads=n_minimap_threads)
+def map_in_and_out_contexts_to_ref(in_paths_fasta, out_paths_fasta, reference_path, in_mapping_to_ref_genomes_path,
+                                   out_mapping_to_ref_genomes_path, n_minimap_threads):
+    map_contexts_to_ref_genomes(in_paths_fasta, reference_path, in_mapping_to_ref_genomes_path, nthreads=n_minimap_threads)
+    map_contexts_to_ref_genomes(out_paths_fasta, reference_path, out_mapping_to_ref_genomes_path, nthreads=n_minimap_threads)

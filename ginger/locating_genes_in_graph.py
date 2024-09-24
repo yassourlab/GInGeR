@@ -6,7 +6,6 @@ from ginger import matches_classes as mc
 from ginger import constants as c
 from Bio import SeqIO
 from typing import Dict, Iterator, List
-import networkx as nx
 import pandas as pd
 import os
 
