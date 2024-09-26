@@ -21,6 +21,9 @@ KRAKEN_OUTPUT_HEADER = ['classified', 'read', 'genome', 'reads_len', 'mapping_st
 READ_STATUS_INDEX = 0
 SPECIES_NAME_INDEX = 2
 NUM_READS_RATIO = 0.005
+URLOPEN_TIMEOUT = 20
+N_ATTEMPTS = 3
+SLEEP_SECS = 5
 
 
 def run_kraken(reads_1, reads_2, threads, output_path, report_path):
@@ -37,8 +40,6 @@ def run_kraken(reads_1, reads_2, threads, output_path, report_path):
         if kraken_process.returncode:
             log.error(kraken_process.stderr)
             raise Exception('GInGeR failed to run Kraken2. The pipeline will abort')
-        else:
-            log.info(kraken_process.stdout)
 
 
 def get_max_read_len(fastq_file):
@@ -85,7 +86,6 @@ def run_bracken(reads_1, kraken_report, bracken_output, bracken_report):
         if bracken_process.returncode:
             log.error(bracken_process.stderr)
             raise Exception('GInGeR failed to run bracken_process. The pipeline will abort')
-        else:
             log.info(bracken_process.stdout)
 
 
@@ -106,13 +106,17 @@ def download_and_write_content_to_file(references_folder, references_folder_cont
         log.debug(f'{mgyg_file} already in {references_folder}. File will not be downloaded')
     else:
         log.debug(f'{mgyg_file} not in {references_folder}. File will be downloaded')
-        try:
-            data = urllib.request.urlopen(ftp_download_str).read()
-            with open(local_tar_gz_path, 'wb') as f:
-                f.write(data)
-        except Exception as e:
-            log.error(f'Failed to download {ftp_download_str} with error: {e}')
-            raise e
+        for attempt in range(N_ATTEMPTS):
+            try:
+                data = urllib.request.urlopen(ftp_download_str, timeout=URLOPEN_TIMEOUT).read()
+                with open(local_tar_gz_path, 'wb') as f:
+                    f.write(data)
+                break
+            except Exception as e:
+                log.error(f'Failed to download {ftp_download_str} with error: {e} trying again in {SLEEP_SECS} seconds')
+                time.sleep(SLEEP_SECS)
+                if attempt == N_ATTEMPTS - 1:
+                    raise e
 
     # read tar.gt file and add it's content to the merged filtered fasta
     gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f)
@@ -136,7 +140,9 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
     references_folder_content = [x.split('/')[-1] for x in glob(references_folder + '/*')]
     with open(merged_filtered_fasta, 'w') as merged_filtered_fasta_f:
         for s in top_species:
-            single_species_table = metadata[(metadata.species == s) & (metadata.FTP_download.str.startswith('ftp'))].sort_values('Completeness', ascending=False).head(
+            single_species_table = metadata[
+                (metadata.species == s) & (metadata.FTP_download.str.startswith('ftp'))].sort_values('Completeness',
+                                                                                                     ascending=False).head(
                 max_refs_per_species)
             single_species_table.apply(
                 lambda x: download_and_write_content_to_file(references_folder, references_folder_content,
