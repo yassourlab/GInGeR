@@ -83,10 +83,8 @@ def get_ref_genome_species_dict_from_metadata_path(metadata_path):
         f.readline()
         for line in f:
             splt = line[:-1].split('\t')
-            if len(splt) ==4:
-                genome, _, _, species = splt
-            else:
-                print(line)
+            genome = splt[0]
+            species = splt[3]
             ref_genome_species_dict[genome] = species
     return ref_genome_species_dict
 

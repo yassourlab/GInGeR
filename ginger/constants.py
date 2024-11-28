@@ -10,4 +10,5 @@ GENES_TO_CONTIGS_TEMPLATE = '{temp_files_path}/genes_to_contigs.m8'
 NODES_TO_CONTIGS_W_GAPS_TEMPLATE = '{temp_files_path}/nodes_to_contigs_w_gaps.paf'
 CONTEXT_LEVEL_OUTPUT_TEMPLATE = '{out_dir}/context_level_matches.csv'
 SPECIES_LEVEL_OUTPUT_TEMPLATE = '{out_dir}/species_level_matches.csv'
+SUBSPECIES_LEVEL_OUTPUT_TEMPLATE = '{out_dir}/subspecies_level_matches.csv'
 
