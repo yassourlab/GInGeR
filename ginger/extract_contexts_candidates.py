@@ -5,6 +5,7 @@ import logging
 import datetime as dt
 from typing import Dict
 from Bio import SeqIO
+import os
 
 log = logging.getLogger(__name__)
 
@@ -14,8 +15,8 @@ def save_paths_to_fasta_io_paths_approach(paths, paths_fasta_name, records_dict,
                                           covered_by_gene=0, gene_and_node=''):
     in_paths_lengths = {}
     node_locations = {}
-    with open(paths_fasta_name,
-              'a') as f:  # there is an 'a' here because I call this function once per gene location in the graph
+
+    with open(paths_fasta_name, 'a') as f:  # there is an 'a' here because I call this function once per gene location in the graph
         for path in paths:
             seq, node_start = pu.generate_str_from_list_of_nodes(records_dict, path, node_to_find)
             if len(seq) > min_context_len:
@@ -61,6 +62,10 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                       in_paths_fasta, out_paths_fasta):
     gene_and_nodes_path_set = set()
     gene_lengths = {}
+    # delete fasta file if it exists
+    for fasta_file in [in_paths_fasta, out_paths_fasta]:
+        if os.path.exists(fasta_file):
+            os.remove(fasta_file)
     for gene_contigs_match in genes_to_contigs:
         gene_and_nodes_path_str = f"{gene_contigs_match.gene}_nodes_{'_'.join(gene_contigs_match.nodes_list)}"
         if gene_contigs_match.start_in_first_node is None:  # I already ran the pipeline for this and there is no need to do it again

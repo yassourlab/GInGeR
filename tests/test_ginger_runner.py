@@ -75,6 +75,16 @@ class GingerRunnerTest(unittest.TestCase):
         self.assertListEqual(lines_out, lines_gt)
 
     @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
+    def test_ginger_e2e_func_with_subspecies_output(self):
+        ginger_e2e_func(None, self.short_reads_1, self.short_reads_2, self.out_dir, None, 2,
+                        None, self.read_ratio_th, f'{TEST_FILES}/e_coli_metadata.tsv', 'references_dir',
+                        None, self.genes_path, 12, 1.5, 0,
+                        2500, 0.9, 0.9, False, 3)
+
+        self.assertTrue(os.path.exists(f'{self.out_dir}/context_level_matches.csv'))
+        self.assertTrue(os.path.exists(f'{self.out_dir}/species_level_matches.csv'))
+
+    @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
     def test_ginger_e2e_command_skip_kraken(self):
         runner = CliRunner()
 
@@ -96,6 +106,7 @@ class GingerRunnerTest(unittest.TestCase):
             lines_out = test_out.readlines()
             lines_gt = gt.readlines()
         self.assertListEqual(lines_out, lines_gt)
+
 
 if __name__ == '__main__':
     unittest.main()

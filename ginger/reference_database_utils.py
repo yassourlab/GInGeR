@@ -138,6 +138,7 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
     metadata = pd.read_csv(metadata_path, sep='\t')
     # metadata['species'] = metadata.Lineage.apply(lambda x: x.split('s__')[-1])
     references_folder_content = [x.split('/')[-1] for x in glob(references_folder + '/*')]
+    selected_samples_dfs_list = []
     with open(merged_filtered_fasta, 'w') as merged_filtered_fasta_f:
         for s in top_species:
             single_species_table = metadata[
@@ -148,20 +149,21 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
                 lambda x: download_and_write_content_to_file(references_folder, references_folder_content,
                                                              x.FTP_download,
                                                              merged_filtered_fasta_f), axis=1)
-
-    return merged_filtered_fasta
+            selected_samples_dfs_list.append(single_species_table)
+    return pd.concat(selected_samples_dfs_list)
 
 
 @pu.step_timing
 def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_path, kraken_report_path, bracken_output,
-                                     bracken_report, reads_ratio_th, metadata_path,
-                                     references_folder, merged_filtered_fasta, max_species_representatives):
+                                     bracken_report, reads_ratio_th, metadata_path,references_folder,
+                                     merged_filtered_fasta, references_used_path, max_species_representatives):
     pu.check_and_makedir(kraken_output_path)
     pu.check_and_make_dir_no_file_name(references_folder)
     run_kraken(reads_1, reads_2, threads, kraken_output_path, kraken_report_path)
     run_bracken(reads_1, kraken_report_path, bracken_output, bracken_report)
     top_species = get_list_of_top_species_by_bracken(bracken_output, reads_ratio_th)
-    generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path, references_folder,
+    selected_species_df = generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path, references_folder,
                                                                merged_filtered_fasta,
                                                                max_refs_per_species=max_species_representatives)
+    selected_species_df.to_csv(references_used_path, index=False, sep='\t')
     return merged_filtered_fasta

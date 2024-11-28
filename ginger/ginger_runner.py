@@ -3,6 +3,7 @@ import logging
 import click
 from Bio import SeqIO
 import os
+import pandas as pd
 
 from ginger import locating_genes_in_graph as lg
 from ginger import reference_database_utils as rdu
@@ -12,6 +13,7 @@ from ginger import sequence_alignment_utils as sau
 from ginger import verify_context_candidates as vcc
 from ginger import pipeline_utils as pu
 from ginger import constants as c
+
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -96,6 +98,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     # create output directory if it doesn't exist
     pu.check_and_make_dir_no_file_name(out_dir)
     # filter reference database using kraken
+    references_used_path = f'{out_dir}/references_used_path.csv'
     if merged_filtered_fasta is None:
         merged_filtered_fasta = f'{out_dir}/merged_filtered_ref_db.fasta'
         if kraken_output_path is None:
@@ -106,6 +109,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
             rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads, kraken_output_path,
                                                  kraken_report_path, bracken_output, bracken_report, reads_ratio_th,
                                                  metadata_path, references_dir, merged_filtered_fasta,
+                                                 references_used_path,
                                                  max_species_representatives)
     if not merged_filtered_fasta.endswith('mmi'):
         indexed_reference = sau.generate_index(merged_filtered_fasta, sau.INDEXING_PRESET)
@@ -124,7 +128,8 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                                                                   threads,
                                                                                                   out_dir)
     if not genes_with_location_in_graph:
-        log.info('Genes of interest were not detected in assembly. GInger run will stop and no results will be generated')
+        log.info(
+            'Genes of interest were not detected in assembly. GInger run will stop and no results will be generated')
         return
 
     # get in and out paths
@@ -143,7 +148,8 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
 
     # merge and get results
     genes_lengths = extract_genes_lengths(genes_path)
-    context_level_results = vcc.process_in_and_out_paths_to_results(in_contexts_to_ref_genomes, out_contexts_to_ref_genomes,
+    context_level_results = vcc.process_in_and_out_paths_to_results(in_contexts_to_ref_genomes,
+                                                                    out_contexts_to_ref_genomes,
                                                                     genes_lengths, paths_pident_filtering_th, 0,
                                                                     maximal_gap_ratio, metadata_path)
     if not context_level_results:
@@ -152,11 +158,19 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
         return
     context_level_output_path = c.CONTEXT_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     species_level_output_path = c.SPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
+    subspecies_level_output_path = c.SUBSPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     pu.write_context_level_output_to_csv(context_level_results, context_level_output_path, metadata_path)
     pu.aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path,
                                                                             metadata_path,
                                                                             species_level_output_path,
                                                                             max_species_representatives)
+
+    if os.path.exists(references_used_path) and 'subspecies' in pd.read_table(references_used_path).columns:
+        pu.aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path,
+                                                                                references_used_path,
+                                                                                subspecies_level_output_path,
+                                                                                max_species_representatives,
+                                                                                'subspecies')
     log.info(
         f"GInGer's run completed successfully!\nContext-level output can be found here: {context_level_output_path}, species-level output can be found here: {species_level_output_path}")
 
