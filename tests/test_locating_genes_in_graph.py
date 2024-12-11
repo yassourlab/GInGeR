@@ -33,5 +33,6 @@ class LocatingGenesInGraphTest(unittest.TestCase):
     #     print(len(genes_with_location_in_graph))
     #
 
+
 if __name__ == '__main__':
     unittest.main()
