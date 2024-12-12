@@ -98,7 +98,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     # create output directory if it doesn't exist
     pu.check_and_make_dir_no_file_name(out_dir)
     # filter reference database using kraken
-    references_used_path = f'{out_dir}/references_used_path.csv'
+    references_used_path = f'{out_dir}/references_used.csv'
     if merged_filtered_fasta is None:
         merged_filtered_fasta = f'{out_dir}/merged_filtered_ref_db.fasta'
         if kraken_output_path is None:
@@ -154,7 +154,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                                     maximal_gap_ratio, metadata_path)
     if not context_level_results:
         log.info(
-            'GInGeR could not find the requested genes in the samples')
+            'GInGeR could not matching pairs of incoming and outgoing contexts to reference sequences. GInger run will stop and no results will be generated')
         return
     context_level_output_path = c.CONTEXT_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     species_level_output_path = c.SPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
@@ -172,7 +172,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                                                 max_species_representatives,
                                                                                 'subspecies')
     log.info(
-        f"GInGer's run completed successfully!\nContext-level output can be found here: {context_level_output_path}, species-level output can be found here: {species_level_output_path}")
+        f"Context-level output can be found here: {context_level_output_path}, species-level output can be found here: {species_level_output_path}\nGInGer's run completed successfully!")
 
     if __name__ == "__main__":
         run_ginger_e2e()
