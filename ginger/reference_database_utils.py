@@ -160,8 +160,7 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
 
 def take_top_species_and_download_to_file(max_refs_per_species, single_species_table, references_folder,
                                           references_folder_content, merged_filtered_fasta_f):
-    top_x_df = single_species_table.sort_values(['Completeness', 'Genome'], ascending=[False, True]).head(
-        max_refs_per_species)
+    top_x_df = single_species_table.sort_values(['Completeness', 'Genome']).tail( max_refs_per_species)
     top_x_df.apply(lambda x: download_and_write_content_to_file(references_folder,
                                                                 references_folder_content,
                                                                 x.FTP_download,
