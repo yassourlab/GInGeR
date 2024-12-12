@@ -172,7 +172,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                                                 max_species_representatives,
                                                                                 'subspecies')
     log.info(
-        f"GInGer's run completed successfully!\nContext-level output can be found here: {context_level_output_path}, species-level output can be found here: {species_level_output_path}")
+        f"Context-level output can be found here: {context_level_output_path}, species-level output can be found here: {species_level_output_path}\nGInGer's run completed successfully!")
 
     if __name__ == "__main__":
         run_ginger_e2e()
