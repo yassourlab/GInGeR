@@ -150,7 +150,9 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
                                                                      merged_filtered_fasta_f)
                     selected_samples_dfs_list.append(top_x_df)
             else:
-                top_x_df = take_top_species_and_download_to_file(max_refs_per_species, single_species_table)
+                top_x_df = take_top_species_and_download_to_file(max_refs_per_species, single_species_table,
+                                                                 references_folder,
+                                                                 references_folder_content, merged_filtered_fasta_f)
                 selected_samples_dfs_list.append(top_x_df)
 
     return pd.concat(selected_samples_dfs_list)
@@ -168,8 +170,6 @@ def take_top_species_and_download_to_file(max_refs_per_species, single_species_t
 
 
 def take_top_refs_and_download_to_file():
-
-
     @pu.step_timing
     def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_path, kraken_report_path,
                                          bracken_output,
