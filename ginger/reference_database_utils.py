@@ -21,9 +21,9 @@ KRAKEN_OUTPUT_HEADER = ['classified', 'read', 'genome', 'reads_len', 'mapping_st
 READ_STATUS_INDEX = 0
 SPECIES_NAME_INDEX = 2
 NUM_READS_RATIO = 0.005
-URLOPEN_TIMEOUT = 20
-N_ATTEMPTS = 3
-SLEEP_SECS = 5
+URLOPEN_TIMEOUT = 60
+N_ATTEMPTS = 10
+SLEEP_SECS = 60
 
 
 def run_kraken(reads_1, reads_2, threads, output_path, report_path):
