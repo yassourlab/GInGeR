@@ -1,4 +1,5 @@
 import urllib.request
+import time
 from subprocess import run, Popen, PIPE
 from collections import defaultdict
 import pandas as pd
