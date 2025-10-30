@@ -2,6 +2,8 @@ import urllib.request
 import time
 from subprocess import run, Popen, PIPE
 from collections import defaultdict
+
+import numpy as np
 import pandas as pd
 from glob import glob
 import urllib
@@ -161,12 +163,17 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
 
 def take_top_species_and_download_to_file(max_refs_per_species, single_species_table, references_folder,
                                           references_folder_content, merged_filtered_fasta_f):
-    top_x_df = single_species_table.sort_values(['Completeness', 'Genome']).tail( max_refs_per_species)
+    # Create column 'Quality' as Completeness - 5 * Contamination + ln(N50)
+    single_species_table['Quality'] = single_species_table.Completeness - 5 * single_species_table.Contamination + \
+                                      single_species_table.N50.apply(lambda x: 0 if x <= 0 else np.log(x))
+    # Take top X references according to Quality score, breaking ties alphabetically by Genome
+    top_x_df = single_species_table.sort_values(['Quality', 'Genome']).tail(max_refs_per_species)
     top_x_df.apply(lambda x: download_and_write_content_to_file(references_folder,
                                                                 references_folder_content,
                                                                 x.FTP_download,
                                                                 merged_filtered_fasta_f), axis=1)
     return top_x_df
+
 
 @pu.step_timing
 def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_path, kraken_report_path,
