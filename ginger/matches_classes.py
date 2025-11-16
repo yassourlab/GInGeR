@@ -7,7 +7,7 @@ class PathRefGenomeMatch:
         gene_and_nodes_list = query_name_splt[0].split('_nodes_')
         self.query_name = paf_line.qname
         self.path = query_name_splt[1] if len(query_name_splt) > 1 else None
-        self.gene = gene_and_nodes_list[0].split('|')[0]
+        self.gene = gene_and_nodes_list[0]
         self.nodes_list = gene_and_nodes_list[1] if len(gene_and_nodes_list) > 1 else None
         self.path_length = paf_line.qlen
         self.path_start = paf_line.qstart
@@ -31,7 +31,7 @@ class GeneContigMatch:
     def __init__(self, mmseq_line: str):
         target, query, tstart, tend, nident, qlen = mmseq_line.split('\t')
         self.gene_length = int(qlen) * 3
-        self.gene = query
+        self.gene = query.split(' ')[0]
         start_int = int(tstart)
         end_int = int(tend)
 
