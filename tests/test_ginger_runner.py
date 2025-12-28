@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import patch
-from distutils.dir_util import copy_tree
-from shutil import rmtree
+from shutil import rmtree, copytree
 from click.testing import CliRunner
 from ginger.ginger_runner import ginger_e2e_func, run_ginger_e2e
 import os
@@ -22,7 +21,7 @@ with '../ginger/UHGG-metadata.tsv'
 
 
 def run_meta_or_hybrid_spades_mock(short_reads_1, short_reads_2, long_reads, output_folder, threads):
-    copy_tree(f'{TEST_FILES}/SPAdes', output_folder)
+    copytree(f'{TEST_FILES}/SPAdes', output_folder, dirs_exist_ok=True)
     return output_folder
 
 

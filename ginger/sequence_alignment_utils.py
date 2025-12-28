@@ -84,14 +84,14 @@ def generate_index(fasta_file, preset):
     else:
         raise Exception('fasta file name should end with fasta.gzip,  fasta.gz or fasta')
     command = MINIMAP2_INDEXING_COMMAND.format(preset=preset, index_file=index_file, fasta_file=fasta_file)
-    log.info(f'{dt.datetime.now()} running Minimap2 indexing: {command}')
+    log.info(f'Running Minimap2 indexing - {command}')
 
     command_output = run(command, shell=True, capture_output=True)
     if command_output.returncode:
-        logging.error(f'Minimap2 stderr: {command_output.stderr}')
-        raise Exception('Minimap2 failed to run. GInGeR will abort.')
+        logging.error(f'Minimap2 indexing failed: {command_output.stderr}')
+        raise Exception('Minimap2 indexing failed - GInGeR aborted')
     else:
-        logging.info(f'Minimap2 run successfully. stdout: {command_output.stdout}')
+        logging.info(f'Minimap2 indexing completed successfully')
     return index_file
 
 
@@ -121,13 +121,13 @@ def _run_mmseqs2(query, target, out_file, nthreads=1):
     # temp dir should be under the dir of the out file
     command = MMSEQ2_COMMAND.format(target=target, query=query, out_file=out_file, temp_dir=f'{os.path.dirname(out_file)}/mmseqs_tmp', nthreads=nthreads)
     pu.check_and_makedir(out_file)
-    logging.info(f'running mmseq2: {command}')
+    logging.info(f'Running MMseqs2 - {command}')
     command_output = run(command, shell=True, capture_output=True)
     if command_output.returncode:
-        logging.error(f'mmseq2 stderr: {command_output.stderr}')
-        raise Exception('mmseq2 failed to run. GInGeR will abort.')
+        logging.error(f'MMseqs2 failed: {command_output.stderr}')
+        raise Exception('MMseqs2 failed - GInGeR aborted')
     else:
-        logging.info(f'mmseq2 ran successfully')
+        logging.info(f'MMseqs2 completed successfully')
     return out_file
 
 
@@ -136,15 +136,15 @@ def _run_minimap2_paf(query, target, out_file, preset='asm20', just_print=JUST_P
     command = MINIMAP2_COMMAND.format(preset=preset, target=target, query=query, out_file=out_file,
                                       nthreads=nthreads)
     pu.check_and_makedir(out_file)
-    logging.info(f'running minimap2: {command}')
+    logging.info(f'Running Minimap2 - {command}')
     if just_print:
         return out_file
     command_output = run(command, shell=True, capture_output=True)
     if command_output.returncode:
-        logging.error(f'minimap2 stderr: {command_output.stderr}')
-        raise Exception('minimap2 failed to run. GInGeR will abort.')
+        logging.error(f'Minimap2 failed: {command_output.stderr}')
+        raise Exception('Minimap2 failed - GInGeR aborted')
     else:
-        logging.info(f'minimap2 ran successfully')
+        logging.info(f'Minimap2 completed successfully')
     return out_file
     # with Popen(command.split(' '), stdout=PIPE) as minimap_process:
     #     output_lines = [output_line for output_line in tqdm(iter(lambda: minimap_process.stdout.readline(), b""))]
@@ -165,11 +165,11 @@ def read_and_filter_mmseq2_matches(match_object_constructor: callable, alignment
         if log.level == logging.DEBUG:  # keeping the generator will be more memory efficient, so convert this to list only if needed for debugging
             mmseq2_results = list(mmseq2_results)
             log.debug(
-                f'{dt.datetime.now()} {len(mmseq2_results)} alignments for {len(set([match.gene for match in mmseq2_results]))} genes were found in {alignment_path}')
+                f'Found {len(mmseq2_results)} alignments for {len(set([match.gene for match in mmseq2_results]))} genes in {alignment_path}')
         filtered_mmseq2_results = [paf_line for paf_line in mmseq2_results if paf_line.score > pident_filtering_th]
         if log.level == logging.DEBUG:
             log.debug(
-                f'{dt.datetime.now()} {len(filtered_mmseq2_results)} alignments for {len(set([match.gene for match in filtered_mmseq2_results]))} genes were left after filtering ')
+                f'Retained {len(filtered_mmseq2_results)} alignments for {len(set([match.gene for match in filtered_mmseq2_results]))} genes after filtering')
     return filtered_mmseq2_results
 
 @pu.step_timing
@@ -183,12 +183,12 @@ def read_and_filter_minimap_matches(match_object_constructor: callable, alignmen
     if log.level == logging.DEBUG:
         minimap_results = minimap_results
         log.debug(
-            f'{dt.datetime.now()} {len(minimap_results)} alignments for {len(set([match.gene for match in minimap_results]))} genes were found in {alignment_path}')
+            f'Found {len(minimap_results)} alignments for {len(set([match.gene for match in minimap_results]))} genes in {alignment_path}')
     filtered_minimap_results = [paf_line for paf_line in minimap_results if paf_line.score > pident_filtering_th]
 
     if log.level == logging.DEBUG:
         log.debug(
-            f'{dt.datetime.now()} {len(filtered_minimap_results)} alignments for {len(set([match.gene for match in filtered_minimap_results]))} genes were left after filtering ')
+            f'Retained {len(filtered_minimap_results)} alignments for {len(set([match.gene for match in filtered_minimap_results]))} genes after filtering')
     return filtered_minimap_results
 
 

@@ -17,7 +17,12 @@ from ginger import pipeline_utils as pu
 from ginger import constants as c
 
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 log = logging.getLogger(__name__)
 
 
@@ -39,7 +44,7 @@ def cleanup_intermediate_files(out_dir, keep_options):
     if 'all' in keep_options:
         return
     
-    log.info('Cleaning up intermediate files...')
+    log.info('Cleaning up intermediate files')
     
     # Define file patterns for each category
     cleanup_map = {
@@ -65,10 +70,10 @@ def cleanup_intermediate_files(out_dir, keep_options):
                     try:
                         if os.path.isdir(match):
                             shutil.rmtree(match)
-                            log.debug(f'Removed directory: {match}')
+                            log.debug(f'Removed directory {match}')
                         else:
                             os.remove(match)
-                            log.debug(f'Removed file: {match}')
+                            log.debug(f'Removed file {match}')
                     except Exception as e:
                         log.warning(f'Failed to remove {match}: {e}')
             else:
@@ -78,10 +83,10 @@ def cleanup_intermediate_files(out_dir, keep_options):
                     try:
                         if os.path.isdir(path):
                             shutil.rmtree(path)
-                            log.debug(f'Removed directory: {path}')
+                            log.debug(f'Removed directory {path}')
                         else:
                             os.remove(path)
-                            log.debug(f'Removed file: {path}')
+                            log.debug(f'Removed file {path}')
                     except Exception as e:
                         log.warning(f'Failed to remove {path}: {e}')
 
@@ -157,6 +162,9 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                     kraken_db, reads_ratio_th, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
                     max_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
                     paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives):
+    # Log the command that was run
+    log.info(f"Running GInGeR with command: {' '.join(sys.argv)}")
+    
     # create output directory if it doesn't exist
     pu.check_and_make_dir_no_file_name(out_dir)
     # filter reference database using kraken
@@ -191,7 +199,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                                                                   out_dir)
     if not genes_with_location_in_graph:
         log.info(
-            'Genes of interest were not detected in assembly. GInger run will stop and no results will be generated')
+            'No genes of interest detected in assembly. GInGeR run stopped - no results generated')
         return
 
     # get in and out paths
@@ -216,7 +224,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                                     max_gap_ratio, reference_genomes_metadata)
     if not context_level_results:
         log.info(
-            'GInGeR could not matching pairs of incoming and outgoing contexts to reference sequences. GInger run will stop and no results will be generated')
+            'No matching pairs of incoming and outgoing contexts found in reference sequences. GInGeR run stopped - no results generated')
         return
     context_level_output_path = c.CONTEXT_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     species_level_output_path = c.SPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
@@ -237,7 +245,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     cleanup_intermediate_files(out_dir, keep_intermediate)
     
     log.info(
-        f"Context-level output can be found here: {context_level_output_path}, species-level output can be found here: {species_level_output_path}\nGInGer's run completed successfully!")
+        f"GInGeR completed successfully. Context-level output: {context_level_output_path}, Species-level output: {species_level_output_path}")
 
     if __name__ == "__main__":
         run_ginger_e2e()
