@@ -4,7 +4,7 @@ GInGeR is a tool for analyzing the genomic regions of genes of interest in metag
 GInGeR constructs an assembly graph, locates the genes of interest in the assembly graph, identifies their potential
 genomic contexts in the graph, verifies the contexts and assigns them to carrier species using a reference genomes database.
 
-**Note that a paper describing GInGeR was not yet published. If you're interested in using it for your research, please email netta.barak@mail.huji.ac.il**
+**Note that a paper describing GInGeR was not yet published. If you're interested in using it for your research, please contact netta.barak [at] mail.huji.ac.il**
 
 # Installation using conda:
 
@@ -23,7 +23,7 @@ genomic contexts in the graph, verifies the contexts and assigns them to carrier
     * `run_ginger tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.faa e2e_test_output --max-species-representatives 1`
     * **Note that due to Kraken2's memory requirements, you'd need to allocate at least 16G of memory for the pipeline
       to run successfully**. In case you would like to test ginger but skip the step using Kraken, you can
-      run: `run_ginger tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.faa e2e_test_output --merged-filtered-fasta tests/test_files/merged_filtered_ref_db.fasta.gz --max-species-representatives 1`
+      run: `run_ginger tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.faa e2e_test_output --sample-specific-references tests/test_files/merged_filtered_ref_db.fasta.gz --max-species-representatives 1`
 
 # Running GInGeR
 
@@ -82,14 +82,14 @@ a pre-ran assembly, please specify here the directory of sapdes' output.
 
 `--kraken-output-path` - A path for saving Kraken2's output
 
-`--metadata-path` - The path to the reference database metadata table. (see more information in the Reference database
+`--reference-genomes-metadata` - The path to the reference database metadata table. (see more information in the Reference database
 section)
 
-`--references-dir`- The directory to which GInGeR will download missing reference genomes from UHGG. Defaults
+`--downloaded-references-dir`- The directory to which GInGeR will download missing reference genomes from UHGG. Defaults
 to `references_dir`. This folder can be shared for all runs of GInGer in order to avoid the same file being downloaded
 and saved multiple times.
 
-`--merged-filtered-fasta` - A reference database in a fasta format. using this will skip the stages of creating a sample
+`--sample-specific-references` - A reference database in a fasta format. using this will skip the stages of creating a sample
 specific database based on the species Kraken2 detected in the sample.
 
 `--keep-intermediate` - Controls which intermediate files are kept after the pipeline completes. By default, all files are kept (`all`). Options include: `final` (only result CSVs), `assembly` (SPAdes output), `alignment` (PAF/M8 files), `sequences` (FASTA files), `kraken` (Kraken2/Bracken output), `reference` (reference database files). Can specify multiple categories by repeating the flag. Example: `--keep-intermediate final --keep-intermediate assembly` keeps only the final CSV results and the SPAdes directory.
@@ -132,15 +132,15 @@ By default, GInGeR uses the Unified Human Gastrointestinal Genome collection (UH
 see [genome catalog](http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0/README_v2.0.txt) and
 [Almeida et al.](https://www.nature.com/articles/s41587-020-0603-3)) as a reference database. When
 running GInGer, it first detects the dominant species in the sample using Kraken2. Then it downloads missing
-references (`--max-species-representatives` of references per species) for these species from UHGG to the `--references-dir` and
+references (`--max-species-representatives` of references per species) for these species from UHGG to the `--downloaded-references-dir` and
 combining them into a reference database customized for the given sample. It is recommended to use a
-shared `--references-dir` for multiple samples (this is GInGeR's default behavior) to save time and storage by
+shared `--downloaded-references-dir` for multiple samples (this is GInGeR's default behavior) to save time and storage by
 not downloading the same references multiple times.
 
 ### supply GInGer with a fasta of reference species
 
-You can do so using using the `--merged-filtered-fasta` option. For optimal results, it should include only species that
-are relevant for your sample. In this case you should supply also a `--metadata-path` in a TSV format and the header '
+You can do so using using the `--sample-specific-references` option. For optimal results, it should include only species that
+are relevant for your sample. In this case you should supply also a `--reference-genomes-metadata` in a TSV format and the header '
 Genome Length Lineage FTP_download species':
 
 - 'Genomes' should be the id of the genome as appears in your fasta file. Each contig should have the following format

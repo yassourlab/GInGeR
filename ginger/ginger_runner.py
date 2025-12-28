@@ -104,16 +104,16 @@ def cleanup_intermediate_files(out_dir, keep_options):
               help='The minimal % of reads that need to be mapped to a certain species for it to be included in the analysis')
 @click.option('--max-species-representatives', type=int, default=100,
               help='The maximal references per species that will be downloaded from UHGG and taken into account in the aggregation of results at the species level')
-@click.option('--metadata-path', type=click.Path(),
+@click.option('--reference-genomes-metadata', type=click.Path(),
               default=os.path.join(os.path.dirname(__file__), 'UHGG-metadata.tsv'),
               help='The path to the reference database metadata table')
-@click.option('--references-dir', type=click.Path(), default='references_dir',
+@click.option('--downloaded-references-dir', type=click.Path(), default='references_dir',
               help='The directory to which GInGeR will download missing reference genomes from UHGG. This folder can be shared for all runs of GInGer in order to avoid the same file being  downloaded and saved multiple times')
-@click.option('--merged-filtered-fasta', type=click.Path(), default=None,
+@click.option('--sample-specific-references', type=click.Path(), default=None,
               help='A fasta, fasta.gz or mmi (minimap indexed) file that will be used a reference database (using this will skip the stages of creating a sample specific database based on the species detected in the sample by Kraken2)')
 @click.option('--depth-limit', type=int, default=12,
               help='The maximal depth for paths describing context candidates in the assembly graph')
-@click.option('--maximal-gap-ratio', type=float, default=1.5,
+@click.option('--max-gap-ratio', type=float, default=1.5,
               help="The maximal ratio between the length of the gene and the gap between it's contexts in the database")
 @click.option('--max-context-len', type=int, default=2500, help='The maximal length for context candidates')
 @click.option('--min-context-len', type=int, default=0, help='The minimal length for context candidates')
@@ -129,8 +129,8 @@ def cleanup_intermediate_files(out_dir, keep_options):
 @click.option('--skip-assembly', is_flag=True, default=False,
               help='A flag that indicates whether or not to skip the assembly step. If the flag is set to True, the argument --assembly--dir must be supplied and direct to the results of a SPAdes run')
 def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                   kraken_db, reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path, depth_limit,
-                   maximal_gap_ratio, max_context_len, min_context_len, gene_pident_filtering_th,
+                   kraken_db, reads_ratio_th, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
+                   max_gap_ratio, max_context_len, min_context_len, gene_pident_filtering_th,
                    paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives):
     """GInGeR - A tool for analyzing the genomic contexts of genes in metagenomic samples.
 
@@ -148,21 +148,21 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_d
 
     """
     return ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                           kraken_db, reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path,
-                           depth_limit, maximal_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
+                           kraken_db, reads_ratio_th, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path,
+                           depth_limit, max_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
                            paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives)
 
 
 def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                    kraken_db, reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path, depth_limit,
-                    maximal_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
+                    kraken_db, reads_ratio_th, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
+                    max_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
                     paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives):
     # create output directory if it doesn't exist
     pu.check_and_make_dir_no_file_name(out_dir)
     # filter reference database using kraken
     references_used_path = f'{out_dir}/references_used.csv'
-    if merged_filtered_fasta is None:
-        merged_filtered_fasta = f'{out_dir}/merged_filtered_ref_db.fasta'
+    if sample_specific_references is None:
+        sample_specific_references = f'{out_dir}/merged_filtered_ref_db.fasta'
         if kraken_output_path is None:
             kraken_output_path = f'{out_dir}/kraken_output_file.tsv'
             kraken_report_path = f'{out_dir}/kraken_report_file.tsv'
@@ -170,13 +170,13 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
             bracken_report = f'{out_dir}/bracken_report_file.tsv'
             rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads, kraken_output_path,
                                                  kraken_report_path, bracken_output, bracken_report, reads_ratio_th,
-                                                 metadata_path, references_dir, merged_filtered_fasta,
+                                                 reference_genomes_metadata, downloaded_references_dir, sample_specific_references,
                                                  references_used_path,
                                                  max_species_representatives, kraken_db)
-    if not merged_filtered_fasta.endswith('mmi'):
-        indexed_reference = sau.generate_index(merged_filtered_fasta, sau.INDEXING_PRESET)
+    if not sample_specific_references.endswith('mmi'):
+        indexed_reference = sau.generate_index(sample_specific_references, sau.INDEXING_PRESET)
     else:
-        indexed_reference = merged_filtered_fasta
+        indexed_reference = sample_specific_references
     # run assembly
     if assembly_dir is None:
         assembly_dir = f'{out_dir}/SPAdes'
@@ -213,7 +213,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     context_level_results = vcc.process_in_and_out_paths_to_results(in_contexts_to_ref_genomes,
                                                                     out_contexts_to_ref_genomes,
                                                                     genes_lengths, paths_pident_filtering_th, 0,
-                                                                    maximal_gap_ratio, metadata_path)
+                                                                    max_gap_ratio, reference_genomes_metadata)
     if not context_level_results:
         log.info(
             'GInGeR could not matching pairs of incoming and outgoing contexts to reference sequences. GInger run will stop and no results will be generated')
@@ -221,9 +221,9 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     context_level_output_path = c.CONTEXT_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     species_level_output_path = c.SPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     subspecies_level_output_path = c.SUBSPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
-    pu.write_context_level_output_to_csv(context_level_results, context_level_output_path, metadata_path)
+    pu.write_context_level_output_to_csv(context_level_results, context_level_output_path, reference_genomes_metadata)
     pu.aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path,
-                                                                            metadata_path,
+                                                                            reference_genomes_metadata,
                                                                             species_level_output_path,
                                                                             max_species_representatives)
 
