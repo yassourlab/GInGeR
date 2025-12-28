@@ -139,7 +139,7 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_d
 
     \b
     SHORT_READS_2 - R2 fastq or fastq.gzip file
-
+t
     \b
     GENES_PATH - A fasta file with the genes of interest
 
