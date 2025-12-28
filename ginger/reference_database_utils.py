@@ -16,7 +16,6 @@ import os
 import re
 
 log = logging.getLogger(__name__)
-KRAKEN_DB = f'/sci/labs/morani/morani/icore-data/lab/Tools/kraken2_db/UnifiedHumanGastrointestinalGenome'
 KRAKEN_COMMAND = 'kraken2 --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {kraken_output} --report {kraken_report} --confidence 0.1 --use-names'  # --report {report}
 BRACKEN_COMMAND = 'bracken -d {kraken_db} -i {kraken_report} -o {bracken_output} -w {bracken_report} -r {read_len} -l S -t {min_reads_for_bracken}'
 KRAKEN_OUTPUT_HEADER = ['classified', 'read', 'genome', 'reads_len', 'mapping_str']
@@ -29,12 +28,12 @@ N_ATTEMPTS = 10
 SLEEP_SECS = 60
 
 
-def run_kraken(reads_1, reads_2, threads, output_path, report_path):
-    command = KRAKEN_COMMAND.format(kraken_db=KRAKEN_DB, reads_1=reads_1, reads_2=reads_2,
+def run_kraken(reads_1, reads_2, threads, output_path, report_path, kraken_db):
+    command = KRAKEN_COMMAND.format(kraken_db=kraken_db, reads_1=reads_1, reads_2=reads_2,
                                     threads=threads, kraken_output=output_path, kraken_report=report_path)
     # if kraken db does not exist, raise an error
-    if not os.path.exists(KRAKEN_DB):
-        raise Exception(f'Kraken database does not exist in {KRAKEN_DB}')
+    if not os.path.exists(kraken_db):
+        raise Exception(f'Kraken database does not exist in {kraken_db}')
 
     log.info(f'running Kraken2: {command}')
     # command_output = run(command, shell=True, capture_output=True)
@@ -74,12 +73,12 @@ def get_kmer_length_options(kraken_db):
     return extracted_parts
 
 
-def run_bracken(reads_1, kraken_report, bracken_output, bracken_report):
+def run_bracken(reads_1, kraken_report, bracken_output, bracken_report, kraken_db):
     num_reads, max_read_len = get_max_read_len(reads_1)
-    kmer_length_options = get_kmer_length_options(KRAKEN_DB)
+    kmer_length_options = get_kmer_length_options(kraken_db)
     # get the kmer length that is closest to the read length
     read_len = min(kmer_length_options, key=lambda x: abs(int(x) - max_read_len))
-    command = BRACKEN_COMMAND.format(kraken_db=KRAKEN_DB, kraken_report=kraken_report, bracken_output=bracken_output,
+    command = BRACKEN_COMMAND.format(kraken_db=kraken_db, kraken_report=kraken_report, bracken_output=bracken_output,
                                      bracken_report=bracken_report, read_len=read_len,
                                      min_reads_for_bracken=int(num_reads * NUM_READS_RATIO))
     log.info(f'running Bracken: {command}')
@@ -179,11 +178,11 @@ def take_top_species_and_download_to_file(max_refs_per_species, single_species_t
 def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_path, kraken_report_path,
                                      bracken_output,
                                      bracken_report, reads_ratio_th, metadata_path, references_folder,
-                                     merged_filtered_fasta, references_used_path, max_species_representatives):
+                                     merged_filtered_fasta, references_used_path, max_species_representatives, kraken_db):
     pu.check_and_makedir(kraken_output_path)
     pu.check_and_make_dir_no_file_name(references_folder)
-    run_kraken(reads_1, reads_2, threads, kraken_output_path, kraken_report_path)
-    run_bracken(reads_1, kraken_report_path, bracken_output, bracken_report)
+    run_kraken(reads_1, reads_2, threads, kraken_output_path, kraken_report_path, kraken_db)
+    run_bracken(reads_1, kraken_report_path, bracken_output, bracken_report, kraken_db)
     top_species = get_list_of_top_species_by_bracken(bracken_output, reads_ratio_th)
     selected_species_df = generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path,
                                                                                      references_folder,

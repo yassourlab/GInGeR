@@ -43,6 +43,9 @@ def extract_genes_lengths(genes_path):
 @click.option('--threads', '-t', type=int, default=1,
               help='Number of threads that will be used for running Kraken2, SPAdes and Minimap2')
 @click.option('--kraken-output-path', default=None, help="A path for saving Kraken2's output")
+@click.option('--kraken-db', type=click.Path(),
+              default=os.path.join(os.path.dirname(__file__), '..', 'kraken2_db_uhgg_v2.0.2'),
+              help='The path to UHGG\'s Kraken2 database directory')
 @click.option('--reads-ratio-th', type=float, default=0.01,
               help='The minimal % of reads that need to be mapped to a certain species for it to be included in the analysis')
 @click.option('--max-species-representatives', type=int, default=100,
@@ -67,7 +70,7 @@ def extract_genes_lengths(genes_path):
 @click.option('--skip-assembly', is_flag=True, default=False,
               help='A flag that indicates whether or not to skip the assembly step. If the flag is set to True, the argument --assembly--dir must be supplied and direct to the results of a SPAdes run')
 def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                   reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path, depth_limit,
+                   kraken_db, reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path, depth_limit,
                    maximal_gap_ratio, max_context_len, min_context_len, gene_pident_filtering_th,
                    paths_pident_filtering_th, skip_assembly, max_species_representatives):
     """GInGeR - A tool for analyzing the genomic contexts of genes in metagenomic samples.
@@ -86,13 +89,13 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_d
 
     """
     return ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                           reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path,
+                           kraken_db, reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path,
                            depth_limit, maximal_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
                            paths_pident_filtering_th, skip_assembly, max_species_representatives)
 
 
 def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                    reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path, depth_limit,
+                    kraken_db, reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path, depth_limit,
                     maximal_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
                     paths_pident_filtering_th, skip_assembly, max_species_representatives):
     # create output directory if it doesn't exist
@@ -110,7 +113,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                  kraken_report_path, bracken_output, bracken_report, reads_ratio_th,
                                                  metadata_path, references_dir, merged_filtered_fasta,
                                                  references_used_path,
-                                                 max_species_representatives)
+                                                 max_species_representatives, kraken_db)
     if not merged_filtered_fasta.endswith('mmi'):
         indexed_reference = sau.generate_index(merged_filtered_fasta, sau.INDEXING_PRESET)
     else:
