@@ -92,6 +92,8 @@ and saved multiple times.
 `--merged-filtered-fasta` - A reference database in a fasta format. using this will skip the stages of creating a sample
 specific database based on the species Kraken2 detected in the sample.
 
+`--keep-intermediate` - Controls which intermediate files are kept after the pipeline completes. By default, all files are kept (`all`). Options include: `final` (only result CSVs), `assembly` (SPAdes output), `alignment` (PAF/M8 files), `sequences` (FASTA files), `kraken` (Kraken2/Bracken output), `reference` (reference database files). Can specify multiple categories by repeating the flag. Example: `--keep-intermediate final --keep-intermediate assembly` keeps only the final CSV results and the SPAdes directory.
+
 # GInGer's outputs
 
 GInGeR's outputs two results files:
@@ -151,24 +153,24 @@ Genome Length Lineage FTP_download species':
 
 GInGeR requires a 64-bit Linux system and conda (or miniconda).
 
-### Python 3.11.6
+### Python 3.14.2
 
 The pipeline might also work on older versions of python, but they were not tested.
 
 #### python packages
 
-  - biopython=1.81
-  - pandas=2.1.4
-  - kraken2=2.1.3
-  - bracken=3.0
-  - minimap2=2.26
-  - pip=23.3.1
-  - spades=3.15.5
-  - click=8.1.7
+  - biopython=1.86
+  - pandas=2.3.3
+  - kraken2=2.17.1
+  - bracken=3.1
+  - minimap2=2.30
+  - pip=25.3
+  - spades=4.2.0
+  - click=8.3.1
   - pyfastg=0.1.0
   - pafpy=0.2.0
-  - tqdm=4.66.1
-  - mmseqs2=15.6f452
+  - tqdm=4.67.1
+  - mmseqs2=18.8cc5c
 
 # Acknowledgements
 GInGer is open source and available thanks to the hard work of [Haimasree Bhattacharya](https://github.com/haimasree)

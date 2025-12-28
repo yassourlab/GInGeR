@@ -4,6 +4,8 @@ import click
 from Bio import SeqIO
 import os
 import pandas as pd
+import shutil
+from glob import glob
 
 from ginger import locating_genes_in_graph as lg
 from ginger import reference_database_utils as rdu
@@ -30,6 +32,58 @@ def extract_genes_lengths(genes_path):
 
             gene_lengths[gene_name] = gene_length
     return gene_lengths
+
+
+def cleanup_intermediate_files(out_dir, keep_options):
+    """Remove intermediate files based on keep_options."""
+    if 'all' in keep_options:
+        return
+    
+    log.info('Cleaning up intermediate files...')
+    
+    # Define file patterns for each category
+    cleanup_map = {
+        'assembly': ['SPAdes'],
+        'alignment': ['*.paf', '*.m8', 'mmseqs_tmp', 'nodes_to_contigs_w_gaps.paf'],
+        'sequences': ['all_in_paths.fasta', 'all_out_paths.fasta'],
+        'kraken': ['kraken_*.tsv', 'bracken_*.tsv'],
+        'reference': ['merged_filtered_ref_db.*', 'references_used.csv']
+    }
+    
+    # Remove categories not in keep_options
+    # 'final' is not a real category, it just means "keep final CSV results"
+    categories_to_remove = [cat for cat in cleanup_map.keys() if cat not in keep_options]
+    
+    for category in categories_to_remove:
+        patterns = cleanup_map[category]
+        for pattern in patterns:
+            # Handle both files and directories
+            if '*' in pattern:
+                # Glob pattern
+                matches = glob(os.path.join(out_dir, pattern))
+                for match in matches:
+                    try:
+                        if os.path.isdir(match):
+                            shutil.rmtree(match)
+                            log.debug(f'Removed directory: {match}')
+                        else:
+                            os.remove(match)
+                            log.debug(f'Removed file: {match}')
+                    except Exception as e:
+                        log.warning(f'Failed to remove {match}: {e}')
+            else:
+                # Exact file/directory name
+                path = os.path.join(out_dir, pattern)
+                if os.path.exists(path):
+                    try:
+                        if os.path.isdir(path):
+                            shutil.rmtree(path)
+                            log.debug(f'Removed directory: {path}')
+                        else:
+                            os.remove(path)
+                            log.debug(f'Removed file: {path}')
+                    except Exception as e:
+                        log.warning(f'Failed to remove {path}: {e}')
 
 
 @click.command()
@@ -67,12 +121,17 @@ def extract_genes_lengths(genes_path):
               help='The minimal % of matched base pairs required for locating a gene in the graph')
 @click.option('--paths-pident-filtering-th', type=float, default=0.9,
               help='The minimal % of matched base pairs required for matching a context candidate to a reference sequence')
+@click.option('--keep-intermediate', multiple=True,
+              type=click.Choice(['all', 'final', 'assembly', 'alignment', 'sequences', 'kraken', 'reference'],
+                               case_sensitive=False),
+              default=['all'],
+              help='Specify which intermediate files to keep. Options: all (default, keep everything), final (only result CSVs), assembly (SPAdes output), alignment (PAF/M8 files), sequences (FASTA files), kraken (Kraken2/Bracken output), reference (reference database files). Can specify multiple by repeating the flag: --keep-intermediate final --keep-intermediate assembly')
 @click.option('--skip-assembly', is_flag=True, default=False,
               help='A flag that indicates whether or not to skip the assembly step. If the flag is set to True, the argument --assembly--dir must be supplied and direct to the results of a SPAdes run')
 def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                    kraken_db, reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path, depth_limit,
                    maximal_gap_ratio, max_context_len, min_context_len, gene_pident_filtering_th,
-                   paths_pident_filtering_th, skip_assembly, max_species_representatives):
+                   paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives):
     """GInGeR - A tool for analyzing the genomic contexts of genes in metagenomic samples.
 
     \b
@@ -91,13 +150,13 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_d
     return ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                            kraken_db, reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path,
                            depth_limit, maximal_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
-                           paths_pident_filtering_th, skip_assembly, max_species_representatives)
+                           paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives)
 
 
 def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                     kraken_db, reads_ratio_th, metadata_path, references_dir, merged_filtered_fasta, genes_path, depth_limit,
                     maximal_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
-                    paths_pident_filtering_th, skip_assembly, max_species_representatives):
+                    paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives):
     # create output directory if it doesn't exist
     pu.check_and_make_dir_no_file_name(out_dir)
     # filter reference database using kraken
@@ -174,6 +233,9 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                                                 subspecies_level_output_path,
                                                                                 max_species_representatives,
                                                                                 'subspecies')
+    # Clean up intermediate files if requested
+    cleanup_intermediate_files(out_dir, keep_intermediate)
+    
     log.info(
         f"Context-level output can be found here: {context_level_output_path}, species-level output can be found here: {species_level_output_path}\nGInGer's run completed successfully!")
 
