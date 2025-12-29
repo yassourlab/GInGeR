@@ -247,5 +247,5 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     log.info(
         f"GInGeR completed successfully. Context-level output: {context_level_output_path}, Species-level output: {species_level_output_path}")
 
-    if __name__ == "__main__":
-        run_ginger_e2e()
+if __name__ == "__main__":
+    run_ginger_e2e()
