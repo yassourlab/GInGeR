@@ -60,10 +60,10 @@ class GingerRunnerTest(unittest.TestCase):
                 f'{TEST_FILES}/context_level_matches.csv', 'r') as gt:
             lines_out = test_out.readlines()
             lines_gt = gt.readlines()
-            self.assertEquals(len(lines_out), len(lines_gt))
-            self.assertEquals(len(lines_out[1].split('/')), len(lines_gt[1].split('/')))
+            self.assertEqual(len(lines_out), len(lines_gt))
+            self.assertEqual(len(lines_out[1].split('/')), len(lines_gt[1].split('/')))
             for field, field_gt in zip(lines_out[1].split(','), lines_gt[1].split(',')):
-                self.assertEquals(field, field_gt)
+                self.assertEqual(field, field_gt)
 
             self.assertListEqual(lines_out, lines_gt)
 
