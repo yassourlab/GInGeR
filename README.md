@@ -53,8 +53,10 @@ additional files.
 `-t` or `--threads` - An integer specifying the number of threads that will be used for running Kraken2, SPAdes and
 Minimap2. Default is 1.
 
-`--reads-ratio-th` - A float in the range [0,1] specifying the minimal % of reads that need to be mapped to a certain
-species for it to be included in the analysis. Default is 0.01 (1%).
+`--species-inclusion-threshold` - A float in the range [0,1] specifying the minimal fraction of reads that need to be mapped to a certain
+species for it to be included in the analysis. This represents read-based abundance (proportion of DNA sequences in the sample), 
+not cell count abundance. Species with larger genomes contribute more reads than those with smaller genomes at equal cell counts. 
+Default is 0.01 (1%).
 
 `--max-species-representatives` - The maximal references per species that will be downloaded from UHGG and taken into
 account in the aggregation of results at the species level. Default is 100.

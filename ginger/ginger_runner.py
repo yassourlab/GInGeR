@@ -6,6 +6,7 @@ import os
 import pandas as pd
 import shutil
 from glob import glob
+import pickle
 
 from ginger import locating_genes_in_graph as lg
 from ginger import reference_database_utils as rdu
@@ -24,20 +25,6 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 log = logging.getLogger(__name__)
-
-
-def extract_genes_lengths(genes_path):
-    # TODO why do I ned to extract genes length if I have this from mmseq?
-    gene_lengths = {}
-    with open(genes_path) as f:
-        fasta_sequences = SeqIO.parse(f, 'fasta')
-        for s in fasta_sequences:
-            gene_length = len(s.seq) * 3
-            gene_name = s.id
-
-            gene_lengths[gene_name] = gene_length
-    return gene_lengths
-
 
 def cleanup_intermediate_files(out_dir, keep_options):
     """Remove intermediate files based on keep_options."""
@@ -105,8 +92,8 @@ def cleanup_intermediate_files(out_dir, keep_options):
 @click.option('--kraken-db', type=click.Path(),
               default=os.path.join(os.path.dirname(__file__), '..', 'kraken2_db_uhgg_v2.0.2'),
               help='The path to UHGG\'s Kraken2 database directory')
-@click.option('--reads-ratio-th', type=float, default=0.01,
-              help='The minimal % of reads that need to be mapped to a certain species for it to be included in the analysis')
+@click.option('--species-inclusion-threshold', type=float, default=0.01,
+              help='The minimal fraction of reads mapped to a species for inclusion in the analysis. This represents read-based abundance (proportion of DNA sequences), not cell count abundance. Species with larger genomes contribute more reads than those with smaller genomes at equal cell counts. Value should be in [0,1], default 0.01 (1%)')
 @click.option('--max-species-representatives', type=int, default=100,
               help='The maximal references per species that will be downloaded from UHGG and taken into account in the aggregation of results at the species level')
 @click.option('--reference-genomes-metadata', type=click.Path(),
@@ -134,7 +121,7 @@ def cleanup_intermediate_files(out_dir, keep_options):
 @click.option('--skip-assembly', is_flag=True, default=False,
               help='A flag that indicates whether or not to skip the assembly step. If the flag is set to True, the argument --assembly--dir must be supplied and direct to the results of a SPAdes run')
 def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                   kraken_db, reads_ratio_th, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
+                   kraken_db, species_inclusion_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
                    max_gap_ratio, max_context_len, min_context_len, gene_pident_filtering_th,
                    paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives):
     """GInGeR - A tool for analyzing the genomic contexts of genes in metagenomic samples.
@@ -153,13 +140,13 @@ t
 
     """
     return ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                           kraken_db, reads_ratio_th, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path,
+                           kraken_db, species_inclusion_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path,
                            depth_limit, max_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
                            paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives)
 
 
 def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                    kraken_db, reads_ratio_th, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
+                    kraken_db, species_inclusion_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
                     max_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
                     paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives):
     # Log the command that was run
@@ -177,7 +164,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
             bracken_output = f'{out_dir}/bracken_output_file.tsv'
             bracken_report = f'{out_dir}/bracken_report_file.tsv'
             rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads, kraken_output_path,
-                                                 kraken_report_path, bracken_output, bracken_report, reads_ratio_th,
+                                                 kraken_report_path, bracken_output, bracken_report, species_inclusion_threshold,
                                                  reference_genomes_metadata, downloaded_references_dir, sample_specific_references,
                                                  references_used_path,
                                                  max_species_representatives, kraken_db)
@@ -205,7 +192,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     # get in and out paths
     in_paths_fasta = c.IN_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
     out_paths_fasta = c.OUT_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
-    _ = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, assembly_graph_nodes,
+    gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, assembly_graph_nodes,
                                                               genes_with_location_in_graph, depth_limit,
                                                               min_context_len, max_context_len, in_paths_fasta,
                                                               out_paths_fasta)
@@ -217,10 +204,9 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                        out_contexts_to_ref_genomes, threads)
 
     # merge and get results
-    genes_lengths = extract_genes_lengths(genes_path)
     context_level_results = vcc.process_in_and_out_paths_to_results(in_contexts_to_ref_genomes,
                                                                     out_contexts_to_ref_genomes,
-                                                                    genes_lengths, paths_pident_filtering_th, 0,
+                                                                    gene_lengths, paths_pident_filtering_th, 0,
                                                                     max_gap_ratio, reference_genomes_metadata)
     if not context_level_results:
         log.info(

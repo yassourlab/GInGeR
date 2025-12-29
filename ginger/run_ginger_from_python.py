@@ -11,7 +11,7 @@ if __name__ == "__main__":
         'genes_path': '/sci/backup/morani/lab/Projects/GInGeR/analysis_data/250twins_37276_GL0178535.fasta',
         'out_dir': 'ginger_out_dir', 'long_reads': None,
         'assembly_dir': '/sci/backup/morani/lab/Projects/GInGeR/analysis_data/SPAdes_short_1M_long_0',
-        'kraken_output_path': None, 'reads_ratio_th': 0.01, 'max_species_representatives': 10,
+        'kraken_output_path': None, 'species_inclusion_threshold': 0.01, 'max_species_representatives': 10,
         'metadata_path': '/sci/labs/morani/morani/icore-data/lab/Data/UnifiedHumanGastrointestinalGenome/genomes-partial_metadata_with_species.tsv',
         'references_dir': '/sci/backup/morani/lab/Projects/GInGeR/analysis_data/analysis_references_dir_100',
          'merged_filtered_fasta': None,

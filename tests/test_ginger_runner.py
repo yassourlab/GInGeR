@@ -88,7 +88,7 @@ class GingerRunnerTest(unittest.TestCase):
         runner = CliRunner()
 
         result = runner.invoke(run_ginger_e2e,
-                               f'{self.short_reads_1} {self.short_reads_1} {self.genes_path} {self.out_dir} --sample-specific-references {self.merged_filtered_fasta} --reads-ratio-th {self.read_ratio_th} --reference-genomes-metadata {self.metadata_path} --max-species-representatives 1'.split(
+                               f'{self.short_reads_1} {self.short_reads_1} {self.genes_path} {self.out_dir} --sample-specific-references {self.merged_filtered_fasta} --species-inclusion-threshold {self.read_ratio_th} --reference-genomes-metadata {self.metadata_path} --max-species-representatives 1'.split(
                                    ' '))
         self.assertEqual(result.exit_code, 0, str(result.exception))
         self.assertTrue(os.path.exists(f'{self.out_dir}/context_level_matches.csv'))

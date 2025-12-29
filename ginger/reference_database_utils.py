@@ -177,13 +177,13 @@ def take_top_species_and_download_to_file(max_refs_per_species, single_species_t
 @pu.step_timing
 def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_path, kraken_report_path,
                                      bracken_output,
-                                     bracken_report, reads_ratio_th, metadata_path, references_folder,
+                                     bracken_report, species_inclusion_threshold, metadata_path, references_folder,
                                      merged_filtered_fasta, references_used_path, max_species_representatives, kraken_db):
     pu.check_and_makedir(kraken_output_path)
     pu.check_and_make_dir_no_file_name(references_folder)
     run_kraken(reads_1, reads_2, threads, kraken_output_path, kraken_report_path, kraken_db)
     run_bracken(reads_1, kraken_report_path, bracken_output, bracken_report, kraken_db)
-    top_species = get_list_of_top_species_by_bracken(bracken_output, reads_ratio_th)
+    top_species = get_list_of_top_species_by_bracken(bracken_output, species_inclusion_threshold)
     selected_species_df = generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path,
                                                                                      references_folder,
                                                                                      merged_filtered_fasta,
