@@ -62,6 +62,7 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                       in_paths_fasta, out_paths_fasta):
     gene_and_nodes_path_set = set()
     gene_lengths = {}
+    gene_match_scores = {}
     # delete fasta file if it exists
     for fasta_file in [in_paths_fasta, out_paths_fasta]:
         if os.path.exists(fasta_file):
@@ -112,7 +113,8 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                                          covered_by_gene=out_covered_by_gene,
                                                                          gene_and_node=gene_and_nodes_path_str)
             gene_lengths[gene_name] = gene_length
+            gene_match_scores[gene_name] = gene_contigs_match.score
             if len(in_paths) == 0 or len(out_paths) == 0:
                 log.info(f'{gene_contigs_match} in {len(in_paths)} out {len(out_paths)}')
 
-    return gene_lengths
+    return gene_lengths, gene_match_scores

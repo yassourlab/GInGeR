@@ -50,7 +50,7 @@ class GeneContigMatch:
 
 
 class InOutPathsMatch:
-    def __init__(self, in_path, out_path, start, end, gap_ratio, score, gene_length, gene=None, ref_genome=None):
+    def __init__(self, in_path, out_path, start, end, gap_ratio, score, gene_length, gene=None, ref_genome=None, gene_match_score=None, in_context_score=None, out_context_score=None):
         self.in_path = in_path
         self.out_path = out_path
         if gene is None:
@@ -68,9 +68,13 @@ class InOutPathsMatch:
         self.gap_ratio = gap_ratio
         self.score = score
         self.gene_length = gene_length
+        self.gene_match_score = gene_match_score
+        self.in_context_score = in_context_score
+        self.out_context_score = out_context_score
 
     def to_dict(self):
-        out_dict = dict(gene=self.gene, ref_genome=self.ref_genome, start=self.start, end=self.end, score=self.score)
+        out_dict = dict(gene=self.gene, ref_genome=self.ref_genome, start=self.start, end=self.end, score=self.score,
+                       gene_match_score=self.gene_match_score, in_context_score=self.in_context_score, out_context_score=self.out_context_score)
         if self.in_path:
             out_dict.update(dict(in_path_name=self.in_path.query_name, out_path_name=self.out_path.query_name,
                                  in_path_score=self.in_path.score, out_path_score=self.out_path.score))

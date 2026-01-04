@@ -3,7 +3,7 @@ from shutil import rmtree
 import pickle
 import os
 import ginger.extract_contexts_candidates as ecc
-
+import pyfastg
 from tests import helper
 
 TEST_FILES = helper.get_filedir()
@@ -27,14 +27,15 @@ class TestExtractContextsCandidates(unittest.TestCase):
         rmtree(cls.test_outputs_dir)
 
     def test_extract_all_in_out_paths_and_write_them_to_fastas(self):
-        with open(f'{TEST_FILES}/assembly_graph.pkl', 'rb') as f:
-            assembly_graph = pickle.load(f)
+        # with open(f'{TEST_FILES}/assembly_graph.pkl', 'rb') as f:
+            # assembly_graph = pickle.load(f)
+        assembly_graph= pyfastg.parse_fastg(f'{TEST_FILES}/SPAdes/assembly_graph.fastg')
         with open(f'{TEST_FILES}/nodes_with_edges_and_sequences.pkl', 'rb') as f:
             nodes_with_edges_and_sequences = pickle.load(f)
         with open(f'{TEST_FILES}/genes_with_location_in_graph.pkl', 'rb') as f:
             genes_with_location_in_graph = pickle.load(f)
 
-        gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
+        gene_lengths, gene_scores = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                                              nodes_with_edges_and_sequences,
                                                                              genes_with_location_in_graph,
                                                                              12, self.min_context_len,
@@ -45,23 +46,25 @@ class TestExtractContextsCandidates(unittest.TestCase):
 
         with open(self.in_paths_fasta) as f:
             lines = f.readlines()
-            self.assertListEqual(lines,
-                                 ['>test_gene_nodes_5+_path_5+\n',
-                                  'CTTTTTTTTTCGACCAAAGGTAACGAGGTAACAACCATGCGAGTGTTGAAGTTCGGCGGTACATCAGTGGCAAATGCAGAACGTTTTCTGCGTGTTGCCG\n'],
-                                 'Wrong incoming contexts extracted')
             # the -1 is beacuse of the \n in the end of the line
             self.assertEqual(len(lines[1]) - 1, self.max_context_len, 'Incoming context are not of correct length')
+            self.assertListEqual(lines,
+                                 ['>test_gene_nodes_5+_path_5+\n',
+                                  'GGTAACGGTGCGGGCTGACGCGTACAGGAAACACAGAAAAAAGCCCGCACCTGACAGTGCGGGCTTTTTTTTTCGACCAAAGGTAACGAGGTAACAACCA\n'],
+                                 'Wrong incoming contexts extracted')
+            
 
         with open(self.out_paths_fasta) as f:
             lines = f.readlines()
-
+            self.assertEqual(len(lines[1]) - 1, self.max_context_len, 'Outgoing context are not of correct length')
             self.assertListEqual(lines,
                                  ['>test_gene_nodes_5+_path_5+\n',
-                                  'CAATTGAAAACTTTCGTCGATCAGGAATTTGCCCAAATAAAACATGTCCTGCATGGCATTAGTTTGTTGGGGCAGTGCCCGGATAGCATCAACGCTGCGC\n'],
+                                  'TCGATCAGGAATTTGCCCAAATAAAACATGTCCTGCATGGCATTAGTTTGTTGGGGCAGTGCCCGGATAGCATCAACGCTGCGCTGATTTGCCGTGGCGA\n'],
                                  'Wrong outgoing contexts extracted')
-            self.assertEqual(len(lines[1]) - 1, self.max_context_len, 'Outgoing context are not of correct length')
+            
 
-        self.assertDictEqual(gene_lengths, {'test_gene': 200}, 'Genes length dictionary is incorrect')
+        self.assertDictEqual(gene_lengths, {'test_gene': 279}, 'Genes length dictionary is incorrect')
+        self.assertDictEqual(gene_scores, {'test_gene': 1.0}, 'Genes length dictionary is incorrect')
 
 
 if __name__ == '__main__':

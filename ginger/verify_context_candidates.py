@@ -21,7 +21,7 @@ def extract_start_and_end(in_match: mc.PathRefGenomeMatch, out_match: mc.PathRef
     return start, end
 
 
-def get_in_out_match(i, o, gene_length, minimal_gap_ratio, maximal_gap_ratio):
+def get_in_out_match(i, o, gene_length, gene_match_score, minimal_gap_ratio, maximal_gap_ratio):
     for field in ['gene', 'ref_genome', 'strand']:
         if getattr(i, field) != getattr(o, field):
             return None
@@ -30,7 +30,7 @@ def get_in_out_match(i, o, gene_length, minimal_gap_ratio, maximal_gap_ratio):
     gap_ratio = start_end_diff / gene_length
     score = (i.score * i.path_length + o.score * o.path_length) / (i.path_length + o.path_length)
     if minimal_gap_ratio < gap_ratio < maximal_gap_ratio:
-        return mc.InOutPathsMatch(i, o, start, end, gap_ratio, score, gene_length)
+        return mc.InOutPathsMatch(i, o, start, end, gap_ratio, score, gene_length, gene_match_score=gene_match_score, in_context_score=i.score, out_context_score=o.score)
     return None
 
 
@@ -48,7 +48,7 @@ def read_and_filter_path_matches_per_gene(match_object_constructor: callable, al
     return genes_to_matches
 
 
-def get_all_in_out_matches(in_paths_by_gene_and_ref_genome, out_paths_by_gene_and_ref_genome, genes_lengths, minimal_gap_ratio,
+def get_all_in_out_matches(in_paths_by_gene_and_ref_genome, out_paths_by_gene_and_ref_genome, genes_lengths, gene_match_scores, minimal_gap_ratio,
                            maximal_gap_ratio, iou_th=IOU_TH) -> Dict[tuple, list]:
     matches_per_gene_and_ref_genome = dict()
     for gene_ref_genome in in_paths_by_gene_and_ref_genome:
@@ -57,7 +57,7 @@ def get_all_in_out_matches(in_paths_by_gene_and_ref_genome, out_paths_by_gene_an
         out_paths = out_paths_by_gene_and_ref_genome.get(gene_ref_genome, [])
         for i in in_paths:
             for o in out_paths:
-                in_out_match = get_in_out_match(i, o, genes_lengths[i.gene], minimal_gap_ratio,maximal_gap_ratio)
+                in_out_match = get_in_out_match(i, o, genes_lengths[i.gene], gene_match_scores[i.gene], minimal_gap_ratio, maximal_gap_ratio)
                 if in_out_match is not None:
                     matches_for_gene_ref_genome_pair.append(in_out_match)
         if matches_for_gene_ref_genome_pair:
@@ -89,7 +89,7 @@ def get_ref_genome_species_dict_from_metadata_path(metadata_path):
     return ref_genome_species_dict
 
 @pu.step_timing
-def process_in_and_out_paths_to_results(in_path_mapping_to_ref_genomes, out_path_mapping_to_ref_genomes, genes_lengths,
+def process_in_and_out_paths_to_results(in_path_mapping_to_ref_genomes, out_path_mapping_to_ref_genomes, genes_lengths, gene_match_scores,
                                         paths_pident_filtering_th, minimal_gap_ratio,
                                         maximal_gap_ratio, metadata_path):
     # TODO get rid of pandas here (the tables have millions of entries and can potentially grow bigger)
@@ -110,6 +110,6 @@ def process_in_and_out_paths_to_results(in_path_mapping_to_ref_genomes, out_path
     log.info(f'{dt.datetime.now()} generating in-out matches')
     matches_per_gene_and_ref_genome = get_all_in_out_matches(parsed_in_path_to_ref_genomes_by_gene_and_ref_genome,
                                               parsed_out_path_to_ref_genomes_by_gene_and_ref_genome,
-                                              genes_lengths,
+                                              genes_lengths, gene_match_scores,
                                               minimal_gap_ratio, maximal_gap_ratio)
     return matches_per_gene_and_ref_genome
