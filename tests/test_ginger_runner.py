@@ -59,6 +59,7 @@ class GingerRunnerTest(unittest.TestCase):
         with open(f'{self.out_dir}/context_level_matches.csv', 'r') as test_out, open(
                 f'{TEST_FILES}/context_level_matches.csv', 'r') as gt:
             lines_out = test_out.readlines()
+            print(lines_out)
             lines_gt = gt.readlines()
             self.assertEqual(len(lines_out), len(lines_gt))
             self.assertEqual(len(lines_out[1].split('/')), len(lines_gt[1].split('/')))
@@ -79,32 +80,32 @@ class GingerRunnerTest(unittest.TestCase):
     #                     None, self.read_ratio_th, f'{TEST_FILES}/e_coli_metadata.tsv', 'references_dir',
     #                     None, self.genes_path, 12, 1.5, 0,
     #                     2500, 0.9, 0.9, False, 3)
-    #
+    
     #     self.assertTrue(os.path.exists(f'{self.out_dir}/context_level_matches.csv'))
     #     self.assertTrue(os.path.exists(f'{self.out_dir}/species_level_matches.csv'))
 
-    # @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
-    # def test_ginger_e2e_command_skip_kraken(self):
-    #     runner = CliRunner()
+    @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
+    def test_ginger_e2e_command_skip_kraken(self):
+        runner = CliRunner()
 
-    #     result = runner.invoke(run_ginger_e2e,
-    #                            f'{self.short_reads_1} {self.short_reads_1} {self.genes_path} {self.out_dir} --sample-specific-references {self.merged_filtered_fasta} --species-inclusion-threshold {self.read_ratio_th} --reference-genomes-metadata {self.metadata_path} --max-species-representatives 1'.split(
-    #                                ' '))
-    #     self.assertEqual(result.exit_code, 0, str(result.exception))
-    #     self.assertTrue(os.path.exists(f'{self.out_dir}/context_level_matches.csv'))
-    #     self.assertTrue(os.path.exists(f'{self.out_dir}/species_level_matches.csv'))
+        result = runner.invoke(run_ginger_e2e,
+                               f'{self.short_reads_1} {self.short_reads_1} {self.genes_path} {self.out_dir} --sample-specific-references {self.merged_filtered_fasta} --species-inclusion-threshold {self.read_ratio_th} --reference-genomes-metadata {self.metadata_path} --max-species-representatives 1'.split(
+                                   ' '))
+        self.assertEqual(result.exit_code, 0, str(result.exception))
+        self.assertTrue(os.path.exists(f'{self.out_dir}/context_level_matches.csv'))
+        self.assertTrue(os.path.exists(f'{self.out_dir}/species_level_matches.csv'))
 
-    #     with open(f'{self.out_dir}/context_level_matches.csv', 'r') as test_out, open(
-    #             f'{TEST_FILES}/context_level_matches.csv', 'r') as gt:
-    #         lines_out = test_out.readlines()
-    #         lines_gt = gt.readlines()
-    #     self.assertListEqual(lines_out, lines_gt)
+        with open(f'{self.out_dir}/context_level_matches.csv', 'r') as test_out, open(
+                f'{TEST_FILES}/context_level_matches.csv', 'r') as gt:
+            lines_out = test_out.readlines()
+            lines_gt = gt.readlines()
+        self.assertListEqual(lines_out, lines_gt)
 
-    #     with open(f'{self.out_dir}/species_level_matches.csv', 'r') as test_out, open(
-    #             f'{TEST_FILES}/species_level_matches.csv', 'r') as gt:
-    #         lines_out = test_out.readlines()
-    #         lines_gt = gt.readlines()
-    #     self.assertListEqual(lines_out, lines_gt)
+        with open(f'{self.out_dir}/species_level_matches.csv', 'r') as test_out, open(
+                f'{TEST_FILES}/species_level_matches.csv', 'r') as gt:
+            lines_out = test_out.readlines()
+            lines_gt = gt.readlines()
+        self.assertListEqual(lines_out, lines_gt)
 
 
 if __name__ == '__main__':

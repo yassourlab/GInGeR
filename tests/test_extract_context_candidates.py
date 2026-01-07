@@ -35,7 +35,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
         with open(f'{TEST_FILES}/genes_with_location_in_graph.pkl', 'rb') as f:
             genes_with_location_in_graph = pickle.load(f)
 
-        gene_lengths, gene_scores = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
+        gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                                              nodes_with_edges_and_sequences,
                                                                              genes_with_location_in_graph,
                                                                              12, self.min_context_len,
@@ -49,7 +49,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
             # the -1 is beacuse of the \n in the end of the line
             self.assertEqual(len(lines[1]) - 1, self.max_context_len, 'Incoming context are not of correct length')
             self.assertListEqual(lines,
-                                 ['>test_gene_nodes_5+_path_5+\n',
+                                 ['>test_gene_nodes_5+_match_1.0000_path_5+\n',
                                   'GGTAACGGTGCGGGCTGACGCGTACAGGAAACACAGAAAAAAGCCCGCACCTGACAGTGCGGGCTTTTTTTTTCGACCAAAGGTAACGAGGTAACAACCA\n'],
                                  'Wrong incoming contexts extracted')
             
@@ -58,13 +58,13 @@ class TestExtractContextsCandidates(unittest.TestCase):
             lines = f.readlines()
             self.assertEqual(len(lines[1]) - 1, self.max_context_len, 'Outgoing context are not of correct length')
             self.assertListEqual(lines,
-                                 ['>test_gene_nodes_5+_path_5+\n',
+                                 ['>test_gene_nodes_5+_match_1.0000_path_5+\n',
                                   'TCGATCAGGAATTTGCCCAAATAAAACATGTCCTGCATGGCATTAGTTTGTTGGGGCAGTGCCCGGATAGCATCAACGCTGCGCTGATTTGCCGTGGCGA\n'],
                                  'Wrong outgoing contexts extracted')
             
 
         self.assertDictEqual(gene_lengths, {'test_gene': 279}, 'Genes length dictionary is incorrect')
-        self.assertDictEqual(gene_scores, {'test_gene': 1.0}, 'Genes length dictionary is incorrect')
+        
 
 
 if __name__ == '__main__':

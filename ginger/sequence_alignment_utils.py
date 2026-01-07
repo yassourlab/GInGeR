@@ -10,7 +10,7 @@ log = logging.getLogger(__name__)
 
 JUST_PRINT_DEFAULT = False
 # MMSEQS:
-MMSEQ2_OUTPUT_FORMAT = "'theader,qheader,tstart,tend,nident,qlen'"
+MMSEQ2_OUTPUT_FORMAT = "'target,query,tstart,tend,nident,qlen'"
 MMSEQ2_COMMAND = f"mmseqs easy-search {{query}} {{target}} {{out_file}} {{temp_dir}} --search-type 2 -a --format-mode 4 --format-output {MMSEQ2_OUTPUT_FORMAT} -c 0.8 --cov-mode 2 --threads {{nthreads}} --mask 0"
 MMSEQS_GENES_TO_CONTIGS_HEADER_CONVERSION = {'target': 'contig',
                                              'query': 'gene',

@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 def save_paths_to_fasta_io_paths_approach(paths, paths_fasta_name, records_dict, node_to_find=None,
                                           max_context_len=math.inf, min_context_len=0, in_or_out=None,
-                                          covered_by_gene=0, gene_and_node=''):
+                                          covered_by_gene=0, gene_and_node='', match_score=None):
     in_paths_lengths = {}
     node_locations = {}
 
@@ -32,7 +32,8 @@ def save_paths_to_fasta_io_paths_approach(paths, paths_fasta_name, records_dict,
                     if in_or_out == 'out':
                         seq = seq[int(covered_by_gene):]
                 in_paths_lengths['_'.join(path)] = len(seq)
-                f.write(f">{gene_and_node}_path_{'_'.join(path)}\n" if gene_and_node else f">{'_'.join(path)}\n")
+                match_score_str = f"_match_{match_score:.4f}" if match_score is not None else ""
+                f.write(f">{gene_and_node}{match_score_str}_path_{'_'.join(path)}\n" if gene_and_node else f">{'_'.join(path)}\n")
                 f.write(f'{seq}\n')
 
     return in_paths_lengths, node_locations
@@ -62,7 +63,6 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                       in_paths_fasta, out_paths_fasta):
     gene_and_nodes_path_set = set()
     gene_lengths = {}
-    gene_match_scores = {}
     # delete fasta file if it exists
     for fasta_file in [in_paths_fasta, out_paths_fasta]:
         if os.path.exists(fasta_file):
@@ -95,7 +95,8 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                                         min_context_len=min_context_len,
                                                                         in_or_out='in',
                                                                         covered_by_gene=in_covered_by_gene,
-                                                                        gene_and_node=gene_and_nodes_path_str)
+                                                                        gene_and_node=gene_and_nodes_path_str,
+                                                                        match_score=gene_contigs_match.score)
 
             # out paths
             out_paths_initial_stack = [(last_node, [(last_node, assembly_graph.nodes[last_node][
@@ -111,10 +112,10 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                                          min_context_len=min_context_len,
                                                                          in_or_out='out',
                                                                          covered_by_gene=out_covered_by_gene,
-                                                                         gene_and_node=gene_and_nodes_path_str)
+                                                                         gene_and_node=gene_and_nodes_path_str,
+                                                                         match_score=gene_contigs_match.score)
             gene_lengths[gene_name] = gene_length
-            gene_match_scores[gene_name] = gene_contigs_match.score
             if len(in_paths) == 0 or len(out_paths) == 0:
                 log.info(f'{gene_contigs_match} in {len(in_paths)} out {len(out_paths)}')
 
-    return gene_lengths, gene_match_scores
+    return gene_lengths

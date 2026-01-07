@@ -192,7 +192,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     # get in and out paths
     in_paths_fasta = c.IN_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
     out_paths_fasta = c.OUT_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
-    gene_lengths, gene_match_scores = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, assembly_graph_nodes,
+    gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, assembly_graph_nodes,
                                                               genes_with_location_in_graph, depth_limit,
                                                               min_context_len, max_context_len, in_paths_fasta,
                                                               out_paths_fasta)
@@ -206,7 +206,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     # merge and get results
     context_level_results = vcc.process_in_and_out_paths_to_results(in_contexts_to_ref_genomes,
                                                                     out_contexts_to_ref_genomes,
-                                                                    gene_lengths, gene_match_scores, paths_pident_filtering_th, 0,
+                                                                    gene_lengths, paths_pident_filtering_th, 0,
                                                                     max_gap_ratio, reference_genomes_metadata)
     if not context_level_results:
         log.info(
