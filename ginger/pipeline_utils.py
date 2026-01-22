@@ -11,9 +11,9 @@ log = logging.getLogger(__name__)
 
 # TODO - write a function here that runs an external tool and present the output using tqdm (I coppied and pasted it multiple times already)
 def step_timing(func):
-    def wrapper_lot_and_time(*args):
+    def wrapper_lot_and_time(*args, **kwargs):
         start = timeit.default_timer()
-        func_return_vals = func(*args)
+        func_return_vals = func(*args, **kwargs)
         stop = timeit.default_timer()
         log.info(f'{RUNTIME_PRINTS_PATTERN} {func} took {(stop - start) / 60} minutes {RUNTIME_PRINTS_PATTERN}')
         return func_return_vals

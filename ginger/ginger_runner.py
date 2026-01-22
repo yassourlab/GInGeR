@@ -158,7 +158,8 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     references_used_path = f'{out_dir}/references_used.csv'
     if sample_specific_references is None:
         sample_specific_references = f'{out_dir}/merged_filtered_ref_db.fasta'
-        if kraken_output_path is None:
+        # if the file was not specified or the specified file does not exist
+        if kraken_output_path is None or not os.path.exists(kraken_output_path):
             kraken_output_path = f'{out_dir}/kraken_output_file.tsv'
             kraken_report_path = f'{out_dir}/kraken_report_file.tsv'
             bracken_output = f'{out_dir}/bracken_output_file.tsv'

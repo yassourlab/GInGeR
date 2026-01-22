@@ -42,7 +42,7 @@ def read_and_filter_path_matches_per_gene(match_object_constructor: callable, al
     genes_to_matches = defaultdict(list)
     for match in parsed_as_iterator:
         # print(match)
-        genes_to_matches[(match.gene, match.ref_genome)].append(match)
+        genes_to_matches[(match.gene.split('$')[0], match.ref_genome)].append(match)
     log.info(
         f"found {sum(len(v) for v in genes_to_matches.values())} matches for {len(genes_to_matches)} gene and ref genomes pairs")
     return genes_to_matches
@@ -57,7 +57,7 @@ def get_all_in_out_matches(in_paths_by_gene_and_ref_genome, out_paths_by_gene_an
         out_paths = out_paths_by_gene_and_ref_genome.get(gene_ref_genome, [])
         for i in in_paths:
             for o in out_paths:
-                in_out_match = get_in_out_match(i, o, genes_lengths[i.gene], minimal_gap_ratio, maximal_gap_ratio)
+                in_out_match = get_in_out_match(i, o, genes_lengths[i.gene.split('$')[0]], minimal_gap_ratio, maximal_gap_ratio)
                 if in_out_match is not None:
                     matches_for_gene_ref_genome_pair.append(in_out_match)
         if matches_for_gene_ref_genome_pair:
