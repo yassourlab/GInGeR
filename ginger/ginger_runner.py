@@ -198,17 +198,6 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                               min_context_len, max_context_len, in_paths_fasta,
                                                               out_paths_fasta)
 
-    def extract_genes_lengths(genes_path):
-        gene_lengths = {}
-        with open(genes_path) as f:
-            fasta_sequences = SeqIO.parse(f, 'fasta')
-            for s in fasta_sequences:
-                gene_length = len(s.seq) * 3
-                gene_name = s.id
-
-                gene_lengths[gene_name] = gene_length
-        return gene_lengths
-    gene_lengths = extract_genes_lengths(genes_path)
     # map them to the reference
     in_contexts_to_ref_genomes = c.IN_MAPPING_TO_REF_GENOMES_PATH_TEMPLATE.format(temp_folder=out_dir)
     out_contexts_to_ref_genomes = c.OUT_MAPPING_TO_REF_GENOMES_PATH_TEMPLATE.format(temp_folder=out_dir)
