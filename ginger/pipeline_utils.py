@@ -129,41 +129,7 @@ def intervals_overlap(start_a, end_a, start_b, end_b):
     return start_a <= end_b and start_b <= end_a
 
 
-def interval_iou(start1, end1, start2, end2):
-    try:
-        # TODO can probably calculate intersection in a shorter way (see tal's snippet at WW) +  move it elsewhere
-        if start1 <= start2 <= end1 <= end2:
 
-            intersection = end1 - start2
-            union = end2 - start1
-        elif start2 <= start1 <= end2 <= end1:
-
-            intersection = end2 - start1
-            union = end1 - start1
-
-        elif start1 <= start2 <= end2 <= end1:
-
-            intersection = end2 - start2
-            union = end1 - start1
-        elif start2 <= start1 <= end1 <= end2:
-
-            intersection = end1 - start1
-            union = end2 - start2
-        else:
-            return 0
-        output = intersection / union
-    except Exception as e:
-        log.error(f'{e} - start1: {start1}, end1: {end1}, start2: {start2}, end2: {end2}')
-        raise e
-    return output
-
-
-def is_similar_to_representatives(representatives, gene_paths_to_ref_genome_match, iou_th):
-    for rep in representatives:
-        if interval_iou(gene_paths_to_ref_genome_match.start, gene_paths_to_ref_genome_match.end, rep.start,
-                        rep.end) > iou_th:
-            return True
-    return False
 
 
 @step_timing

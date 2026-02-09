@@ -11,7 +11,6 @@ import os
 
 log = logging.getLogger(__name__)
 
-
 def get_node_without_adj(long_node_name):
     split_by_dots = long_node_name.split(':')[0]
     split_by_comma_dot = long_node_name.split(';')[0]
@@ -107,7 +106,7 @@ def add_node_list_to_genes_to_contigs(genes_to_contigs: Iterator[mc.GeneContigMa
                                       nodes_sequences_dict: Dict[str, SeqIO.SeqRecord],
                                       nodes_to_contigs_df: pd.DataFrame):
     matches_with_nodes_list_and_start_location = []
-
+    
     for gene_contig_match in genes_to_contigs:
         contig_path_in_graph = parsed_paths_without_gaps.get(gene_contig_match.contig, None)
         if contig_path_in_graph:
@@ -138,19 +137,22 @@ def get_nodes_dict_from_fastg_file(assembly_graph_path: str) -> Dict[str, SeqIO.
 
 @pu.step_timing
 def find_genes_in_contigs(genes_path: str, contigs_path: str, n_minimap_threads: int,
-                          pident_filtering_th: float, genes_to_contigs_path: str) -> Iterator[mc.GeneContigMatch]:
+                          pident_filtering_th: float, genes_to_contigs_path: str,
+                          return_all_gene_matches: bool = False) -> Iterator[mc.GeneContigMatch]:
     if not os.path.exists(genes_to_contigs_path) or not os.path.isfile(genes_to_contigs_path):
         log.info(f'running mmseqs2 to find genes in contigs')
         genes_to_contigs_path = sau.map_genes_to_contigs(genes_path, contigs_path, genes_to_contigs_path,
                                                          nthreads=n_minimap_threads)
     genes_to_contigs = sau.read_and_filter_mmseq2_matches(mc.GeneContigMatch, genes_to_contigs_path,
-                                                          pident_filtering_th)
+                                                          pident_filtering_th, nms=not return_all_gene_matches)
+    
     return genes_to_contigs
+
 
 
 @pu.step_timing
 def locate_genes_in_graph(assembly_dir: str, gene_pident_filtering_th: float, genes_path: str, n_threads: int,
-                          temp_folder: str):  # -> Tuple[networkx.DiGraph,??? ,Dict[str, SeqIO.SeqRecord]]
+                          temp_folder: str, return_all_gene_matches: bool = False):  # -> Tuple[networkx.DiGraph,??? ,Dict[str, SeqIO.SeqRecord]]
     contigs_path = c.CONTIGS_PATH_TEMPLATE.format(assembly_dir=assembly_dir)
     assembly_graph_path = c.ASSEMBLY_GRAPH_PATH_TEMPLATE.format(assembly_dir=assembly_dir)
     genes_to_contigs_path = c.GENES_TO_CONTIGS_TEMPLATE.format(temp_files_path=temp_folder)
@@ -158,9 +160,8 @@ def locate_genes_in_graph(assembly_dir: str, gene_pident_filtering_th: float, ge
 
     # find genes in contigs
     genes_to_contigs = find_genes_in_contigs(genes_path, contigs_path, n_threads,
-                                             gene_pident_filtering_th, genes_to_contigs_path)
-
-    log.info(f'found {len(set([m.gene for m in genes_to_contigs]))} genes in the assembly graph')
+                                             gene_pident_filtering_th, genes_to_contigs_path,
+                                             return_all_gene_matches)
     if not genes_to_contigs:
         return None, None, None
 

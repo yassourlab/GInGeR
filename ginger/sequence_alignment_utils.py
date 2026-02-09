@@ -5,8 +5,11 @@ import datetime as dt
 import logging
 from tqdm import tqdm
 from subprocess import run, Popen, PIPE
+import itertools
 
 log = logging.getLogger(__name__)
+
+IOU_TH = 0.3
 
 JUST_PRINT_DEFAULT = False
 # MMSEQS:
@@ -110,12 +113,6 @@ def map_genes_to_contigs(genes_path, contigs_path, genes_to_contigs_path,
                          just_print=JUST_PRINT_DEFAULT, nthreads=N_THREADS_DEFAULT):
     return _run_mmseqs2(genes_path, contigs_path, genes_to_contigs_path, nthreads)
 
-
-def map_genes_to_reference(args_path, reference_path, genes_to_reference_path,
-                           just_print=JUST_PRINT_DEFAULT, nthreads=N_THREADS_DEFAULT):
-    return _run_mmseqs2(args_path, reference_path, genes_to_reference_path, nthreads)
-
-
 @pu.step_timing
 def _run_mmseqs2(query, target, out_file, nthreads=1):
     # temp dir should be under the dir of the out file
@@ -153,10 +150,48 @@ def _run_minimap2_paf(query, target, out_file, preset='asm20', just_print=JUST_P
     #     else:
     #         logging.info(f'minimap2 run successfully. stdout: {minimap_process.stdout}')
     #     return out_file
+def interval_iou(start1, end1, start2, end2):
+    try:
+        intersection = max(0, min(end1, end2) - max(start1, start2))
+        if intersection == 0:
+            return 0
+        union = max(end1, end2) - min(start1, start2)
+        output = intersection / union
+    except Exception as e:
+        log.error(f'{e} - start1: {start1}, end1: {end1}, start2: {start2}, end2: {end2}')
+        raise e
+    return output
 
+
+def is_similar_to_representatives(representatives, gene_paths_to_ref_genome_match, iou_th):
+    for rep in representatives:
+        if interval_iou(gene_paths_to_ref_genome_match.start, gene_paths_to_ref_genome_match.end, rep.start,
+                        rep.end) > iou_th:
+            return True
+    return False
+
+def non_max_suppresion(matches_dict):
+    nms_dict = {}
+    for bug, matches in matches_dict.items():
+        nmsd_list = non_max_suppression_single_class(matches)
+        if nmsd_list:
+            nms_dict[bug] = nmsd_list
+    return nms_dict
+
+
+def non_max_suppression_single_class(matches, sorting_func=lambda x: (x.score, x.end - x.start, x.start, x.gene),
+                                     iou_th=IOU_TH,
+                                     score_th=0):
+    # to maintain consistencythe soring function should put the best matches first, and if there are matches with the same score, sort them by their start position, and if they are the same, sort them by the gene name.
+    sorted_matches = sorted(matches, key=sorting_func, reverse=True)
+    representative_matches = []
+    for match in sorted_matches:
+        if not pu.is_similar_to_representatives(representative_matches, match, iou_th):
+            representative_matches.append(match)
+    return representative_matches
 
 @pu.step_timing
-def read_and_filter_mmseq2_matches(match_object_constructor: callable, alignment_path: str, pident_filtering_th: float):
+def read_and_filter_mmseq2_matches(match_object_constructor: callable, alignment_path: str, pident_filtering_th: float, nms=True):
     if os.path.getsize(alignment_path) == 0:
         return None
     with open(alignment_path, 'r') as f:
@@ -166,11 +201,30 @@ def read_and_filter_mmseq2_matches(match_object_constructor: callable, alignment
             mmseq2_results = list(mmseq2_results)
             log.debug(
                 f'Found {len(mmseq2_results)} alignments for {len(set([match.gene for match in mmseq2_results]))} genes in {alignment_path}')
-        filtered_mmseq2_results = [paf_line for paf_line in mmseq2_results if paf_line.score > pident_filtering_th]
+        
+        # filter and group by contig
+        filtered_mmseqs_by_contig_dict = {}
+        for match in mmseq2_results:
+            if match.score > pident_filtering_th:
+                if match.contig in filtered_mmseqs_by_contig_dict:
+                    filtered_mmseqs_by_contig_dict[match.contig].append(match)
+                else:
+                    filtered_mmseqs_by_contig_dict[match.contig] = [match]
+        
         if log.level == logging.DEBUG:
             log.debug(
-                f'Retained {len(filtered_mmseq2_results)} alignments for {len(set([match.gene for match in filtered_mmseq2_results]))} genes after filtering')
-    return filtered_mmseq2_results
+                f'Retained {len([matches for matches in filtered_mmseqs_by_contig_dict.values()])} alignments for species and {len(set([match.gene for matches in filtered_mmseqs_by_contig_dict.values() for match in matches]))} genes after filtering')
+
+        if nms:
+            filtered_mmseqs_by_contig_dict = non_max_suppresion(filtered_mmseqs_by_contig_dict)
+            
+            if log.level == logging.DEBUG:
+                log.debug(
+                    f'Retained {len([matches for matches in filtered_mmseqs_by_contig_dict.values()])} alignments for species and {len(set([match.gene for matches in filtered_mmseqs_by_contig_dict.values() for match in matches]))} genes after taking to gene per lofaction')
+        
+        # Flatten dictionary values into a single list
+        filtered_matches_list = list(itertools.chain.from_iterable(filtered_mmseqs_by_contig_dict.values()))
+    return filtered_matches_list
 
 @pu.step_timing
 def read_and_filter_minimap_matches(match_object_constructor: callable, alignment_path: str,
