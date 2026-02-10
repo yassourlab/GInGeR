@@ -186,7 +186,7 @@ def non_max_suppression_single_class(matches, sorting_func=lambda x: (x.score, x
     sorted_matches = sorted(matches, key=sorting_func, reverse=True)
     representative_matches = []
     for match in sorted_matches:
-        if not pu.is_similar_to_representatives(representative_matches, match, iou_th):
+        if not is_similar_to_representatives(representative_matches, match, iou_th):
             representative_matches.append(match)
     return representative_matches
 
@@ -196,7 +196,7 @@ def read_and_filter_mmseq2_matches(match_object_constructor: callable, alignment
         return None
     with open(alignment_path, 'r') as f:
         next(f)  # skip header
-        mmseq2_results = (match_object_constructor(line) for line in f)
+        mmseq2_results = [match_object_constructor(line) for line in f]
         if log.level == logging.DEBUG:  # keeping the generator will be more memory efficient, so convert this to list only if needed for debugging
             mmseq2_results = list(mmseq2_results)
             log.debug(

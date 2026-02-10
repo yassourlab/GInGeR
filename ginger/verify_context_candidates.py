@@ -72,7 +72,7 @@ def keep_best_matches(matches:List, sorting_func=lambda x: (-x.score, -(x.end - 
     sorted_matches = sorted(matches, key=sorting_func)
     representative_matches = []
     for match in sorted_matches:
-        if not pu.is_similar_to_representatives(representative_matches, match, iou_th):
+        if not sau.is_similar_to_representatives(representative_matches, match, iou_th):
             representative_matches.append(match)
     return representative_matches
 
