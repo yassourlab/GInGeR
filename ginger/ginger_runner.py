@@ -122,10 +122,12 @@ def cleanup_intermediate_files(out_dir, keep_options):
               help='A flag that indicates whether or not to skip the assembly step. If the flag is set to True, the argument --assembly--dir must be supplied and direct to the results of a SPAdes run')
 @click.option('--return-all-gene-matches', is_flag=True, default=False,
               help='By default, GInGeR applies non-max-suppression (NMS) to the alignment of genes of interest to the assembly graph, keeping only top scoring matches and removing redundant overlapping matches. If this flag is set to True, all gene matches will be returned without applying NMS.')
+@click.option('--nms-iou-threshold', type=float, default=0.8,
+              help='The IoU (Intersection over Union) threshold used for non-max-suppression when filtering overlapping gene matches. Gene matches with IoU > this threshold are considered overlapping. Only used when --return-all-gene-matches is False. Default: 0.8')
 def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                    kraken_db, species_inclusion_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
                    max_gap_ratio, max_context_len, min_context_len, gene_pident_filtering_th,
-                   paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches):
+                   paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold):
     """GInGeR - A tool for analyzing the genomic contexts of genes in metagenomic samples.
 
     \b
@@ -144,13 +146,13 @@ t
     return ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                            kraken_db, species_inclusion_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path,
                            depth_limit, max_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
-                           paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches)
+                           paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold)
 
 
 def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                     kraken_db, species_inclusion_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
                     max_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
-                    paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches):
+                    paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold):
     # Log the command that was run
     log.info(f"Running GInGeR with command: {' '.join(sys.argv)}")
     
@@ -187,7 +189,8 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                                                                   genes_path,
                                                                                                   threads,
                                                                                                   out_dir,
-                                                                                                  return_all_gene_matches)
+                                                                                                  return_all_gene_matches,
+                                                                                                  nms_iou_threshold)
     if not genes_with_location_in_graph:
         log.info(
             'No genes of interest detected in assembly. GInGeR run stopped - no results generated')

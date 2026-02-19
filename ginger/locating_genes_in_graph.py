@@ -138,13 +138,14 @@ def get_nodes_dict_from_fastg_file(assembly_graph_path: str) -> Dict[str, SeqIO.
 @pu.step_timing
 def find_genes_in_contigs(genes_path: str, contigs_path: str, n_minimap_threads: int,
                           pident_filtering_th: float, genes_to_contigs_path: str,
-                          return_all_gene_matches: bool = False) -> Iterator[mc.GeneContigMatch]:
+                          return_all_gene_matches: bool = False, nms_iou_threshold: float = 0.8) -> Iterator[mc.GeneContigMatch]:
     if not os.path.exists(genes_to_contigs_path) or not os.path.isfile(genes_to_contigs_path):
         log.info(f'running mmseqs2 to find genes in contigs')
         genes_to_contigs_path = sau.map_genes_to_contigs(genes_path, contigs_path, genes_to_contigs_path,
                                                          nthreads=n_minimap_threads)
     genes_to_contigs = sau.read_and_filter_mmseq2_matches(mc.GeneContigMatch, genes_to_contigs_path,
-                                                          pident_filtering_th, nms=not return_all_gene_matches)
+                                                          pident_filtering_th, nms=not return_all_gene_matches,
+                                                          nms_iou_threshold=nms_iou_threshold)
     
     return genes_to_contigs
 
@@ -152,7 +153,7 @@ def find_genes_in_contigs(genes_path: str, contigs_path: str, n_minimap_threads:
 
 @pu.step_timing
 def locate_genes_in_graph(assembly_dir: str, gene_pident_filtering_th: float, genes_path: str, n_threads: int,
-                          temp_folder: str, return_all_gene_matches: bool = False):  # -> Tuple[networkx.DiGraph,??? ,Dict[str, SeqIO.SeqRecord]]
+                          temp_folder: str, return_all_gene_matches: bool = False, nms_iou_threshold: float = 0.8):  # -> Tuple[networkx.DiGraph,??? ,Dict[str, SeqIO.SeqRecord]]
     contigs_path = c.CONTIGS_PATH_TEMPLATE.format(assembly_dir=assembly_dir)
     assembly_graph_path = c.ASSEMBLY_GRAPH_PATH_TEMPLATE.format(assembly_dir=assembly_dir)
     genes_to_contigs_path = c.GENES_TO_CONTIGS_TEMPLATE.format(temp_files_path=temp_folder)
@@ -161,7 +162,7 @@ def locate_genes_in_graph(assembly_dir: str, gene_pident_filtering_th: float, ge
     # find genes in contigs
     genes_to_contigs = find_genes_in_contigs(genes_path, contigs_path, n_threads,
                                              gene_pident_filtering_th, genes_to_contigs_path,
-                                             return_all_gene_matches)
+                                             return_all_gene_matches, nms_iou_threshold)
     if not genes_to_contigs:
         return None, None, None
 

@@ -51,7 +51,7 @@ class GingerRunnerTest(unittest.TestCase):
     def test_ginger_e2e_func(self):
         ginger_e2e_func(None, self.short_reads_1, self.short_reads_2, self.out_dir, None, self.threads, None,
                         None, self.read_ratio_th, self.metadata_path, 'references_dir', self.merged_filtered_fasta,
-                        self.genes_path, 12, 1.5, 0, 2500, 0.9, 0.9, ['all'], False, self.max_species_representatives, False)
+                        self.genes_path, 12, 1.5, 0, 2500, 0.9, 0.9, ['all'], False, self.max_species_representatives, False, 0.8)
 
         self.assertTrue(os.path.exists(f'{self.out_dir}/context_level_matches.csv'))
         self.assertTrue(os.path.exists(f'{self.out_dir}/species_level_matches.csv'))

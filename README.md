@@ -74,6 +74,15 @@ locating a gene in the graph. Default is 0.9.
 `--paths-pident-filtering-th` - A float in the range [0,1] specifying the minimal % of matched base pairs required for
 matching a context candidate to a reference sequence. Default is 0.9.
 
+`--return-all-gene-matches` - A flag indicating whether to return all gene matches without applying non-max-suppression (NMS). 
+By default (when this flag is not set), GInGeR applies NMS to filter overlapping gene matches, keeping only the top-scoring 
+matches. When this flag is set, all gene matches above the `--gene-pident-filtering-th` threshold are returned.
+
+`--nms-iou-threshold` - A float in the range [0,1] specifying the IoU (Intersection over Union) threshold for 
+non-max-suppression when filtering overlapping gene matches. Gene matches with IoU > this threshold are considered 
+overlapping, and only the highest-scoring match is kept. Only used when `--return-all-gene-matches` is not set. 
+Default is 0.8.
+
 ### Advanced options (skipping steps or customizing reference database):
 
 `--skip-assembly` - A flag that indicates whether to skip the assembly step. If the flag is set, the

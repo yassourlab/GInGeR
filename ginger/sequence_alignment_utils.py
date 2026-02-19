@@ -170,10 +170,10 @@ def is_similar_to_representatives(representatives, gene_paths_to_ref_genome_matc
             return True
     return False
 
-def non_max_suppresion(matches_dict):
+def non_max_suppresion(matches_dict, iou_th=IOU_TH):
     nms_dict = {}
     for bug, matches in matches_dict.items():
-        nmsd_list = non_max_suppression_single_class(matches)
+        nmsd_list = non_max_suppression_single_class(matches, iou_th=iou_th)
         if nmsd_list:
             nms_dict[bug] = nmsd_list
     return nms_dict
@@ -191,7 +191,7 @@ def non_max_suppression_single_class(matches, sorting_func=lambda x: (x.score, x
     return representative_matches
 
 @pu.step_timing
-def read_and_filter_mmseq2_matches(match_object_constructor: callable, alignment_path: str, pident_filtering_th: float, nms=True):
+def read_and_filter_mmseq2_matches(match_object_constructor: callable, alignment_path: str, pident_filtering_th: float, nms=True, nms_iou_threshold=IOU_TH):
     if os.path.getsize(alignment_path) == 0:
         return None
     with open(alignment_path, 'r') as f:
@@ -216,7 +216,7 @@ def read_and_filter_mmseq2_matches(match_object_constructor: callable, alignment
                 f'Retained {len([matches for matches in filtered_mmseqs_by_contig_dict.values()])} alignments for species and {len(set([match.gene for matches in filtered_mmseqs_by_contig_dict.values() for match in matches]))} genes after filtering')
 
         if nms:
-            filtered_mmseqs_by_contig_dict = non_max_suppresion(filtered_mmseqs_by_contig_dict)
+            filtered_mmseqs_by_contig_dict = non_max_suppresion(filtered_mmseqs_by_contig_dict, iou_th=nms_iou_threshold)
             
             if log.level == logging.DEBUG:
                 log.debug(
