@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import patch
-from distutils.dir_util import copy_tree
-from shutil import rmtree
+from shutil import rmtree, copytree
 from click.testing import CliRunner
 from ginger.ginger_runner import ginger_e2e_func, run_ginger_e2e
 import os
@@ -22,7 +21,7 @@ with '../ginger/UHGG-metadata.tsv'
 
 
 def run_meta_or_hybrid_spades_mock(short_reads_1, short_reads_2, long_reads, output_folder, threads):
-    copy_tree(f'{TEST_FILES}/SPAdes', output_folder)
+    copytree(f'{TEST_FILES}/SPAdes', output_folder, dirs_exist_ok=True)
     return output_folder
 
 
@@ -51,8 +50,8 @@ class GingerRunnerTest(unittest.TestCase):
     @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
     def test_ginger_e2e_func(self):
         ginger_e2e_func(None, self.short_reads_1, self.short_reads_2, self.out_dir, None, self.threads, None,
-                        self.read_ratio_th, self.metadata_path, 'references_dir', self.merged_filtered_fasta,
-                        self.genes_path, 12, 1.5, 0, 2500, 0.9, 0.9, False, self.max_species_representatives)
+                        None, self.read_ratio_th, self.metadata_path, 'references_dir', self.merged_filtered_fasta,
+                        self.genes_path, 12, 1.5, 0, 2500, 0.9, 0.9, ['all'], False, self.max_species_representatives, False, 0.8)
 
         self.assertTrue(os.path.exists(f'{self.out_dir}/context_level_matches.csv'))
         self.assertTrue(os.path.exists(f'{self.out_dir}/species_level_matches.csv'))
@@ -60,11 +59,12 @@ class GingerRunnerTest(unittest.TestCase):
         with open(f'{self.out_dir}/context_level_matches.csv', 'r') as test_out, open(
                 f'{TEST_FILES}/context_level_matches.csv', 'r') as gt:
             lines_out = test_out.readlines()
+            print(lines_out)
             lines_gt = gt.readlines()
-            self.assertEquals(len(lines_out), len(lines_gt))
-            self.assertEquals(len(lines_out[1].split('/')), len(lines_gt[1].split('/')))
+            self.assertEqual(len(lines_out), len(lines_gt))
+            self.assertEqual(len(lines_out[1].split('/')), len(lines_gt[1].split('/')))
             for field, field_gt in zip(lines_out[1].split(','), lines_gt[1].split(',')):
-                self.assertEquals(field, field_gt)
+                self.assertEqual(field, field_gt)
 
             self.assertListEqual(lines_out, lines_gt)
 
@@ -80,7 +80,7 @@ class GingerRunnerTest(unittest.TestCase):
     #                     None, self.read_ratio_th, f'{TEST_FILES}/e_coli_metadata.tsv', 'references_dir',
     #                     None, self.genes_path, 12, 1.5, 0,
     #                     2500, 0.9, 0.9, False, 3)
-    #
+    
     #     self.assertTrue(os.path.exists(f'{self.out_dir}/context_level_matches.csv'))
     #     self.assertTrue(os.path.exists(f'{self.out_dir}/species_level_matches.csv'))
 
@@ -89,7 +89,7 @@ class GingerRunnerTest(unittest.TestCase):
         runner = CliRunner()
 
         result = runner.invoke(run_ginger_e2e,
-                               f'{self.short_reads_1} {self.short_reads_1} {self.genes_path} {self.out_dir} --merged-filtered-fasta {self.merged_filtered_fasta} --reads-ratio-th {self.read_ratio_th} --metadata-path {self.metadata_path} --max-species-representatives 1'.split(
+                               f'{self.short_reads_1} {self.short_reads_1} {self.genes_path} {self.out_dir} --sample-specific-references {self.merged_filtered_fasta} --species-inclusion-threshold {self.read_ratio_th} --reference-genomes-metadata {self.metadata_path} --max-species-representatives 1'.split(
                                    ' '))
         self.assertEqual(result.exit_code, 0, str(result.exception))
         self.assertTrue(os.path.exists(f'{self.out_dir}/context_level_matches.csv'))

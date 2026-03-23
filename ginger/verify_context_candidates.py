@@ -30,7 +30,7 @@ def get_in_out_match(i, o, gene_length, minimal_gap_ratio, maximal_gap_ratio):
     gap_ratio = start_end_diff / gene_length
     score = (i.score * i.path_length + o.score * o.path_length) / (i.path_length + o.path_length)
     if minimal_gap_ratio < gap_ratio < maximal_gap_ratio:
-        return mc.InOutPathsMatch(i, o, start, end, gap_ratio, score, gene_length)
+        return mc.InOutPathsMatch(i, o, start, end, gap_ratio, score, gene_length, gene_match_score=i.gene_match_score, in_context_score=i.score, out_context_score=o.score)
     return None
 
 
@@ -42,7 +42,7 @@ def read_and_filter_path_matches_per_gene(match_object_constructor: callable, al
     genes_to_matches = defaultdict(list)
     for match in parsed_as_iterator:
         # print(match)
-        genes_to_matches[(match.gene, match.ref_genome)].append(match)
+        genes_to_matches[(match.gene.split('$')[0], match.ref_genome)].append(match)
     log.info(
         f"found {sum(len(v) for v in genes_to_matches.values())} matches for {len(genes_to_matches)} gene and ref genomes pairs")
     return genes_to_matches
@@ -57,7 +57,7 @@ def get_all_in_out_matches(in_paths_by_gene_and_ref_genome, out_paths_by_gene_an
         out_paths = out_paths_by_gene_and_ref_genome.get(gene_ref_genome, [])
         for i in in_paths:
             for o in out_paths:
-                in_out_match = get_in_out_match(i, o, genes_lengths[i.gene], minimal_gap_ratio,maximal_gap_ratio)
+                in_out_match = get_in_out_match(i, o, genes_lengths[i.gene.split('$')[0]], minimal_gap_ratio, maximal_gap_ratio)
                 if in_out_match is not None:
                     matches_for_gene_ref_genome_pair.append(in_out_match)
         if matches_for_gene_ref_genome_pair:
@@ -72,7 +72,7 @@ def keep_best_matches(matches:List, sorting_func=lambda x: (-x.score, -(x.end - 
     sorted_matches = sorted(matches, key=sorting_func)
     representative_matches = []
     for match in sorted_matches:
-        if not pu.is_similar_to_representatives(representative_matches, match, iou_th):
+        if not sau.is_similar_to_representatives(representative_matches, match, iou_th):
             representative_matches.append(match)
     return representative_matches
 

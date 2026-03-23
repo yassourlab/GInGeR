@@ -4,11 +4,21 @@ import re
 class PathRefGenomeMatch:
     def __init__(self, paf_line: PafRecord, contigs_to_species: dict):
         query_name_splt = paf_line.qname.split('_path_')
-        gene_and_nodes_list = query_name_splt[0].split('_nodes_')
+        gene_nodes_match = query_name_splt[0].split('_nodes_')
         self.query_name = paf_line.qname
         self.path = query_name_splt[1] if len(query_name_splt) > 1 else None
-        self.gene = gene_and_nodes_list[0]
-        self.nodes_list = gene_and_nodes_list[1] if len(gene_and_nodes_list) > 1 else None
+        self.gene = gene_nodes_match[0]
+        
+        # Parse nodes_list and match_score from gene_nodes_match[1]
+        # Format: {nodes}_match_{score} or just {nodes}
+        if len(gene_nodes_match) > 1:
+            nodes_and_match = gene_nodes_match[1].split('_match_')
+            self.nodes_list = nodes_and_match[0]
+            self.gene_match_score = float(nodes_and_match[1]) if len(nodes_and_match) > 1 else None
+        else:
+            self.nodes_list = None
+            self.gene_match_score = None
+        
         self.path_length = paf_line.qlen
         self.path_start = paf_line.qstart
         self.path_end = paf_line.qend
@@ -50,7 +60,7 @@ class GeneContigMatch:
 
 
 class InOutPathsMatch:
-    def __init__(self, in_path, out_path, start, end, gap_ratio, score, gene_length, gene=None, ref_genome=None):
+    def __init__(self, in_path, out_path, start, end, gap_ratio, score, gene_length, gene=None, ref_genome=None, gene_match_score=None, in_context_score=None, out_context_score=None):
         self.in_path = in_path
         self.out_path = out_path
         if gene is None:
@@ -68,9 +78,13 @@ class InOutPathsMatch:
         self.gap_ratio = gap_ratio
         self.score = score
         self.gene_length = gene_length
+        self.gene_match_score = gene_match_score
+        self.in_context_score = in_context_score
+        self.out_context_score = out_context_score
 
     def to_dict(self):
-        out_dict = dict(gene=self.gene, ref_genome=self.ref_genome, start=self.start, end=self.end, score=self.score)
+        out_dict = dict(gene=self.gene, ref_genome=self.ref_genome, start=self.start, end=self.end, score=self.score,
+                       gene_match_score=self.gene_match_score, in_context_score=self.in_context_score, out_context_score=self.out_context_score)
         if self.in_path:
             out_dict.update(dict(in_path_name=self.in_path.query_name, out_path_name=self.out_path.query_name,
                                  in_path_score=self.in_path.score, out_path_score=self.out_path.score))

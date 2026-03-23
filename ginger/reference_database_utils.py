@@ -16,7 +16,6 @@ import os
 import re
 
 log = logging.getLogger(__name__)
-KRAKEN_DB = f'/sci/labs/morani/morani/icore-data/lab/Tools/kraken2_db/UnifiedHumanGastrointestinalGenome'
 KRAKEN_COMMAND = 'kraken2 --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {kraken_output} --report {kraken_report} --confidence 0.1 --use-names'  # --report {report}
 BRACKEN_COMMAND = 'bracken -d {kraken_db} -i {kraken_report} -o {bracken_output} -w {bracken_report} -r {read_len} -l S -t {min_reads_for_bracken}'
 KRAKEN_OUTPUT_HEADER = ['classified', 'read', 'genome', 'reads_len', 'mapping_str']
@@ -29,20 +28,20 @@ N_ATTEMPTS = 10
 SLEEP_SECS = 60
 
 
-def run_kraken(reads_1, reads_2, threads, output_path, report_path):
-    command = KRAKEN_COMMAND.format(kraken_db=KRAKEN_DB, reads_1=reads_1, reads_2=reads_2,
+def run_kraken(reads_1, reads_2, threads, output_path, report_path, kraken_db):
+    command = KRAKEN_COMMAND.format(kraken_db=kraken_db, reads_1=reads_1, reads_2=reads_2,
                                     threads=threads, kraken_output=output_path, kraken_report=report_path)
     # if kraken db does not exist, raise an error
-    if not os.path.exists(KRAKEN_DB):
-        raise Exception(f'Kraken database does not exist in {KRAKEN_DB}')
+    if not os.path.exists(kraken_db):
+        raise Exception(f'Kraken database does not exist in {kraken_db}')
 
-    log.info(f'running Kraken2: {command}')
+    log.info(f'Running Kraken2 - {command}')
     # command_output = run(command, shell=True, capture_output=True)
     with Popen(command.split(' '), stdout=PIPE) as kraken_process:
         output_lines = [output_line for output_line in tqdm(iter(lambda: kraken_process.stdout.readline(), b""))]
         if kraken_process.returncode:
             log.error(kraken_process.stderr)
-            raise Exception('GInGeR failed to run Kraken2. The pipeline will abort')
+            raise Exception('Kraken2 failed - GInGeR aborted')
 
 
 def get_max_read_len(fastq_file):
@@ -74,28 +73,28 @@ def get_kmer_length_options(kraken_db):
     return extracted_parts
 
 
-def run_bracken(reads_1, kraken_report, bracken_output, bracken_report):
+def run_bracken(reads_1, kraken_report, bracken_output, bracken_report, kraken_db):
     num_reads, max_read_len = get_max_read_len(reads_1)
-    kmer_length_options = get_kmer_length_options(KRAKEN_DB)
+    kmer_length_options = get_kmer_length_options(kraken_db)
     # get the kmer length that is closest to the read length
     read_len = min(kmer_length_options, key=lambda x: abs(int(x) - max_read_len))
-    command = BRACKEN_COMMAND.format(kraken_db=KRAKEN_DB, kraken_report=kraken_report, bracken_output=bracken_output,
+    command = BRACKEN_COMMAND.format(kraken_db=kraken_db, kraken_report=kraken_report, bracken_output=bracken_output,
                                      bracken_report=bracken_report, read_len=read_len,
                                      min_reads_for_bracken=int(num_reads * NUM_READS_RATIO))
-    log.info(f'running Bracken: {command}')
+    log.info(f'Running Bracken - {command}')
     # command_output = run(command, shell=True, capture_output=True)
     with Popen(command.split(' '), stdout=PIPE) as bracken_process:
         output_lines = [output_line for output_line in tqdm(iter(lambda: bracken_process.stdout.readline(), b""))]
         if bracken_process.returncode:
             log.error(bracken_process.stderr)
-            raise Exception('GInGeR failed to run bracken_process. The pipeline will abort')
+            raise Exception('Bracken failed - GInGeR aborted')
             log.info(bracken_process.stdout)
 
 
 def get_list_of_top_species_by_bracken(bracken_output_path, fraction_of_reads):
     bracken_out = pd.read_csv(bracken_output_path, sep='\t')
     top_species = bracken_out[bracken_out['fraction_total_reads'] > fraction_of_reads]['name'].tolist()
-    log.info(top_species)
+    log.info(f'Top species detected: {top_species}')
     return top_species
 
 
@@ -106,9 +105,9 @@ def download_and_write_content_to_file(references_folder, references_folder_cont
     # download file from FTP if needed
 
     if mgyg_file in references_folder_content:
-        log.debug(f'{mgyg_file} already in {references_folder}. File will not be downloaded')
+        log.debug(f'{mgyg_file} already exists in {references_folder} - skipping download')
     else:
-        log.debug(f'{mgyg_file} not in {references_folder}. File will be downloaded')
+        log.debug(f'{mgyg_file} not found in {references_folder} - downloading file')
         for attempt in range(N_ATTEMPTS):
             try:
                 data = urllib.request.urlopen(ftp_download_str, timeout=URLOPEN_TIMEOUT).read()
@@ -116,7 +115,7 @@ def download_and_write_content_to_file(references_folder, references_folder_cont
                     f.write(data)
                 break
             except Exception as e:
-                log.error(f'Failed to download {ftp_download_str} with error: {e} trying again in {SLEEP_SECS} seconds')
+                log.error(f'Failed to download {ftp_download_str}: {e}. Retrying in {SLEEP_SECS} seconds')
                 time.sleep(SLEEP_SECS)
                 if attempt == N_ATTEMPTS - 1:
                     raise e
@@ -139,6 +138,9 @@ def gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f):
 def generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path, references_folder,
                                                                merged_filtered_fasta, max_refs_per_species):
     metadata = pd.read_csv(metadata_path, sep='\t')
+    # Create column 'Quality' as Completeness - 5 * Contamination + ln(N50)
+    metadata['Quality'] = metadata.Completeness - 5 * metadata.Contamination + \
+                                      metadata.N50.apply(lambda x: 0 if x <= 0 else np.log(x))
     # metadata['species'] = metadata.Lineage.apply(lambda x: x.split('s__')[-1])
     references_folder_content = [x.split('/')[-1] for x in glob(references_folder + '/*')]
     selected_samples_dfs_list = []
@@ -163,9 +165,6 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
 
 def take_top_species_and_download_to_file(max_refs_per_species, single_species_table, references_folder,
                                           references_folder_content, merged_filtered_fasta_f):
-    # Create column 'Quality' as Completeness - 5 * Contamination + ln(N50)
-    single_species_table['Quality'] = single_species_table.Completeness - 5 * single_species_table.Contamination + \
-                                      single_species_table.N50.apply(lambda x: 0 if x <= 0 else np.log(x))
     # Take top X references according to Quality score, breaking ties alphabetically by Genome
     top_x_df = single_species_table.sort_values(['Quality', 'Genome']).tail(max_refs_per_species)
     top_x_df.apply(lambda x: download_and_write_content_to_file(references_folder,
@@ -178,13 +177,13 @@ def take_top_species_and_download_to_file(max_refs_per_species, single_species_t
 @pu.step_timing
 def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_path, kraken_report_path,
                                      bracken_output,
-                                     bracken_report, reads_ratio_th, metadata_path, references_folder,
-                                     merged_filtered_fasta, references_used_path, max_species_representatives):
+                                     bracken_report, species_inclusion_threshold, metadata_path, references_folder,
+                                     merged_filtered_fasta, references_used_path, max_species_representatives, kraken_db):
     pu.check_and_makedir(kraken_output_path)
     pu.check_and_make_dir_no_file_name(references_folder)
-    run_kraken(reads_1, reads_2, threads, kraken_output_path, kraken_report_path)
-    run_bracken(reads_1, kraken_report_path, bracken_output, bracken_report)
-    top_species = get_list_of_top_species_by_bracken(bracken_output, reads_ratio_th)
+    run_kraken(reads_1, reads_2, threads, kraken_output_path, kraken_report_path, kraken_db)
+    run_bracken(reads_1, kraken_report_path, bracken_output, bracken_report, kraken_db)
+    top_species = get_list_of_top_species_by_bracken(bracken_output, species_inclusion_threshold)
     selected_species_df = generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path,
                                                                                      references_folder,
                                                                                      merged_filtered_fasta,

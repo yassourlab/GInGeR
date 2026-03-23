@@ -11,9 +11,9 @@ log = logging.getLogger(__name__)
 
 # TODO - write a function here that runs an external tool and present the output using tqdm (I coppied and pasted it multiple times already)
 def step_timing(func):
-    def wrapper_lot_and_time(*args):
+    def wrapper_lot_and_time(*args, **kwargs):
         start = timeit.default_timer()
-        func_return_vals = func(*args)
+        func_return_vals = func(*args, **kwargs)
         stop = timeit.default_timer()
         log.info(f'{RUNTIME_PRINTS_PATTERN} {func} took {(stop - start) / 60} minutes {RUNTIME_PRINTS_PATTERN}')
         return func_return_vals
@@ -129,41 +129,7 @@ def intervals_overlap(start_a, end_a, start_b, end_b):
     return start_a <= end_b and start_b <= end_a
 
 
-def interval_iou(start1, end1, start2, end2):
-    try:
-        # TODO can probably calculate intersection in a shorter way (see tal's snippet at WW) +  move it elsewhere
-        if start1 <= start2 <= end1 <= end2:
 
-            intersection = end1 - start2
-            union = end2 - start1
-        elif start2 <= start1 <= end2 <= end1:
-
-            intersection = end2 - start1
-            union = end1 - start1
-
-        elif start1 <= start2 <= end2 <= end1:
-
-            intersection = end2 - start2
-            union = end1 - start1
-        elif start2 <= start1 <= end1 <= end2:
-
-            intersection = end1 - start1
-            union = end2 - start2
-        else:
-            return 0
-        output = intersection / union
-    except Exception as e:
-        log.error(f'{e} - start1: {start1}, end1: {end1}, start2: {start2}, end2: {end2}')
-        raise e
-    return output
-
-
-def is_similar_to_representatives(representatives, gene_paths_to_ref_genome_match, iou_th):
-    for rep in representatives:
-        if interval_iou(gene_paths_to_ref_genome_match.start, gene_paths_to_ref_genome_match.end, rep.start,
-                        rep.end) > iou_th:
-            return True
-    return False
 
 
 @step_timing
@@ -186,6 +152,9 @@ def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str)
             results_dict['gene_end'].append(match.end)
 
             results_dict['score'].append(match.score)
+            results_dict['gene_match_score'].append(match.gene_match_score)
+            results_dict['in_context_score'].append(match.in_context_score)
+            results_dict['out_context_score'].append(match.out_context_score)
 
     metadata_df = pd.read_csv(metadata_path, sep='\t')
     results_df = pd.DataFrame(results_dict)
