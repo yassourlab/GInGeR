@@ -138,6 +138,9 @@ def gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f):
 def generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path, references_folder,
                                                                merged_filtered_fasta, max_refs_per_species):
     metadata = pd.read_csv(metadata_path, sep='\t')
+    # Create column 'Quality' as Completeness - 5 * Contamination + ln(N50)
+    metadata['Quality'] = metadata.Completeness - 5 * metadata.Contamination + \
+                                      metadata.N50.apply(lambda x: 0 if x <= 0 else np.log(x))
     # metadata['species'] = metadata.Lineage.apply(lambda x: x.split('s__')[-1])
     references_folder_content = [x.split('/')[-1] for x in glob(references_folder + '/*')]
     selected_samples_dfs_list = []
@@ -162,9 +165,6 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
 
 def take_top_species_and_download_to_file(max_refs_per_species, single_species_table, references_folder,
                                           references_folder_content, merged_filtered_fasta_f):
-    # Create column 'Quality' as Completeness - 5 * Contamination + ln(N50)
-    single_species_table['Quality'] = single_species_table.Completeness - 5 * single_species_table.Contamination + \
-                                      single_species_table.N50.apply(lambda x: 0 if x <= 0 else np.log(x))
     # Take top X references according to Quality score, breaking ties alphabetically by Genome
     top_x_df = single_species_table.sort_values(['Quality', 'Genome']).tail(max_refs_per_species)
     top_x_df.apply(lambda x: download_and_write_content_to_file(references_folder,
