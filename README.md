@@ -141,7 +141,11 @@ GInGeR outputs two result files:
 By default, GInGeR uses the Unified Human Gastrointestinal Genome collection (UHGG,
 see [genome catalog](http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0/README_v2.0.txt) and
 [Almeida et al.](https://www.nature.com/articles/s41587-020-0603-3)) as a reference database. When
-running GInGer, it first detects the dominant species in the sample using Kraken2. Then it downloads missing
+running GInGer, it first detects the dominant species in the sample using Kraken2 and estimates per-species read counts using Bracken. It then keeps only species with estimated sequencing coverage above `--species-coverage-threshold` (default: 10). Estimated coverage is computed as:
+
+new_est_reads * (avg_len_R1 + avg_len_R2) / median_genome_length
+
+where `new_est_reads` comes from Bracken, read lengths come from `seqkit stats`, and `median_genome_length` is computed from the top UHGG reference genomes per species (ranked by the metadata Quality score) capped by `--max-species-representatives`. GInGeR then downloads missing
 references (`--max-species-representatives` of references per species) for these species from UHGG to the `--downloaded-references-dir` and
 combining them into a reference database customized for the given sample. It is recommended to use a
 shared `--downloaded-references-dir` for multiple samples (this is GInGeR's default behavior) to save time and storage by
