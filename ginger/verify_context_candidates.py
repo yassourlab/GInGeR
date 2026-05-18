@@ -1,6 +1,7 @@
 import logging
 from collections import defaultdict
 import datetime as dt
+import re
 
 from ginger import sequence_alignment_utils as sau
 from ginger import matches_classes as mc
@@ -78,14 +79,41 @@ def keep_best_matches(matches:List, sorting_func=lambda x: (-x.score, -(x.end - 
 
 
 def get_ref_genome_species_dict_from_metadata_path(metadata_path):
+    def infer_species_from_lineage(lineage: str) -> str:
+        if not lineage:
+            return ''
+        match = re.search(r'(?:^|;)s__([^;]+)', lineage)
+        return match.group(1) if match else ''
+
     ref_genome_species_dict = {}
     with open(metadata_path, 'r') as f:
-        f.readline()
+        header_line = f.readline()
+        if not header_line:
+            return ref_genome_species_dict
+
+        headers = [h.strip().lower() for h in header_line.rstrip('\n').split('\t')]
+        genome_idx = headers.index('genome') if 'genome' in headers else 0
+        species_idx = headers.index('species') if 'species' in headers else None
+        lineage_idx = headers.index('lineage') if 'lineage' in headers else None
+
         for line in f:
-            splt = line[:-1].split('\t')
-            genome = splt[0]
-            species = splt[3]
+            row = line.rstrip('\n').split('\t')
+            if not row:
+                continue
+            if genome_idx >= len(row):
+                continue
+            genome = row[genome_idx]
+            if not genome:
+                continue
+
+            species = ''
+            if species_idx is not None and species_idx < len(row):
+                species = row[species_idx]
+            if not species and lineage_idx is not None and lineage_idx < len(row):
+                species = infer_species_from_lineage(row[lineage_idx])
+
             ref_genome_species_dict[genome] = species
+
     return ref_genome_species_dict
 
 @pu.step_timing
