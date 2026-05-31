@@ -11,4 +11,5 @@ NODES_TO_CONTIGS_W_GAPS_TEMPLATE = '{temp_files_path}/nodes_to_contigs_w_gaps.pa
 CONTEXT_LEVEL_OUTPUT_TEMPLATE = '{out_dir}/context_level_matches.csv'
 SPECIES_LEVEL_OUTPUT_TEMPLATE = '{out_dir}/species_level_matches.csv'
 SUBSPECIES_LEVEL_OUTPUT_TEMPLATE = '{out_dir}/subspecies_level_matches.csv'
+GENES_DETECTED_IN_GRAPH_WITH_NO_SPECIES_MATCH_OUTPUT_TEMPLATE = '{out_dir}/genes_detected_in_graph_with_no_species_match.csv'
 

@@ -129,6 +129,40 @@ def intervals_overlap(start_a, end_a, start_b, end_b):
     return start_a <= end_b and start_b <= end_a
 
 
+def write_genes_detected_in_graph_with_no_species_match(genes_with_location_in_graph, matched_genes, csv_path: str) -> bool:
+    """Write a CSV listing detected genes in the assembly graph that lack a species-level match.
+
+    The output has exactly these columns:
+    - gene
+    - contig
+    - gene_match_score
+
+    The file is written only if at least one unmatched gene exists.
+
+    Returns True if the file was written, False otherwise.
+    """
+    if not genes_with_location_in_graph:
+        return False
+
+    matched_genes = set(matched_genes or [])
+    rows = []
+    for gene_match in genes_with_location_in_graph:
+        if gene_match.gene not in matched_genes:
+            rows.append(
+                {
+                    'gene': gene_match.gene,
+                    'contig': gene_match.contig,
+                    'gene_match_score': gene_match.score,
+                }
+            )
+
+    if not rows:
+        return False
+
+    pd.DataFrame(rows, columns=['gene', 'contig', 'gene_match_score']).to_csv(csv_path, index=False)
+    return True
+
+
 
 
 
