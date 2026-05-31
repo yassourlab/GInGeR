@@ -93,7 +93,7 @@ def cleanup_intermediate_files(out_dir, keep_options):
               default=os.path.join(os.path.dirname(__file__), '..', 'kraken2_db_uhgg_v2.0.2'),
               help='The path to UHGG\'s Kraken2 database directory')
 @click.option('--species-coverage-threshold', type=float, default=10,
-              help='The minimal estimated sequencing coverage required for including a species in the analysis. Coverage is estimated as: new_est_reads * (avg_len_R1 + avg_len_R2) / median_genome_length, where median genome length is computed from the top references per species (by Quality) capped by --max-species-representatives. Default 10.')
+              help='The minimal estimated sequencing coverage required for including a species in the analysis. Coverage is estimated as: bracken_estimated_reads * (avg_len_R1 + avg_len_R2) / median_genome_length, where median genome length is computed from the top references per species (by Quality) capped by --max-species-representatives. Default 10.')
 @click.option('--max-species-representatives', type=int, default=100,
               help='The maximal references per species that will be downloaded from UHGG and taken into account in the aggregation of results at the species level')
 @click.option('--reference-genomes-metadata', type=click.Path(),
