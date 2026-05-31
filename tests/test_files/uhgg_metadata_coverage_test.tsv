@@ -1,0 +1,10 @@
+Genome	Completeness	Contamination	N50	FTP_download	species	Length
+EC_1	99.0	0.0	100000	ftp://example/EC_1.gff.gz	Enterobacter cloacae	4000000
+EC_2	98.0	0.0	90000	ftp://example/EC_2.gff.gz	Enterobacter cloacae	4000000
+EC_3	50.0	5.0	1000	ftp://example/EC_3.gff.gz	Enterobacter cloacae	10000000
+SE_1	99.0	0.0	100000	ftp://example/SE_1.gff.gz	Salmonella enterica	5000000
+SE_2	97.0	0.0	80000	ftp://example/SE_2.gff.gz	Salmonella enterica	5000000
+SE_3	10.0	10.0	1000	ftp://example/SE_3.gff.gz	Salmonella enterica	2000000
+YE_1	99.0	0.0	100000	ftp://example/YE_1.gff.gz	Yersinia enterocolitica	3000000
+YE_2	96.0	0.0	70000	ftp://example/YE_2.gff.gz	Yersinia enterocolitica	3000000
+YE_3	20.0	5.0	1000	ftp://example/YE_3.gff.gz	Yersinia enterocolitica	8000000

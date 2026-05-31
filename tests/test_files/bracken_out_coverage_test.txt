@@ -1,0 +1,4 @@
+name	taxonomy_id	taxonomy_lvl	kraken_assigned_reads	added_reads	new_est_reads	fraction_total_reads
+Enterobacter cloacae	3510	S	0	0	250000	0.50
+Salmonella enterica	3346	S	0	0	200000	0.40
+Yersinia enterocolitica	3307	S	0	0	200000	0.10

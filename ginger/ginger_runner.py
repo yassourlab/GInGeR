@@ -92,8 +92,8 @@ def cleanup_intermediate_files(out_dir, keep_options):
 @click.option('--kraken-db', type=click.Path(),
               default=os.path.join(os.path.dirname(__file__), '..', 'kraken2_db_uhgg_v2.0.2'),
               help='The path to UHGG\'s Kraken2 database directory')
-@click.option('--species-inclusion-threshold', type=float, default=0.01,
-              help='The minimal fraction of reads mapped to a species for inclusion in the analysis. This represents read-based abundance (proportion of DNA sequences), not cell count abundance. Species with larger genomes contribute more reads than those with smaller genomes at equal cell counts. Value should be in [0,1], default 0.01 (1%)')
+@click.option('--species-coverage-threshold', type=float, default=10,
+              help='The minimal estimated sequencing coverage required for including a species in the analysis. Coverage is estimated as: bracken_estimated_reads * (avg_len_R1 + avg_len_R2) / median_genome_length, where median genome length is computed from the top references per species (by Quality) capped by --max-species-representatives. Default 10.')
 @click.option('--max-species-representatives', type=int, default=100,
               help='The maximal references per species that will be downloaded from UHGG and taken into account in the aggregation of results at the species level')
 @click.option('--reference-genomes-metadata', type=click.Path(),
@@ -125,7 +125,7 @@ def cleanup_intermediate_files(out_dir, keep_options):
 @click.option('--nms-iou-threshold', type=float, default=0.8,
               help='The IoU (Intersection over Union) threshold used for non-max-suppression when filtering overlapping gene matches. Gene matches with IoU > this threshold are considered overlapping. Only used when --return-all-gene-matches is False. Default: 0.8')
 def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                   kraken_db, species_inclusion_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
+                   kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
                    max_gap_ratio, max_context_len, min_context_len, gene_pident_filtering_th,
                    paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold):
     """GInGeR - A tool for analyzing the genomic contexts of genes in metagenomic samples.
@@ -144,13 +144,13 @@ t
 
     """
     return ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                           kraken_db, species_inclusion_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path,
+                           kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path,
                            depth_limit, max_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
                            paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold)
 
 
 def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                    kraken_db, species_inclusion_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
+                    kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
                     max_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
                     paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold):
     # Log the command that was run
@@ -169,7 +169,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
             bracken_output = f'{out_dir}/bracken_output_file.tsv'
             bracken_report = f'{out_dir}/bracken_report_file.tsv'
             rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads, kraken_output_path,
-                                                 kraken_report_path, bracken_output, bracken_report, species_inclusion_threshold,
+                                                 kraken_report_path, bracken_output, bracken_report, species_coverage_threshold,
                                                  reference_genomes_metadata, downloaded_references_dir, sample_specific_references,
                                                  references_used_path,
                                                  max_species_representatives, kraken_db)

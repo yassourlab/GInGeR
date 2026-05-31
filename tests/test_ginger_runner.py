@@ -38,7 +38,7 @@ class GingerRunnerTest(unittest.TestCase):
         cls.metadata_path = 'ginger/UHGG-metadata.tsv'  # for running on github CI
         # cls.metadata_path = '../ginger/UHGG-metadata.tsv'  # for running locally
         cls.max_species_representatives = 1
-        cls.read_ratio_th = 0.15
+        cls.coverage_th = 10
         if os.path.exists(cls.out_dir):
             rmtree(cls.out_dir)
 
@@ -50,7 +50,7 @@ class GingerRunnerTest(unittest.TestCase):
     @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
     def test_ginger_e2e_func(self):
         ginger_e2e_func(None, self.short_reads_1, self.short_reads_2, self.out_dir, None, self.threads, None,
-                        None, self.read_ratio_th, self.metadata_path, 'references_dir', self.merged_filtered_fasta,
+                        None, self.coverage_th, self.metadata_path, 'references_dir', self.merged_filtered_fasta,
                         self.genes_path, 12, 1.5, 0, 2500, 0.9, 0.9, ['all'], False, self.max_species_representatives, False, 0.8)
 
         self.assertTrue(os.path.exists(f'{self.out_dir}/context_level_matches.csv'))
@@ -89,7 +89,7 @@ class GingerRunnerTest(unittest.TestCase):
         runner = CliRunner()
 
         result = runner.invoke(run_ginger_e2e,
-                               f'{self.short_reads_1} {self.short_reads_1} {self.genes_path} {self.out_dir} --sample-specific-references {self.merged_filtered_fasta} --species-inclusion-threshold {self.read_ratio_th} --reference-genomes-metadata {self.metadata_path} --max-species-representatives 1'.split(
+                               f'{self.short_reads_1} {self.short_reads_2} {self.genes_path} {self.out_dir} --sample-specific-references {self.merged_filtered_fasta} --species-coverage-threshold {self.coverage_th} --reference-genomes-metadata {self.metadata_path} --max-species-representatives 1'.split(
                                    ' '))
         self.assertEqual(result.exit_code, 0, str(result.exception))
         self.assertTrue(os.path.exists(f'{self.out_dir}/context_level_matches.csv'))
