@@ -35,7 +35,7 @@ jobs:
       with:
         activate-environment: ginger_env
         environment-file: ${{ matrix.environment-file }}
-        python-version: "3.14.2"
+        python-version: "3.12.13"
         auto-activate-base: false
     - name: Install ginger
       shell: bash -l {0}
