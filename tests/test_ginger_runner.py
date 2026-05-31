@@ -74,6 +74,12 @@ class GingerRunnerTest(unittest.TestCase):
             lines_gt = gt.readlines()
         self.assertListEqual(lines_out, lines_gt)
 
+        no_match_csv = f'{self.out_dir}/genes_detected_in_graph_with_no_species_match.csv'
+        if os.path.exists(no_match_csv):
+            import pandas as pd
+            df = pd.read_csv(no_match_csv)
+            self.assertListEqual(list(df.columns), ['gene', 'contig', 'gene_match_score'])
+
     # @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
     # def test_ginger_e2e_func_with_subspecies_output(self):
     #     ginger_e2e_func(None, self.short_reads_1, self.short_reads_2, self.out_dir, None, 2,
@@ -106,6 +112,12 @@ class GingerRunnerTest(unittest.TestCase):
             lines_out = test_out.readlines()
             lines_gt = gt.readlines()
         self.assertListEqual(lines_out, lines_gt)
+
+        no_match_csv = f'{self.out_dir}/genes_detected_in_graph_with_no_species_match.csv'
+        if os.path.exists(no_match_csv):
+            import pandas as pd
+            df = pd.read_csv(no_match_csv)
+            self.assertListEqual(list(df.columns), ['gene', 'contig', 'gene_match_score'])
 
 
 if __name__ == '__main__':

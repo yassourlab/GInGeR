@@ -196,6 +196,10 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
             'No genes of interest detected in assembly. GInGeR run stopped - no results generated')
         return
 
+    genes_detected_no_species_match_output_path = c.GENES_DETECTED_IN_GRAPH_WITH_NO_SPECIES_MATCH_OUTPUT_TEMPLATE.format(
+        out_dir=out_dir
+    )
+
     # get in and out paths
     in_paths_fasta = c.IN_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
     out_paths_fasta = c.OUT_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
@@ -217,6 +221,11 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                                     gene_lengths, paths_pident_filtering_th, 0,
                                                                     max_gap_ratio, reference_genomes_metadata)
     if not context_level_results:
+        pu.write_genes_detected_in_graph_with_no_species_match(
+            genes_with_location_in_graph,
+            matched_genes=set(),
+            csv_path=genes_detected_no_species_match_output_path,
+        )
         log.info(
             'No matching pairs of incoming and outgoing contexts found in reference sequences. GInGeR run stopped - no results generated')
         return
@@ -224,10 +233,10 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     species_level_output_path = c.SPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     subspecies_level_output_path = c.SUBSPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     pu.write_context_level_output_to_csv(context_level_results, context_level_output_path, reference_genomes_metadata)
-    pu.aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path,
-                                                                            reference_genomes_metadata,
-                                                                            species_level_output_path,
-                                                                            max_species_representatives)
+    species_level_df = pu.aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path,
+                                                                                               reference_genomes_metadata,
+                                                                                               species_level_output_path,
+                                                                                               max_species_representatives)
 
     if os.path.exists(references_used_path) and 'subspecies' in pd.read_table(references_used_path).columns:
         pu.aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path,
@@ -235,6 +244,20 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                                                 subspecies_level_output_path,
                                                                                 max_species_representatives,
                                                                                 'subspecies')
+
+    matched_genes = set()
+    try:
+        if species_level_df is not None and len(species_level_df.index) > 0:
+            # species_level_df has a MultiIndex (gene, species)
+            matched_genes = set(species_level_df.index.get_level_values(0))
+    except Exception as e:
+        log.warning(f'Failed to infer matched genes from species-level output: {e}')
+
+    pu.write_genes_detected_in_graph_with_no_species_match(
+        genes_with_location_in_graph,
+        matched_genes=matched_genes,
+        csv_path=genes_detected_no_species_match_output_path,
+    )
     # Clean up intermediate files if requested
     cleanup_intermediate_files(out_dir, keep_intermediate)
     
