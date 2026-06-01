@@ -246,12 +246,11 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                                                 'subspecies')
 
     matched_genes = set()
-    try:
-        if species_level_df is not None and len(species_level_df.index) > 0:
-            # species_level_df has a MultiIndex (gene, species)
-            matched_genes = set(species_level_df.index.get_level_values(0))
-    except Exception as e:
-        log.warning(f'Failed to infer matched genes from species-level output: {e}')
+    if species_level_df is not None and len(species_level_df.index) > 0:
+        # species_level_df has a MultiIndex (gene, species)
+        matched_genes = set(species_level_df.gene)
+    else:
+        matched_genes = set()
 
     pu.write_genes_detected_in_graph_with_no_species_match(
         genes_with_location_in_graph,
