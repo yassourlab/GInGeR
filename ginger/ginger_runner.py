@@ -239,20 +239,19 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                                                                max_species_representatives)
 
     if os.path.exists(references_used_path) and 'subspecies' in pd.read_table(references_used_path).columns:
-        pu.aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path,
+        species_level_df = pu.aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path,
                                                                                 references_used_path,
                                                                                 subspecies_level_output_path,
                                                                                 max_species_representatives,
                                                                                 'subspecies')
 
+    # get genes detected in graph with no species match
     matched_genes = set()
-    try:
-        if species_level_df is not None and len(species_level_df.index) > 0:
-            # species_level_df has a MultiIndex (gene, species)
-            matched_genes = set(species_level_df.index.get_level_values(0))
-    except Exception as e:
-        log.warning(f'Failed to infer matched genes from species-level output: {e}')
-
+    if species_level_df is None or len(species_level_df) == 0:
+        matched_genes = set()
+    else:
+        matched_genes = set(species_level_df.index)
+    
     pu.write_genes_detected_in_graph_with_no_species_match(
         genes_with_location_in_graph,
         matched_genes=matched_genes,
