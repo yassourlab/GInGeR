@@ -102,11 +102,22 @@ and saved multiple times.
 
 `--sample-specific-references` - A reference database in a fasta format. Using this will skip the stages of creating a sample-specific database based on the species Kraken2 detected in the sample.
 
-`--keep-intermediate` - Controls which intermediate files are kept after the pipeline completes. By default, all files are kept (`all`). Options include: `final` (only result CSVs), `assembly` (SPAdes output), `alignment` (PAF/M8 files), `sequences` (FASTA files), `kraken` (Kraken2/Bracken output), `reference` (reference database files). Can specify multiple categories by repeating the flag. Example: `--keep-intermediate final --keep-intermediate assembly` keeps only the final CSV results and the SPAdes directory.
+`--keep-intermediate` - Controls which intermediate files are kept after the pipeline completes. By default, all files are kept (`all`). Options include: `final` (only result CSVs), `assembly` (SPAdes output), `alignment` (PAF/M8 files), `sequences` (FASTA files), `kraken` (Kraken2/Bracken output), `reference` (reference database files), `plasmid` (GeNomad input fasta and output directory). Can specify multiple categories by repeating the flag. Example: `--keep-intermediate final --keep-intermediate assembly` keeps only the final CSV results and the SPAdes directory.
+
+### Plasmid scoring
+
+`--add-plasmid-score` / `--no-add-plasmid-score` - Whether to run [GeNomad](https://github.com/apcamargo/genomad)
+on the genomic contexts found for each gene (and on the contigs of genes that were located in the
+assembly but had no species-level match) and add `plasmid_score` columns to the output CSVs. Default: enabled.
+
+`--genomad-db` - The path to GeNomad's database directory. Required when `--add-plasmid-score` is set (the
+default). Create it with `genomad download-database <path>` (see
+[GeNomad's documentation](https://portal.nersc.gov/genomad/)). Defaults to a `genomad_db` directory next to the
+GInGeR package.
 
 # GInGeR's outputs
 
-GInGeR outputs two result files:
+GInGeR outputs the following result files:
 
 1. **context_level_matches.csv** - A CSV file specifying the locations in the reference database that match the genomic contexts
    that were detected in the assembly graph for the genes of interest. The CSV columns are:
@@ -126,6 +137,9 @@ GInGeR outputs two result files:
       sequence
     * genome - the genome id as inferred from the reference_contig field
     * species - the species name as inferred from UHGG-metadata.tsv
+    * plasmid_score - (only when `--add-plasmid-score` is set, default) [GeNomad](https://github.com/apcamargo/genomad)'s
+      plasmid score (in the range [0,1]) for the sequence formed by the in_context, the gene and the out_context. 0 if
+      GeNomad did not report a score for this sequence.
 
 2. **species_level_matches.csv** - An aggregation of the first output by gene and species, summarizing whether a
    gene was detected in a certain species in the sample. The CSV columns are:
@@ -135,6 +149,19 @@ GInGeR outputs two result files:
     * match_score_max - the maximal match score for the given gene and species
     * species_instances - the number of instances of the given species taken into account in the calculation (determined
       as the minimum between `--max-species-representatives` and the number of instances found in the UHGG database)
+    * plasmid_score_mean - (only when `--add-plasmid-score` is set, default) the average `plasmid_score` across all of
+      the gene's distinct genomic contexts matched to this species
+    * plasmid_score_most_common_context - (only when `--add-plasmid-score` is set, default) the `plasmid_score` of the
+      genomic context matched to the largest number of reference genomes of this species (averaged across ties)
+
+3. **genes_detected_in_graph_with_no_species_match.csv** - Genes that were located in the assembly graph but for which
+   no genomic context could be matched to a reference genome (and so don't appear in the outputs above). The CSV
+   columns are:
+    * gene - the gene of interest as described for `context_level_output.csv`
+    * contig - the assembly contig the gene was found on
+    * gene_match_score - the gene-to-contig match score (the % of matching base-pairs between the gene and the contig)
+    * plasmid_score - (only when `--add-plasmid-score` is set, default) GeNomad's plasmid score for the full contig the
+      gene was found on. 0 if GeNomad did not report a score for this contig.
 
 # Reference database
 
