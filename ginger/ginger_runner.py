@@ -15,6 +15,7 @@ from ginger import extract_contexts_candidates as ecc
 from ginger import sequence_alignment_utils as sau
 from ginger import verify_context_candidates as vcc
 from ginger import pipeline_utils as pu
+from ginger import plasmid_detection_utils as pdu
 from ginger import constants as c
 
 
@@ -39,7 +40,8 @@ def cleanup_intermediate_files(out_dir, keep_options):
         'alignment': ['*.paf', '*.m8', 'mmseqs_tmp', 'nodes_to_contigs_w_gaps.paf'],
         'sequences': ['all_in_paths.fasta', 'all_out_paths.fasta'],
         'kraken': ['kraken_*.tsv', 'bracken_*.tsv'],
-        'reference': ['merged_filtered_ref_db.*', 'references_used.csv']
+        'reference': ['merged_filtered_ref_db.*', 'references_used.csv'],
+        'plasmid': ['plasmid_detection_input.fasta', 'genomad_output'],
     }
     
     # Remove categories not in keep_options
@@ -114,20 +116,26 @@ def cleanup_intermediate_files(out_dir, keep_options):
 @click.option('--paths-pident-filtering-th', type=float, default=0.9,
               help='The minimal % of matched base pairs required for matching a context candidate to a reference sequence')
 @click.option('--keep-intermediate', multiple=True,
-              type=click.Choice(['all', 'final', 'assembly', 'alignment', 'sequences', 'kraken', 'reference'],
+              type=click.Choice(['all', 'final', 'assembly', 'alignment', 'sequences', 'kraken', 'reference', 'plasmid'],
                                case_sensitive=False),
               default=['all'],
-              help='Specify which intermediate files to keep. Options: all (default, keep everything), final (only result CSVs), assembly (SPAdes output), alignment (PAF/M8 files), sequences (FASTA files), kraken (Kraken2/Bracken output), reference (reference database files). Can specify multiple by repeating the flag: --keep-intermediate final --keep-intermediate assembly')
+              help='Specify which intermediate files to keep. Options: all (default, keep everything), final (only result CSVs), assembly (SPAdes output), alignment (PAF/M8 files), sequences (FASTA files), kraken (Kraken2/Bracken output), reference (reference database files), plasmid (GeNomad input fasta and output directory). Can specify multiple by repeating the flag: --keep-intermediate final --keep-intermediate assembly')
 @click.option('--skip-assembly', is_flag=True, default=False,
               help='A flag that indicates whether or not to skip the assembly step. If the flag is set to True, the argument --assembly--dir must be supplied and direct to the results of a SPAdes run')
 @click.option('--return-all-gene-matches', is_flag=True, default=False,
               help='By default, GInGeR applies non-max-suppression (NMS) to the alignment of genes of interest to the assembly graph, keeping only top scoring matches and removing redundant overlapping matches. If this flag is set to True, all gene matches will be returned without applying NMS.')
 @click.option('--nms-iou-threshold', type=float, default=0.8,
               help='The IoU (Intersection over Union) threshold used for non-max-suppression when filtering overlapping gene matches. Gene matches with IoU > this threshold are considered overlapping. Only used when --return-all-gene-matches is False. Default: 0.8')
+@click.option('--add-plasmid-score/--no-add-plasmid-score', default=True,
+              help='Run GeNomad on the genomic contexts found for each gene (and on the contigs of genes with no species-level match) and add plasmid_score columns to the output CSVs. Requires --genomad-db to point to a valid GeNomad database. Default: True')
+@click.option('--genomad-db', type=click.Path(),
+              default=os.path.join(os.path.dirname(__file__), '..', 'genomad_db'),
+              help="The path to GeNomad's database directory (create one with `genomad download-database <path>`). Only used when --add-plasmid-score is set.")
 def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                    kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
                    max_gap_ratio, max_context_len, min_context_len, gene_pident_filtering_th,
-                   paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold):
+                   paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
+                   add_plasmid_score, genomad_db):
     """GInGeR - A tool for analyzing the genomic contexts of genes in metagenomic samples.
 
     \b
@@ -146,13 +154,15 @@ t
     return ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                            kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path,
                            depth_limit, max_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
-                           paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold)
+                           paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
+                           add_plasmid_score, genomad_db)
 
 
 def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                     kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
                     max_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
-                    paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold):
+                    paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
+                    add_plasmid_score=True, genomad_db=None):
     # Log the command that was run
     log.info(f"Running GInGeR with command: {' '.join(sys.argv)}")
     
@@ -220,12 +230,30 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                                     out_contexts_to_ref_genomes,
                                                                     gene_lengths, paths_pident_filtering_th, 0,
                                                                     max_gap_ratio, reference_genomes_metadata)
+
+    # run GeNomad on the gene contexts and on the contigs of genes with no species-level match
+    context_plasmid_scores, contig_plasmid_scores = None, None
+    if add_plasmid_score:
+        genes_with_context_matches = {gene for gene, _ in context_level_results.keys()} if context_level_results else set()
+        plasmid_input_fasta = c.PLASMID_DETECTION_INPUT_FASTA_TEMPLATE.format(temp_folder=out_dir)
+        plasmid_fasta_path = pdu.write_plasmid_detection_input_fasta(
+            context_level_results, genes_with_location_in_graph, genes_with_context_matches,
+            in_paths_fasta, out_paths_fasta, c.CONTIGS_PATH_TEMPLATE.format(assembly_dir=assembly_dir),
+            plasmid_input_fasta)
+        if plasmid_fasta_path:
+            genomad_out_dir = c.GENOMAD_OUTPUT_DIR_TEMPLATE.format(out_dir=out_dir)
+            plasmid_summary_path = pdu.run_genomad(plasmid_fasta_path, genomad_out_dir, genomad_db, threads)
+            context_plasmid_scores, contig_plasmid_scores = pdu.read_plasmid_scores(plasmid_summary_path)
+
     if not context_level_results:
-        pu.write_genes_detected_in_graph_with_no_species_match(
+        wrote_no_species_match_csv = pu.write_genes_detected_in_graph_with_no_species_match(
             genes_with_location_in_graph,
             matched_genes=set(),
             csv_path=genes_detected_no_species_match_output_path,
         )
+        if wrote_no_species_match_csv and contig_plasmid_scores is not None:
+            pdu.add_plasmid_scores_to_genes_no_species_match_csv(genes_detected_no_species_match_output_path,
+                                                                 contig_plasmid_scores)
         log.info(
             'No matching pairs of incoming and outgoing contexts found in reference sequences. GInGeR run stopped - no results generated')
         return
@@ -233,6 +261,9 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     species_level_output_path = c.SPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     subspecies_level_output_path = c.SUBSPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     pu.write_context_level_output_to_csv(context_level_results, context_level_output_path, reference_genomes_metadata)
+    if context_plasmid_scores is not None:
+        pdu.add_plasmid_scores_to_context_level_csv(context_level_output_path, context_plasmid_scores)
+
     species_level_df = pu.aggregate_context_level_output_to_species_level_output_and_write_csv(context_level_output_path,
                                                                                                reference_genomes_metadata,
                                                                                                species_level_output_path,
@@ -250,11 +281,14 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
         # species_level_df has a MultiIndex (gene, species)
         matched_genes = set(species_level_df.index.get_level_values(0))
 
-    pu.write_genes_detected_in_graph_with_no_species_match(
+    wrote_no_species_match_csv = pu.write_genes_detected_in_graph_with_no_species_match(
         genes_with_location_in_graph,
         matched_genes=matched_genes,
         csv_path=genes_detected_no_species_match_output_path,
     )
+    if wrote_no_species_match_csv and contig_plasmid_scores is not None:
+        pdu.add_plasmid_scores_to_genes_no_species_match_csv(genes_detected_no_species_match_output_path,
+                                                             contig_plasmid_scores)
     # Clean up intermediate files if requested
     cleanup_intermediate_files(out_dir, keep_intermediate)
     

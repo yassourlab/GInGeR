@@ -217,6 +217,26 @@ def aggregate_context_level_output_to_species_level_output_and_write_csv(context
     agg_output = agg_output.merge(genomes_per_species, left_on=species_col, right_index=True, how='left')
     agg_output['references_ratio'] = agg_output['genome_nunique'] / agg_output[f'{species_col}_instances']
     species_level_output = agg_output[['references_ratio', 'score_max', f'{species_col}_instances']]
+
+    if 'plasmid_score' in context_level_df.columns:
+        group_cols = ['gene', species_col]
+        context_cols = ['in_context', 'out_context']
+
+        # average plasmid score across the gene's unique contexts (don't over-weight contexts
+        # that were matched to many reference genomes of the same species)
+        unique_contexts = context_level_df.drop_duplicates(group_cols + context_cols)
+        plasmid_score_mean = unique_contexts.groupby(group_cols)['plasmid_score'].mean().rename('plasmid_score_mean')
+
+        # plasmid score of the context(s) matched to the most reference genomes, averaging ties
+        context_counts = context_level_df.groupby(group_cols + context_cols).size().reset_index(name='n_genomes')
+        context_counts = context_counts.merge(unique_contexts[group_cols + context_cols + ['plasmid_score']],
+                                               on=group_cols + context_cols)
+        max_counts = context_counts.groupby(group_cols)['n_genomes'].transform('max')
+        plasmid_score_most_common_context = context_counts[context_counts['n_genomes'] == max_counts].groupby(
+            group_cols)['plasmid_score'].mean().rename('plasmid_score_most_common_context')
+
+        species_level_output = species_level_output.join(plasmid_score_mean).join(plasmid_score_most_common_context)
+
     if species_level_output_path is not None:
         species_level_output.to_csv(species_level_output_path)
     return species_level_output
