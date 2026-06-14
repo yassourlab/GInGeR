@@ -12,4 +12,6 @@ CONTEXT_LEVEL_OUTPUT_TEMPLATE = '{out_dir}/context_level_matches.csv'
 SPECIES_LEVEL_OUTPUT_TEMPLATE = '{out_dir}/species_level_matches.csv'
 SUBSPECIES_LEVEL_OUTPUT_TEMPLATE = '{out_dir}/subspecies_level_matches.csv'
 GENES_DETECTED_IN_GRAPH_WITH_NO_SPECIES_MATCH_OUTPUT_TEMPLATE = '{out_dir}/genes_detected_in_graph_with_no_species_match.csv'
+PLASMID_DETECTION_INPUT_FASTA_TEMPLATE = '{temp_folder}/plasmid_detection_input.fasta'
+GENOMAD_OUTPUT_DIR_TEMPLATE = '{out_dir}/genomad_output'
 

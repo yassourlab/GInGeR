@@ -21,10 +21,12 @@ class PipelineUtilsTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.context_level_output_path = f'{TEST_FILES}/context_level_matches.csv'
         cls.context_level_output_path_with_dups = f'{TEST_FILES}/context_level_matches_with_dups.csv'  # dups means that the same gene is matched to the same genome twice
+        cls.context_level_output_path_with_plasmid_score = f'{TEST_FILES}/context_level_matches_with_plasmid_score.csv'
         cls.metadata_path = 'ginger/UHGG-metadata.tsv' # use this for running tests on github CI
         # cls.metadata_path = '../ginger/UHGG-metadata.tsv' # use this for running the test locally
         cls.species_level_output_path = 'test_species_level_matches.csv'
         cls.species_level_output_path_with_dups = f'test_species_level_matches_with_dups.csv'  # dups means that the same gene is matched to the same genome twice
+        cls.species_level_output_path_with_plasmid_score = 'test_species_level_matches_with_plasmid_score.csv'
         # GT files
         cls.species_level_output_path_gt = f'{TEST_FILES}/species_level_matches.csv'
         cls.species_level_output_path_with_dups_gt = f'{TEST_FILES}/species_level_matches_with_dups.csv'
@@ -33,6 +35,8 @@ class PipelineUtilsTest(unittest.TestCase):
     def tearDownClass(cls) -> None:
         if os.path.exists(cls.species_level_output_path):
             os.remove(cls.species_level_output_path)
+        if os.path.exists(cls.species_level_output_path_with_plasmid_score):
+            os.remove(cls.species_level_output_path_with_plasmid_score)
 
     def test_aggregate_context_level_output_to_species_level_output_and_write_csv(self):
         pu.aggregate_context_level_output_to_species_level_output_and_write_csv(self.context_level_output_path,
@@ -55,6 +59,22 @@ class PipelineUtilsTest(unittest.TestCase):
             out_lines = out_f.readlines()
             gt_lines = gt_f.readlines()
         self.assertListEqual(out_lines, gt_lines)
+
+    def test_aggregate_context_level_output_to_species_level_output_and_write_csv_with_plasmid_score(self):
+        species_level_output = pu.aggregate_context_level_output_to_species_level_output_and_write_csv(
+            self.context_level_output_path_with_plasmid_score,
+            self.metadata_path,
+            self.species_level_output_path_with_plasmid_score, 1)
+
+        self.assertTrue(os.path.exists(self.species_level_output_path_with_plasmid_score))
+        self.assertIn('plasmid_score_mean', species_level_output.columns)
+        self.assertIn('plasmid_score_most_common_context', species_level_output.columns)
+
+        row = species_level_output.loc[('test_gene', 'Escherichia coli_D')]
+        # plasmid_score_mean averages over the gene's two unique contexts (0.9 and 0.3)
+        self.assertAlmostEqual(row['plasmid_score_mean'], 0.6)
+        # plasmid_score_most_common_context is the score of the context matched to 2 genomes (0.9), not 1 (0.3)
+        self.assertAlmostEqual(row['plasmid_score_most_common_context'], 0.9)
 
     def test_parse_paths_file(self):
         paths_file = f'{TEST_FILES}/SPAdes/contigs.paths'
