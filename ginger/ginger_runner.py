@@ -248,9 +248,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     matched_genes = set()
     if species_level_df is not None and len(species_level_df.index) > 0:
         # species_level_df has a MultiIndex (gene, species)
-        matched_genes = set(species_level_df.gene)
-    else:
-        matched_genes = set()
+        matched_genes = set(species_level_df.index.get_level_values(0))
 
     pu.write_genes_detected_in_graph_with_no_species_match(
         genes_with_location_in_graph,
