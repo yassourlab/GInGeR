@@ -206,24 +206,26 @@ are relevant for your sample. In this case you should also supply a `--reference
 
 GInGeR requires a 64-bit Linux system and conda (or miniconda).
 
-### Python 3.14.2
+### Python 3.12.13
 
-The pipeline might also work on older versions of Python, but they were not tested.
+The pipeline might also work on other versions of Python, but they were not tested.
 
 #### Python packages
 
-  - biopython=1.86
-  - pandas=2.3.3
+  - biopython=1.87
+  - pandas=3.0.3
   - kraken2=2.17.1
   - bracken=3.1
   - minimap2=2.30
-  - pip=25.3
+  - pip=26.1.1
   - spades=4.2.0
-  - click=8.3.1
-  - pyfastg=0.1.0
+  - click=8.4.0
+  - pyfastg=0.2.0
   - pafpy=0.2.0
-  - tqdm=4.67.1
+  - tqdm=4.67.3
   - mmseqs2=18.8cc5c
+  - genomad=1.12.0
+  - seqkit=2.13.0
 
 # Acknowledgements
 
