@@ -1,2 +1,2 @@
-gene,species,references_ratio,score_max,species_instances
-gb|AE006468|+|3570463-3572006|ARO:3003512|Salmonella,Escherichia fergusonii,1.0,0.9792,1
+gene,species,references_ratio,score_max,species_instances,context_species_diversity_mean,context_species_diversity_median,context_species_diversity_mode,n_contexts
+gb|AE006468|+|3570463-3572006|ARO:3003512|Salmonella,Escherichia fergusonii,1.0,0.9792,1,0.0,0.0,0.0,2

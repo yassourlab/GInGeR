@@ -1,5 +1,6 @@
 import os
 import logging
+import numpy as np
 import pandas as pd
 import timeit
 from collections import defaultdict
@@ -166,8 +167,35 @@ def write_genes_detected_in_graph_with_no_species_match(genes_with_location_in_g
 
 
 
+def compute_context_species_diversity(results_df, species_reference_counts,
+                                       group_cols=('gene', 'in_context', 'out_context'),
+                                       species_col='species', genome_col='Genome'):
+    """For each unique in-gene-out trio (group_cols), compute the Shannon diversity index of the
+    species it was matched to.
+
+    For every species matched by a trio, the number of unique references it was matched to is
+    divided by `species_reference_counts` (so species with more available references don't get
+    more weight), and the corrected counts are normalized to probabilities before computing the
+    Shannon diversity (-sum(p * ln(p))).
+    """
+    group_cols = list(group_cols)
+    species_counts = results_df.groupby(group_cols + [species_col])[genome_col].nunique().rename(
+        'n_genomes').reset_index()
+    species_counts['corrected_count'] = species_counts['n_genomes'] / species_counts[species_col].map(
+        species_reference_counts)
+    total_corrected_count = species_counts.groupby(group_cols)['corrected_count'].sum().rename(
+        'total_corrected_count')
+    species_counts = species_counts.merge(total_corrected_count, on=group_cols)
+    probabilities = species_counts['corrected_count'] / species_counts['total_corrected_count']
+    species_counts['entropy_term'] = -probabilities * np.log(probabilities)
+    # abs() avoids -0.0 (e.g. for trios matched to a single species, where the entropy term is -1*ln(1) = -0.0)
+    diversity = species_counts.groupby(group_cols)['entropy_term'].sum().abs().rename(
+        'context_species_diversity').reset_index()
+    return results_df.merge(diversity, on=group_cols, how='left')
+
+
 @step_timing
-def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str):
+def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str, max_species_representatives: int):
     results_dict = defaultdict(list)
     for gene_species_tuple, matches_list in output.items():
         gene, reference = gene_species_tuple
@@ -194,7 +222,13 @@ def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str)
     results_df = pd.DataFrame(results_dict)
     results_df['Genome'] = results_df['reference_contig'].apply(lambda x: x.split('_')[0].split('.')[0])
     metadata_cols_to_merge = [x for x in ['Genome', 'species','subspecies'] if x in metadata_df.columns]
-    results_df.merge(metadata_df[metadata_cols_to_merge], on='Genome', how='left').to_csv(csv_path, index=False)
+    results_df = results_df.merge(metadata_df[metadata_cols_to_merge], on='Genome', how='left')
+
+    if 'species' in results_df.columns:
+        species_reference_counts = metadata_df['species'].value_counts().clip(upper=max_species_representatives)
+        results_df = compute_context_species_diversity(results_df, species_reference_counts)
+
+    results_df.to_csv(csv_path, index=False)
 
 
 @step_timing
@@ -236,6 +270,27 @@ def aggregate_context_level_output_to_species_level_output_and_write_csv(context
             group_cols)['plasmid_score'].mean().rename('plasmid_score_most_common_context')
 
         species_level_output = species_level_output.join(plasmid_score_mean).join(plasmid_score_most_common_context)
+
+    if 'context_species_diversity' in context_level_df.columns:
+        group_cols = ['gene', species_col]
+
+        # if a reference was matched by more than one context, average their diversity scores
+        # and treat the reference as a single match with that averaged score
+        per_reference_diversity = context_level_df.groupby(group_cols + ['genome'])[
+            'context_species_diversity'].mean()
+
+        diversity_mean = per_reference_diversity.groupby(level=group_cols).mean().rename(
+            'context_species_diversity_mean')
+        diversity_median = per_reference_diversity.groupby(level=group_cols).median().rename(
+            'context_species_diversity_median')
+        diversity_mode = per_reference_diversity.groupby(level=group_cols).apply(lambda x: x.mode().mean()).rename(
+            'context_species_diversity_mode')
+
+        n_contexts = context_level_df.groupby(group_cols).apply(
+            lambda x: x[['in_context', 'out_context']].drop_duplicates().shape[0]).rename('n_contexts')
+
+        species_level_output = species_level_output.join(diversity_mean).join(diversity_median).join(
+            diversity_mode).join(n_contexts)
 
     if species_level_output_path is not None:
         species_level_output.to_csv(species_level_output_path)
