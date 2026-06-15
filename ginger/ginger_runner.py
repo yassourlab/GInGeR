@@ -260,7 +260,8 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     context_level_output_path = c.CONTEXT_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     species_level_output_path = c.SPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     subspecies_level_output_path = c.SUBSPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
-    pu.write_context_level_output_to_csv(context_level_results, context_level_output_path, reference_genomes_metadata)
+    pu.write_context_level_output_to_csv(context_level_results, context_level_output_path, reference_genomes_metadata,
+                                          max_species_representatives)
     if context_plasmid_scores is not None:
         pdu.add_plasmid_scores_to_context_level_csv(context_level_output_path, context_plasmid_scores)
 
