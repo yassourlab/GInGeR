@@ -1,0 +1,14 @@
+{
+    "python.defaultInterpreterPath": "/sci/labs/morani/morani/icore-data/lab/Tools/personal_condas/Netta/miniforge3/envs/ginger_env_312/bin/python",
+    "search.exclude": {
+        "**/kraken2_db_uhgg_v2.0.2": true
+    },
+    "files.exclude": {
+        "**/kraken2_db_uhgg_v2.0.2": true
+    },
+    "files.watcherExclude": {
+        "**/kraken2_db_uhgg_v2.0.2/**": true
+    },
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda"
+}

@@ -1,0 +1,37 @@
+Command line: /sci/labs/morani/morani/icore-data/lab/Tools/personal_condas/Netta/miniforge3/envs/ginger_314/bin/spades.py	--meta	-1	/sci/backup/morani/lab/Projects/GInGeR/GInGeR/tests/test_files/ecoli_1K_1.fq.gz	-2	/sci/backup/morani/lab/Projects/GInGeR/GInGeR/tests/test_files/ecoli_1K_2.fq.gz	-o	/sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes	-t	1	
+
+System information:
+  SPAdes version: 4.2.0
+  Python version: 3.14.2
+  OS: Linux-6.12.32-aufs-1-x86_64-with-glibc2.36
+
+Output dir: /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes
+Mode: read error correction and assembling
+Debug mode is turned OFF
+
+Dataset parameters:
+  Metagenomic mode
+  Reads:
+    Library number: 1, library type: paired-end
+      orientation: fr
+      left reads: ['/sci/backup/morani/lab/Projects/GInGeR/GInGeR/tests/test_files/ecoli_1K_1.fq.gz']
+      right reads: ['/sci/backup/morani/lab/Projects/GInGeR/GInGeR/tests/test_files/ecoli_1K_2.fq.gz']
+      interlaced reads: not specified
+      single reads: not specified
+      merged reads: not specified
+Read error correction parameters:
+  Iterations: 1
+  PHRED offset will be auto-detected
+  Corrected reads will be compressed
+Assembly parameters:
+  k: [21, 33, 55]
+  Repeat resolution is enabled
+  Mismatch careful mode is turned OFF
+  MismatchCorrector will be SKIPPED
+  Coverage cutoff is turned OFF
+  Assembly graph output will use GFA v1.2 format
+Other parameters:
+  Dir for temp files: /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/tmp
+  Threads: 1
+  Memory limit (in Gb): 250
+

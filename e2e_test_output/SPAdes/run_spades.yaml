@@ -1,0 +1,170 @@
+- STAGE: Before start
+  args: []
+  config_dir: ''
+  del_after: []
+  job_uuid: SPAdes_Before_start_Y9QUFKAN435HG2I4W0TAAFLS8L1BMT7Q
+  mpi_support: false
+  output_files: []
+  path: 'true'
+  short_name: before_start
+- STAGE: Read error correction
+  args: []
+  config_dir: ''
+  del_after: []
+  job_uuid: SPAdes_Read_error_correction_9A3VO9H96OBNVA18CVZ5C7F2HNBKEF4P
+  mpi_support: false
+  output_files: []
+  path: 'true'
+  short_name: ec_start
+- STAGE: Read error correction
+  args:
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/corrected/configs/config.info
+  config_dir: corrected
+  del_after:
+  - tmp/hammer_er6nn4wd
+  job_uuid: SPAdes_Read_error_correction_QBZD1UTAA0OIVCCQ4043PUKVZH83OA11
+  mpi_support: false
+  output_files:
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/corrected/corrected.yaml
+  path: /sci/labs/morani/morani/icore-data/lab/Tools/personal_condas/Netta/miniforge3/envs/ginger_314/bin/spades-hammer
+  short_name: ec_runtool
+- STAGE: corrected reads compression
+  args:
+  - /sci/labs/morani/morani/icore-data/lab/Tools/personal_condas/Netta/miniforge3/envs/ginger_314/share/spades/spades_pipeline/scripts/compress_all.py
+  - --input_file
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/corrected/corrected.yaml
+  - --ext_python_modules_home
+  - /sci/labs/morani/morani/icore-data/lab/Tools/personal_condas/Netta/miniforge3/envs/ginger_314/share/spades
+  - --max_threads
+  - '1'
+  - --output_dir
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/corrected
+  - --gzip_output
+  config_dir: ''
+  del_after: []
+  job_uuid: SPAdes_corrected_reads_compression_B48QCE44WMNDGBZASHS8OQNPRVZVTZKH
+  mpi_support: false
+  output_files: []
+  path: /sci/labs/morani/morani/icore-data/lab/Tools/personal_condas/Netta/miniforge3/envs/ginger_314/bin/python3
+  short_name: ec_compress
+- STAGE: Read error correction
+  args: []
+  config_dir: ''
+  del_after: []
+  job_uuid: SPAdes_Read_error_correction_ZB23F24KZXYDL1OUHGZXBNY5YF7NO67I
+  mpi_support: false
+  output_files: []
+  path: 'true'
+  short_name: ec_finish
+- STAGE: Assembling
+  args: []
+  config_dir: ''
+  del_after: []
+  job_uuid: SPAdes_Assembling_I9QT1N0FSAKEARQZLU68C9IFNUV635J9
+  mpi_support: false
+  output_files: []
+  path: 'true'
+  short_name: as_start
+- STAGE: K21
+  args:
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K21/configs/config.info
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K21/configs/mda_mode.info
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K21/configs/meta_mode.info
+  config_dir: K21
+  del_after: []
+  job_uuid: hpcSPAdes_K21_LZY6S0LBQD71OQU4ARN9EN9OFV4X70EL
+  mpi_support: true
+  output_files: []
+  path: /sci/labs/morani/morani/icore-data/lab/Tools/personal_condas/Netta/miniforge3/envs/ginger_314/bin/{spades_core}
+  short_name: k21
+- STAGE: K33
+  args:
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K33/configs/config.info
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K33/configs/mda_mode.info
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K33/configs/meta_mode.info
+  config_dir: K33
+  del_after: []
+  job_uuid: hpcSPAdes_K33_9B9T6NJQ0IJGKUO0RLZFZK8HOGGPNEV2
+  mpi_support: true
+  output_files: []
+  path: /sci/labs/morani/morani/icore-data/lab/Tools/personal_condas/Netta/miniforge3/envs/ginger_314/bin/{spades_core}
+  short_name: k33
+- STAGE: K55
+  args:
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K55/configs/config.info
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K55/configs/mda_mode.info
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K55/configs/meta_mode.info
+  config_dir: K55
+  del_after: []
+  job_uuid: hpcSPAdes_K55_0JKUINEBNO4UMTBGRAIA220AM8XSE8B9
+  mpi_support: true
+  output_files: []
+  path: /sci/labs/morani/morani/icore-data/lab/Tools/personal_condas/Netta/miniforge3/envs/ginger_314/bin/{spades_core}
+  short_name: k55
+- STAGE: Copy files
+  args:
+  - /sci/labs/morani/morani/icore-data/lab/Tools/personal_condas/Netta/miniforge3/envs/ginger_314/share/spades/spades_pipeline/scripts/copy_files.py
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K55/before_rr.fasta
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/before_rr.fasta
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K55/assembly_graph_after_simplification.gfa
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/assembly_graph_after_simplification.gfa
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K55/final_contigs.fasta
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/contigs.fasta
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K55/first_pe_contigs.fasta
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/first_pe_contigs.fasta
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K55/strain_graph.gfa
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/strain_graph.gfa
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K55/scaffolds.fasta
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/scaffolds.fasta
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K55/scaffolds.paths
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/scaffolds.paths
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K55/assembly_graph_with_scaffolds.gfa
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/assembly_graph_with_scaffolds.gfa
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K55/assembly_graph.fastg
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/assembly_graph.fastg
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/K55/final_contigs.paths
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/contigs.paths
+  config_dir: ''
+  del_after:
+  - .bin_reads
+  - tmp/spades_gbwjsgih
+  job_uuid: SPAdes_Copy_files_RN1F1MDTY65OTZPCSKC6PBAY1A7MCF9M
+  mpi_support: false
+  output_files: []
+  path: /sci/labs/morani/morani/icore-data/lab/Tools/personal_condas/Netta/miniforge3/envs/ginger_314/bin/python3
+  short_name: copy_files
+- STAGE: Assembling
+  args: []
+  config_dir: ''
+  del_after: []
+  job_uuid: SPAdes_Assembling_KWUKT28BA47QQ026Z8QTFAJFJ6N4UYWO
+  mpi_support: false
+  output_files: []
+  path: 'true'
+  short_name: as_finish
+- STAGE: Breaking scaffolds
+  args:
+  - /sci/labs/morani/morani/icore-data/lab/Tools/personal_condas/Netta/miniforge3/envs/ginger_314/share/spades/spades_pipeline/scripts/breaking_scaffolds_script.py
+  - --result_scaffolds_filename
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/scaffolds.fasta
+  - --misc_dir
+  - /sci/backup/morani/lab/Projects/GInGeR/GInGeR/e2e_test_output/SPAdes/misc
+  - --threshold_for_breaking_scaffolds
+  - '3'
+  config_dir: ''
+  del_after: []
+  job_uuid: SPAdes_Breaking_scaffolds_2N1CCGCSZXH4B8AD4EPTFRBV0L5VV5KJ
+  mpi_support: false
+  output_files: []
+  path: /sci/labs/morani/morani/icore-data/lab/Tools/personal_condas/Netta/miniforge3/envs/ginger_314/bin/python3
+  short_name: bs
+- STAGE: Terminate
+  args: []
+  config_dir: ''
+  del_after:
+  - configs
+  job_uuid: SPAdes_Terminate_LVKVVXCGZ9829XKOC2V0V46BXLURWFQE
+  mpi_support: false
+  output_files: []
+  path: 'true'
+  short_name: terminate

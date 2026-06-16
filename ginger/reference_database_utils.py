@@ -17,7 +17,7 @@ import re
 
 log = logging.getLogger(__name__)
 KRAKEN_COMMAND = 'kraken2 --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {kraken_output} --report {kraken_report} --confidence 0.1 --use-names'  # --report {report}
-BRACKEN_COMMAND = 'bracken -d {kraken_db} -i {kraken_report} -o {bracken_output} -w {bracken_report} -r {read_len} -l {kmer_len} -t {threads}'
+BRACKEN_COMMAND = 'bracken -d {kraken_db} -i {kraken_report} -o {bracken_output} -w {bracken_report} -r {read_len} -l S -t {threads}'
 URLOPEN_TIMEOUT = 60
 N_ATTEMPTS = 10
 SLEEP_SECS = 60
