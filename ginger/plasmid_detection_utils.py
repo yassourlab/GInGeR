@@ -107,11 +107,14 @@ def read_plasmid_scores(plasmid_summary_path):
     is_context = summary_df['seq_name'].str.contains('|', regex=False)
 
     context_plasmid_scores = summary_df[is_context].copy()
-    context_split = context_plasmid_scores['seq_name'].str.split('|', expand=True)
-    context_plasmid_scores['gene'] = context_split[0]
-    context_plasmid_scores['in_context'] = context_split[1]
-    context_plasmid_scores['out_context'] = context_split[2]
-    context_plasmid_scores = context_plasmid_scores[['gene', 'in_context', 'out_context', 'plasmid_score']]
+    if context_plasmid_scores.empty:
+        context_plasmid_scores = pd.DataFrame(columns=['gene', 'in_context', 'out_context', 'plasmid_score'])
+    else:
+        context_split = context_plasmid_scores['seq_name'].str.split('|', expand=True)
+        context_plasmid_scores['gene'] = context_split[0]
+        context_plasmid_scores['in_context'] = context_split[1]
+        context_plasmid_scores['out_context'] = context_split[2]
+        context_plasmid_scores = context_plasmid_scores[['gene', 'in_context', 'out_context', 'plasmid_score']]
 
     contig_plasmid_scores = summary_df[~is_context].rename(columns={'seq_name': 'contig'})[['contig', 'plasmid_score']]
 

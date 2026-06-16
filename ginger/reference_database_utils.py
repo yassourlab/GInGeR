@@ -18,11 +18,6 @@ import re
 log = logging.getLogger(__name__)
 KRAKEN_COMMAND = 'kraken2 --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {kraken_output} --report {kraken_report} --confidence 0.1 --use-names'  # --report {report}
 BRACKEN_COMMAND = 'bracken -d {kraken_db} -i {kraken_report} -o {bracken_output} -w {bracken_report} -r {read_len} -l {kmer_len} -t {threads}'
-KRAKEN_OUTPUT_HEADER = ['classified', 'read', 'genome', 'reads_len', 'mapping_str']
-
-READ_STATUS_INDEX = 0
-SPECIES_NAME_INDEX = 2
-NUM_READS_RATIO = 0.005
 URLOPEN_TIMEOUT = 60
 N_ATTEMPTS = 10
 SLEEP_SECS = 60

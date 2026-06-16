@@ -101,6 +101,38 @@ class ReadPlasmidScoresTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp_dir)
 
+    def test_no_context_rows_returns_empty_context_df(self):
+        """GeNomad output with only contig rows (no '|' in seq_name) must not crash."""
+        summary_path = os.path.join(self.tmp_dir, 'plasmid_summary.tsv')
+        pd.DataFrame({
+            'seq_name': ['contig1', 'contig2'],
+            'length': [1000, 2000],
+            'plasmid_score': [0.9, 0.3],
+        }).to_csv(summary_path, sep='\t', index=False)
+
+        context_plasmid_scores, contig_plasmid_scores = pdu.read_plasmid_scores(summary_path)
+
+        self.assertListEqual(list(context_plasmid_scores.columns), ['gene', 'in_context', 'out_context', 'plasmid_score'])
+        self.assertEqual(len(context_plasmid_scores), 0)
+        self.assertListEqual(list(contig_plasmid_scores.columns), ['contig', 'plasmid_score'])
+        self.assertEqual(len(contig_plasmid_scores), 2)
+
+    def test_no_contig_rows_returns_empty_contig_df(self):
+        """GeNomad output with only context rows must not crash."""
+        summary_path = os.path.join(self.tmp_dir, 'plasmid_summary.tsv')
+        pd.DataFrame({
+            'seq_name': ['geneA|in_ctx1|out_ctx1', 'geneB|in_ctx2|out_ctx2'],
+            'length': [500, 600],
+            'plasmid_score': [0.8, 0.5],
+        }).to_csv(summary_path, sep='\t', index=False)
+
+        context_plasmid_scores, contig_plasmid_scores = pdu.read_plasmid_scores(summary_path)
+
+        self.assertListEqual(list(context_plasmid_scores.columns), ['gene', 'in_context', 'out_context', 'plasmid_score'])
+        self.assertEqual(len(context_plasmid_scores), 2)
+        self.assertListEqual(list(contig_plasmid_scores.columns), ['contig', 'plasmid_score'])
+        self.assertEqual(len(contig_plasmid_scores), 0)
+
     def test_splits_context_and_contig_rows(self):
         summary_path = os.path.join(self.tmp_dir, 'plasmid_summary.tsv')
         summary_df = pd.DataFrame({
