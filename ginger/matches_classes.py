@@ -31,7 +31,7 @@ class PathRefGenomeMatch:
         self.ref_genome_start = paf_line.tstart
         self.ref_genome_end = paf_line.tend
 
-        self.score = paf_line.mlen / min(self.path_length, self.ref_genome_end, self.ref_genome_length - self.ref_genome_start)
+        self.score = paf_line.mlen / self.path_length
 
     def __str__(self):
         return f'{self.ref_genome} {self.species} {self.gene} nodes: {self.nodes_list} path: {self.path} match score:{self.score} strand: {self.strand} {self.ref_genome_start} to {self.ref_genome_end}'

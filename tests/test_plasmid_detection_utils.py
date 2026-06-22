@@ -75,6 +75,30 @@ class WritePlasmidDetectionInputFastaTest(unittest.TestCase):
         self.assertEqual(records['contig2'], 'GGGGCCCCAA')
         self.assertNotIn('contig1', records)
 
+    def test_minus_strand_gene_sequence_is_not_reverse_complemented(self):
+        # in/out path sequences are always extracted in the contig's forward orientation, so
+        # the spliced gene segment must stay forward too, even when gene_match.strand is '-'.
+        in_paths_fasta = self._write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII'})
+        out_paths_fasta = self._write_fasta('out.fasta', {'out_ctx1': 'OOOOOOOO'})
+        contigs_fasta = self._write_fasta('contigs.fasta', {'contig1': 'AAAAACCCCC'})
+
+        genes_with_location_in_graph = [
+            FakeGeneMatch('geneA', 'contig1', 1.0, 3, 6, '-'),
+        ]
+        context_level_results = {
+            ('geneA', 'ref_genome1'): [FakeInOutMatch('geneA', 'in_ctx1', 'out_ctx1')],
+        }
+
+        output_fasta_path = os.path.join(self.tmp_dir, 'plasmid_input.fasta')
+        pdu.write_plasmid_detection_input_fasta(
+            context_level_results, genes_with_location_in_graph, set(),
+            in_paths_fasta, out_paths_fasta, contigs_fasta, output_fasta_path)
+
+        records = pdu._fasta_to_dict(output_fasta_path)
+        # contig1[2:6] = "AACC", kept forward - NOT its reverse complement "GGTT", since
+        # in/out paths are already extracted in the contig's forward orientation.
+        self.assertEqual(records['geneA|in_ctx1|out_ctx1'], 'IIIIIIIIAACCOOOOOOOO')
+
     def test_returns_none_and_removes_file_when_nothing_to_write(self):
         in_paths_fasta = self._write_fasta('in.fasta', {})
         out_paths_fasta = self._write_fasta('out.fasta', {})

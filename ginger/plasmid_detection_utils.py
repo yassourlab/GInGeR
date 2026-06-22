@@ -3,7 +3,6 @@ import logging
 from subprocess import run
 import pandas as pd
 from Bio import SeqIO
-from Bio.Seq import Seq
 
 from ginger import pipeline_utils as pu
 
@@ -18,10 +17,10 @@ def _fasta_to_dict(fasta_path: str) -> dict:
 
 
 def _get_gene_sequence(contig_seq: str, gene_match) -> str:
-    seq = contig_seq[gene_match.start - 1:gene_match.end]
-    if gene_match.strand == '-':
-        seq = str(Seq(seq).reverse_complement())
-    return seq
+    # in/out path sequences are always extracted in the contig's forward orientation
+    # (see extract_contexts_candidates.py), so the gene segment must stay forward too -
+    # reverse-complementing it here would splice a flipped middle into forward-oriented flanks.
+    return contig_seq[gene_match.start - 1:gene_match.end]
 
 
 def write_plasmid_detection_input_fasta(context_level_results, genes_with_location_in_graph, matched_genes,
