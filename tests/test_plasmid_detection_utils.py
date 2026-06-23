@@ -95,9 +95,9 @@ class WritePlasmidDetectionInputFastaTest(unittest.TestCase):
             in_paths_fasta, out_paths_fasta, contigs_fasta, output_fasta_path)
 
         records = pdu._fasta_to_dict(output_fasta_path)
-        # contig1[2:6] = "AACC", kept forward - NOT its reverse complement "GGTT", since
+        # contig1[2:6] = "AAAC", kept forward - NOT its reverse complement "GTTT", since
         # in/out paths are already extracted in the contig's forward orientation.
-        self.assertEqual(records['geneA|in_ctx1|out_ctx1'], 'IIIIIIIIAACCOOOOOOOO')
+        self.assertEqual(records['geneA|in_ctx1|out_ctx1'], 'IIIIIIIIAAACOOOOOOOO')
 
     def test_returns_none_and_removes_file_when_nothing_to_write(self):
         in_paths_fasta = self._write_fasta('in.fasta', {})
