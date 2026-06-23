@@ -147,10 +147,11 @@ GInGeR outputs the following result files:
       to references of a single species has a diversity of 0; the more evenly a trio is spread across distinct species,
       the higher its diversity.
     * context_species_confidence_score - how confidently this row's in_context/out_context pair (the in-gene-out trio)
-      points to this row's species, versus other species also matched by the same trio. For every species matched by
-      the trio, the number of matches is divided by that species' number of references (capped at
-      `--max-species-representatives`), and the resulting corrected counts are normalized so the confidence scores of
-      all species matched by the trio sum to 1.
+      points to this row's species, versus other species also matched by the same trio. in_context and out_context are
+      scored independently using the same logic: for every species matched by the context, the number of matches is
+      divided by that species' number of references (capped at `--max-species-representatives`), and the resulting
+      corrected counts are normalized so the scores of all species matched by that context sum to 1.
+      context_species_confidence_score is the average of the in_context and out_context scores.
 
 2. **species_level_matches.csv** - An aggregation of the first output by gene and species, summarizing whether a
    gene was detected in a certain species in the sample. The CSV columns are:

@@ -150,6 +150,8 @@ class PipelineUtilsTest(unittest.TestCase):
 
         result = pu.compute_context_species_confidence_score(results_df, species_reference_counts)
 
+        # in1 is only ever paired with out1 (and in2 with out2), so the in_context-only and
+        # out_context-only scores agree and their average equals either one.
         # trio (in1, out1) matches 2 genomes of species_A and 1 of species_B. Corrected counts
         # (2/2=1, 1/1=1) are equal, so each species gets confidence 0.5
         for _, row in result[result['in_context'] == 'in1'].iterrows():
@@ -158,6 +160,26 @@ class PipelineUtilsTest(unittest.TestCase):
         # trio (in2, out2) matches only species_A -> single species -> confidence 1.0
         for _, row in result[result['in_context'] == 'in2'].iterrows():
             self.assertAlmostEqual(row['context_species_confidence_score'], 1.0)
+
+    def test_compute_context_species_confidence_score_in_out_context_disagree(self):
+        # in1 is shared by two out_contexts that each match a single, different species, so the
+        # in_context-only and out_context-only scores disagree and must be averaged.
+        results_df = pd.DataFrame({
+            'gene': ['g1', 'g1'],
+            'in_context': ['in1', 'in1'],
+            'out_context': ['out1', 'out2'],
+            'Genome': ['G1', 'G2'],
+            'species': ['species_A', 'species_B'],
+        })
+        species_reference_counts = pd.Series({'species_A': 1, 'species_B': 1})
+
+        result = pu.compute_context_species_confidence_score(results_df, species_reference_counts)
+
+        # in_context score (in1 matches both species equally) = 0.5 for both rows
+        # out_context score (out1/out2 each match a single species) = 1.0 for both rows
+        # average = 0.75
+        for _, row in result.iterrows():
+            self.assertAlmostEqual(row['context_species_confidence_score'], 0.75)
 
     def test_write_context_level_output_to_csv_context_species_diversity_and_confidence_score(self):
         def make_match(gene, in_query_name, out_query_name):
