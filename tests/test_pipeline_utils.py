@@ -27,6 +27,7 @@ class PipelineUtilsTest(unittest.TestCase):
         cls.context_level_output_path_with_dups = f'{TEST_FILES}/context_level_matches_with_dups.csv'  # dups means that the same gene is matched to the same genome twice
         cls.context_level_output_path_with_plasmid_score = f'{TEST_FILES}/context_level_matches_with_plasmid_score.csv'
         cls.context_level_output_path_with_context_species_diversity = f'{TEST_FILES}/context_level_matches_context_species_diversity.csv'
+        cls.context_level_output_path_with_context_species_confidence_score = f'{TEST_FILES}/context_level_matches_context_species_confidence_score.csv'
         cls.context_species_diversity_metadata_path = f'{TEST_FILES}/context_species_diversity_metadata.tsv'
         cls.metadata_path = 'ginger/UHGG-metadata.tsv' # use this for running tests on github CI
         # cls.metadata_path = '../ginger/UHGG-metadata.tsv' # use this for running the test locally
@@ -34,6 +35,7 @@ class PipelineUtilsTest(unittest.TestCase):
         cls.species_level_output_path_with_dups = f'test_species_level_matches_with_dups.csv'  # dups means that the same gene is matched to the same genome twice
         cls.species_level_output_path_with_plasmid_score = 'test_species_level_matches_with_plasmid_score.csv'
         cls.species_level_output_path_with_context_species_diversity = 'test_species_level_matches_context_species_diversity.csv'
+        cls.species_level_output_path_with_context_species_confidence_score = 'test_species_level_matches_context_species_confidence_score.csv'
         # GT files
         cls.species_level_output_path_gt = f'{TEST_FILES}/species_level_matches.csv'
         cls.species_level_output_path_with_dups_gt = f'{TEST_FILES}/species_level_matches_with_dups.csv'
@@ -46,6 +48,8 @@ class PipelineUtilsTest(unittest.TestCase):
             os.remove(cls.species_level_output_path_with_plasmid_score)
         if os.path.exists(cls.species_level_output_path_with_context_species_diversity):
             os.remove(cls.species_level_output_path_with_context_species_diversity)
+        if os.path.exists(cls.species_level_output_path_with_context_species_confidence_score):
+            os.remove(cls.species_level_output_path_with_context_species_confidence_score)
 
     def test_aggregate_context_level_output_to_species_level_output_and_write_csv(self):
         pu.aggregate_context_level_output_to_species_level_output_and_write_csv(self.context_level_output_path,
@@ -85,10 +89,6 @@ class PipelineUtilsTest(unittest.TestCase):
         # plasmid_score_most_common_context is the score of the context matched to 2 genomes (0.9), not 1 (0.3)
         self.assertAlmostEqual(row['plasmid_score_most_common_context'], 0.9)
 
-        # all 3 rows are single-species trios, so their context_species_diversity is 0
-        self.assertAlmostEqual(row['context_species_diversity_mean'], 0.0)
-        self.assertAlmostEqual(row['context_species_diversity_median'], 0.0)
-        self.assertAlmostEqual(row['context_species_diversity_mode'], 0.0)
         # 2 distinct (in_context, out_context) trios: ctx1 and ctx2
         self.assertEqual(row['n_contexts'], 2)
 
@@ -101,14 +101,21 @@ class PipelineUtilsTest(unittest.TestCase):
         self.assertTrue(os.path.exists(self.species_level_output_path_with_context_species_diversity))
 
         row = species_level_output.loc[('gene2', 'Escherichia coli_D')]
-        # per-reference diversity (R3's two contexts, 0.2 and 0.6, are averaged to 0.4):
-        # R1=0.0, R2=0.0, R3=0.4, R4=0.6, R5=0.6, R6=1.0
-        self.assertAlmostEqual(row['context_species_diversity_mean'], 2.6 / 6)
-        self.assertAlmostEqual(row['context_species_diversity_median'], 0.5)
-        # 0.0 and 0.6 are tied as the most common per-reference value (twice each) -> averaged
-        self.assertAlmostEqual(row['context_species_diversity_mode'], 0.3)
         # 5 distinct (in_context, out_context) trios: T1, T2, T3, T4, T6
         self.assertEqual(row['n_contexts'], 5)
+
+    def test_aggregate_context_level_output_to_species_level_output_and_write_csv_with_context_species_confidence_score(self):
+        species_level_output = pu.aggregate_context_level_output_to_species_level_output_and_write_csv(
+            self.context_level_output_path_with_context_species_confidence_score,
+            self.metadata_path,
+            self.species_level_output_path_with_context_species_confidence_score, 1)
+
+        self.assertTrue(os.path.exists(self.species_level_output_path_with_context_species_confidence_score))
+
+        row = species_level_output.loc[('gene2', 'Escherichia coli_D')]
+        # 5 distinct (in_context, out_context) trios (T1=0.1, T2=0.2, T3=0.3, T4=0.4, T6=0.5);
+        # R1/R2 share T1 and R4/R5 share T4, so those duplicate rows must not be double-counted
+        self.assertAlmostEqual(row['species_confidence_score'], 0.3)
 
     def test_compute_context_species_diversity(self):
         results_df = pd.DataFrame({
@@ -131,7 +138,50 @@ class PipelineUtilsTest(unittest.TestCase):
         for _, row in result[result['in_context'] == 'in2'].iterrows():
             self.assertAlmostEqual(row['context_species_diversity'], 0.0)
 
-    def test_write_context_level_output_to_csv_context_species_diversity(self):
+    def test_compute_context_species_confidence_score(self):
+        results_df = pd.DataFrame({
+            'gene': ['g1', 'g1', 'g1', 'g1'],
+            'in_context': ['in1', 'in1', 'in1', 'in2'],
+            'out_context': ['out1', 'out1', 'out1', 'out2'],
+            'Genome': ['G1', 'G2', 'G4', 'G3'],
+            'species': ['species_A', 'species_A', 'species_B', 'species_A'],
+        })
+        species_reference_counts = pd.Series({'species_A': 2, 'species_B': 1})
+
+        result = pu.compute_context_species_confidence_score(results_df, species_reference_counts)
+
+        # in1 is only ever paired with out1 (and in2 with out2), so the in_context-only and
+        # out_context-only scores agree and their average equals either one.
+        # trio (in1, out1) matches 2 genomes of species_A and 1 of species_B. Corrected counts
+        # (2/2=1, 1/1=1) are equal, so each species gets confidence 0.5
+        for _, row in result[result['in_context'] == 'in1'].iterrows():
+            self.assertAlmostEqual(row['context_species_confidence_score'], 0.5)
+
+        # trio (in2, out2) matches only species_A -> single species -> confidence 1.0
+        for _, row in result[result['in_context'] == 'in2'].iterrows():
+            self.assertAlmostEqual(row['context_species_confidence_score'], 1.0)
+
+    def test_compute_context_species_confidence_score_in_out_context_disagree(self):
+        # in1 is shared by two out_contexts that each match a single, different species, so the
+        # in_context-only and out_context-only scores disagree and must be averaged.
+        results_df = pd.DataFrame({
+            'gene': ['g1', 'g1'],
+            'in_context': ['in1', 'in1'],
+            'out_context': ['out1', 'out2'],
+            'Genome': ['G1', 'G2'],
+            'species': ['species_A', 'species_B'],
+        })
+        species_reference_counts = pd.Series({'species_A': 1, 'species_B': 1})
+
+        result = pu.compute_context_species_confidence_score(results_df, species_reference_counts)
+
+        # in_context score (in1 matches both species equally) = 0.5 for both rows
+        # out_context score (out1/out2 each match a single species) = 1.0 for both rows
+        # average = 0.75
+        for _, row in result.iterrows():
+            self.assertAlmostEqual(row['context_species_confidence_score'], 0.75)
+
+    def test_write_context_level_output_to_csv_context_species_diversity_and_confidence_score(self):
         def make_match(gene, in_query_name, out_query_name):
             in_path = SimpleNamespace(query_name=in_query_name, strand='+', ref_genome_start=100, ref_genome_end=200)
             out_path = SimpleNamespace(query_name=out_query_name, strand='+', ref_genome_start=300, ref_genome_end=400)
@@ -155,10 +205,18 @@ class PipelineUtilsTest(unittest.TestCase):
 
             results_df = pd.read_csv(csv_path)
             diversity_by_contig = results_df.set_index('reference_contig')['context_species_diversity']
+            confidence_by_contig = results_df.set_index('reference_contig')['context_species_confidence_score']
 
             for contig in ['G1_1', 'G2_1', 'G4_1']:
                 self.assertAlmostEqual(diversity_by_contig[contig], math.log(2))
             self.assertAlmostEqual(diversity_by_contig['G3_1'], 0.0)
+
+            # trio (g1_in1, g1_out1): species_A corrected count 2/2=1.0, species_B 1/1=1.0,
+            # sum=2.0 -> confidence 0.5 for both species
+            for contig in ['G1_1', 'G2_1', 'G4_1']:
+                self.assertAlmostEqual(confidence_by_contig[contig], 0.5)
+            # trio (g1_in2, g1_out2): species_A only -> confidence 1.0
+            self.assertAlmostEqual(confidence_by_contig['G3_1'], 1.0)
         finally:
             if os.path.exists(csv_path):
                 os.remove(csv_path)

@@ -1,0 +1,8 @@
+gene,Genome,species,score,in_context,out_context,context_species_confidence_score
+gene2,R1,Escherichia coli_D,0.9,T1_in,T1_out,0.1
+gene2,R2,Escherichia coli_D,0.9,T1_in,T1_out,0.1
+gene2,R3,Escherichia coli_D,0.9,T2_in,T2_out,0.2
+gene2,R3,Escherichia coli_D,0.9,T3_in,T3_out,0.3
+gene2,R4,Escherichia coli_D,0.9,T4_in,T4_out,0.4
+gene2,R5,Escherichia coli_D,0.9,T4_in,T4_out,0.4
+gene2,R6,Escherichia coli_D,0.9,T6_in,T6_out,0.5

@@ -194,6 +194,47 @@ def compute_context_species_diversity(results_df, species_reference_counts,
     return results_df.merge(diversity, on=group_cols, how='left')
 
 
+def _compute_single_context_confidence_score(results_df, species_reference_counts, context_col, species_col,
+                                              score_col):
+    """How confidently a single context column (in_context or out_context, considered on its
+    own) points to each species it was matched to. See `compute_context_species_confidence_score`
+    for the underlying logic.
+    """
+    species_counts = results_df.groupby([context_col, species_col]).size().rename('count').reset_index()
+    species_counts['corrected_count'] = species_counts['count'] / species_counts[species_col].map(
+        species_reference_counts)
+    corrected_count_sum = species_counts.groupby(context_col)['corrected_count'].sum().rename('corrected_count_sum')
+    species_counts = species_counts.merge(corrected_count_sum, on=context_col)
+    species_counts[score_col] = species_counts['corrected_count'] / species_counts['corrected_count_sum']
+    return species_counts[[context_col, species_col, score_col]]
+
+
+def compute_context_species_confidence_score(results_df, species_reference_counts,
+                                               context_cols=('in_context', 'out_context'),
+                                               species_col='species'):
+    """Compute how confidently a context (the in-gene-out trio) points to each species it was
+    matched to, versus other species also matched by it.
+
+    The in_context and out_context are scored independently using the same logic: for every
+    species matched by the context, the number of matches is divided by
+    `species_reference_counts` (so species with more available references don't get more
+    weight), and the corrected counts are normalized so the scores of all species matched by
+    that context sum to 1. `context_species_confidence_score` is the average of the in_context
+    and out_context scores.
+    """
+    in_context_col, out_context_col = context_cols
+    in_scores = _compute_single_context_confidence_score(results_df, species_reference_counts, in_context_col,
+                                                          species_col, 'in_context_confidence_score')
+    out_scores = _compute_single_context_confidence_score(results_df, species_reference_counts, out_context_col,
+                                                           species_col, 'out_context_confidence_score')
+
+    results_df = results_df.merge(in_scores, on=[in_context_col, species_col], how='left')
+    results_df = results_df.merge(out_scores, on=[out_context_col, species_col], how='left')
+    results_df['context_species_confidence_score'] = results_df[
+        ['in_context_confidence_score', 'out_context_confidence_score']].mean(axis=1)
+    return results_df.drop(columns=['in_context_confidence_score', 'out_context_confidence_score'])
+
+
 @step_timing
 def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str, max_species_representatives: int):
     results_dict = defaultdict(list)
@@ -227,6 +268,7 @@ def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str,
     if 'species' in results_df.columns:
         species_reference_counts = metadata_df['species'].value_counts().clip(upper=max_species_representatives)
         results_df = compute_context_species_diversity(results_df, species_reference_counts)
+        results_df = compute_context_species_confidence_score(results_df, species_reference_counts)
 
     results_df.to_csv(csv_path, index=False)
 
@@ -242,23 +284,28 @@ def aggregate_context_level_output_to_species_level_output_and_write_csv(context
     context_level_df.columns = [x.lower() for x in context_level_df.columns]
     metadata_df.columns = [x.lower() for x in metadata_df.columns]
 
+    group_cols = ['gene', species_col]
+    context_cols = ['in_context', 'out_context']
+
     genomes_per_species = metadata_df[species_col].value_counts().to_frame()
     genomes_per_species[f'{species_col}_instances'] = genomes_per_species['count'].apply(
         lambda x: min(x, max_species_representatives))
-    agg_output = context_level_df.groupby(['gene', species_col]).aggregate(
-        {'genome': ['nunique'], 'score': ['max']})
+    # combine in_context/out_context into a single column so their distinct-pair count can be
+    # aggregated alongside genome/score in one groupby
+    context_level_df['context_pair'] = list(zip(*(context_level_df[col] for col in context_cols)))
+    agg_output = context_level_df.groupby(group_cols).aggregate(
+        {'genome': ['nunique'], 'score': ['max'], 'context_pair': ['nunique']})
     agg_output.columns = ['_'.join(col) for col in agg_output.columns.values]
     agg_output = agg_output.merge(genomes_per_species, left_on=species_col, right_index=True, how='left')
     agg_output['references_ratio'] = agg_output['genome_nunique'] / agg_output[f'{species_col}_instances']
-    species_level_output = agg_output[['references_ratio', 'score_max', f'{species_col}_instances']]
+    agg_output = agg_output.rename(columns={'context_pair_nunique': 'n_contexts'})
+    species_level_output = agg_output[['references_ratio', 'score_max', f'{species_col}_instances', 'n_contexts']]
+
+    unique_contexts = context_level_df.drop_duplicates(group_cols + context_cols)
 
     if 'plasmid_score' in context_level_df.columns:
-        group_cols = ['gene', species_col]
-        context_cols = ['in_context', 'out_context']
-
         # average plasmid score across the gene's unique contexts (don't over-weight contexts
         # that were matched to many reference genomes of the same species)
-        unique_contexts = context_level_df.drop_duplicates(group_cols + context_cols)
         plasmid_score_mean = unique_contexts.groupby(group_cols)['plasmid_score'].mean().rename('plasmid_score_mean')
 
         # plasmid score of the context(s) matched to the most reference genomes, averaging ties
@@ -271,26 +318,14 @@ def aggregate_context_level_output_to_species_level_output_and_write_csv(context
 
         species_level_output = species_level_output.join(plasmid_score_mean).join(plasmid_score_most_common_context)
 
-    if 'context_species_diversity' in context_level_df.columns:
-        group_cols = ['gene', species_col]
+    if 'context_species_confidence_score' in context_level_df.columns:
+        # a context's confidence score is constant per (gene, species, in_context, out_context);
+        # dedup before averaging so contexts matched to many reference genomes of the species
+        # aren't over-weighted
+        species_confidence_score = unique_contexts.groupby(group_cols)['context_species_confidence_score'].mean(
+        ).rename('species_confidence_score')
 
-        # if a reference was matched by more than one context, average their diversity scores
-        # and treat the reference as a single match with that averaged score
-        per_reference_diversity = context_level_df.groupby(group_cols + ['genome'])[
-            'context_species_diversity'].mean()
-
-        diversity_mean = per_reference_diversity.groupby(level=group_cols).mean().rename(
-            'context_species_diversity_mean')
-        diversity_median = per_reference_diversity.groupby(level=group_cols).median().rename(
-            'context_species_diversity_median')
-        diversity_mode = per_reference_diversity.groupby(level=group_cols).apply(lambda x: x.mode().mean()).rename(
-            'context_species_diversity_mode')
-
-        n_contexts = context_level_df.groupby(group_cols).apply(
-            lambda x: x[['in_context', 'out_context']].drop_duplicates().shape[0]).rename('n_contexts')
-
-        species_level_output = species_level_output.join(diversity_mean).join(diversity_median).join(
-            diversity_mode).join(n_contexts)
+        species_level_output = species_level_output.join(species_confidence_score)
 
     if species_level_output_path is not None:
         species_level_output.to_csv(species_level_output_path)
