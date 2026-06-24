@@ -17,10 +17,11 @@ import re
 
 log = logging.getLogger(__name__)
 KRAKEN_COMMAND = 'kraken2 --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {kraken_output} --report {kraken_report} --confidence 0.1 --use-names'  # --report {report}
-BRACKEN_COMMAND = 'bracken -d {kraken_db} -i {kraken_report} -o {bracken_output} -w {bracken_report} -r {read_len} -l S -t {threads}'
+BRACKEN_COMMAND = 'bracken -d {kraken_db} -i {kraken_report} -o {bracken_output} -w {bracken_report} -r {read_len} -l S -t {min_reads_for_bracken}'
 URLOPEN_TIMEOUT = 60
 N_ATTEMPTS = 10
 SLEEP_SECS = 60
+BRACKEN_MIN_READS_RELAXATION_FACTOR = 0.7
 
 
 def get_paired_reads_seqkit_stats(reads_1: str, reads_2: str):
@@ -80,13 +81,31 @@ def get_kmer_length_options(kraken_db):
     return extracted_parts
 
 
-def run_bracken(kraken_report, bracken_output, bracken_report, kraken_db, threads, max_read_len: int):
+def get_min_reads_for_bracken(metadata_path: str, species_coverage_threshold: float, avg_sum: float, bracken_relaxation_factor:float =BRACKEN_MIN_READS_RELAXATION_FACTOR) -> int:
+    """Minimum reads Bracken requires before re-estimating a taxon's abundance.
+
+    Derived from `species_coverage_threshold` (the same absolute-coverage threshold used in
+    `get_species_passing_coverage_threshold`) using the smallest genome length in the reference
+    metadata, so this pre-filter never excludes a species that could pass the coverage threshold
+    downstream.
+    The relaxation factor allows for an even more permissive threshold, so that in case that many reads are mapped only to the genus level, we still give the species some chance to be considered by bracken and potentially by GInGeR.
+    """
+    metadata = pd.read_csv(metadata_path, sep='\t')
+    lengths = pd.to_numeric(metadata['Length'], errors='coerce')
+    lengths = lengths[lengths > 0]
+    if len(lengths) == 0 or avg_sum <= 0:
+        return 0
+    min_genome_length = lengths.min()
+    return max(0, int(np.ceil(species_coverage_threshold * min_genome_length / avg_sum)))
+
+
+def run_bracken(kraken_report, bracken_output, bracken_report, kraken_db, min_reads_for_bracken, max_read_len: int):
     kmer_length_options = get_kmer_length_options(kraken_db)
     # get the kmer length that is closest to the read length
     read_len = min(kmer_length_options, key=lambda x: abs(int(x) - max_read_len))
     command = BRACKEN_COMMAND.format(kraken_db=kraken_db, kraken_report=kraken_report, bracken_output=bracken_output,
                                      bracken_report=bracken_report, read_len=read_len,
-                                     threads=threads)
+                                     min_reads_for_bracken=min_reads_for_bracken)
     log.info(f'Running Bracken - {command}')
     # command_output = run(command, shell=True, capture_output=True)
     with Popen(command.split(' '), stdout=PIPE) as bracken_process:
@@ -265,7 +284,8 @@ def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_pa
     avg_sum = avg1 + avg2
     max_read_len = max(max1, max2)
 
-    run_bracken(kraken_report_path, bracken_output, bracken_report, kraken_db, threads, max_read_len)
+    min_reads_for_bracken = get_min_reads_for_bracken(metadata_path, species_coverage_threshold, avg_sum)
+    run_bracken(kraken_report_path, bracken_output, bracken_report, kraken_db, min_reads_for_bracken, max_read_len)
     top_species = get_species_passing_coverage_threshold(bracken_output, avg_sum, metadata_path,
                                                          max_species_representatives, species_coverage_threshold)
     selected_species_df = generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path,
