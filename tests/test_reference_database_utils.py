@@ -1,5 +1,8 @@
 import unittest
+import tempfile
+import os
 from unittest.mock import patch
+import pandas as pd
 from ginger import reference_database_utils as rdu
 from tests import helper
 
@@ -48,6 +51,19 @@ class MyTestCase(unittest.TestCase):
         # SE: 200000*200/5000000 = 8.0 (fail)
         # YE: 200000*200/3000000 = 13.33.. (pass)
         self.assertEqual(set(passing), set(['Enterobacter cloacae', 'Yersinia enterocolitica']))
+
+    def test_filter_kraken_report_by_distinct_kmer_count(self):
+        kraken_report_path = f'{TEST_FILES}/kraken_report_filter_test.txt'
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filtered_path = os.path.join(tmpdir, 'filtered_report.txt')
+            rdu.filter_kraken_report_by_distinct_kmer_count(kraken_report_path, filtered_path, threshold=200000)
+            filtered = pd.read_csv(filtered_path, sep='\t', header=None, names=rdu.KRAKEN_REPORT_COLS)
+
+        # non-species rows (U, R, G) are kept regardless of distinct_kmer_count
+        self.assertEqual(set(filtered.loc[filtered['rank'] != 'S', 'taxid']), {0, 1, 100})
+        # only the species row above the threshold survives
+        self.assertEqual(set(filtered.loc[filtered['rank'] == 'S', 'taxid']), {1001})
+
 
 if __name__ == '__main__':
     unittest.main()
