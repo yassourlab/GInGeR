@@ -16,12 +16,14 @@ import os
 import re
 
 log = logging.getLogger(__name__)
-KRAKEN_COMMAND = 'kraken2 --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {kraken_output} --report {kraken_report} --confidence 0.1 --use-names'  # --report {report}
+KRAKEN_COMMAND = 'kraken2 --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {kraken_output} --report {kraken_report} --confidence 0.1 --use-names --report-minimizer-data'  # --report {report}
 BRACKEN_COMMAND = 'bracken -d {kraken_db} -i {kraken_report} -o {bracken_output} -w {bracken_report} -r {read_len} -l S -t {min_reads_for_bracken}'
 URLOPEN_TIMEOUT = 60
 N_ATTEMPTS = 10
 SLEEP_SECS = 60
-BRACKEN_MIN_READS_RELAXATION_FACTOR = 0.7
+BRACKEN_MIN_READS_RELAXATION_FACTOR = 0.5
+DISTINCT_KMER_COUNT_THRESHOLD = 200000
+KRAKEN_REPORT_COLS = ['pct', 'reads_clade', 'reads_direct', 'kmer_count', 'distinct_kmer_count', 'rank', 'taxid', 'name']
 
 
 def get_paired_reads_seqkit_stats(reads_1: str, reads_2: str):
@@ -67,6 +69,19 @@ def run_kraken(reads_1, reads_2, threads, output_path, report_path, kraken_db):
             raise Exception('Kraken2 failed - GInGeR aborted')
 
 
+def filter_kraken_report_by_distinct_kmer_count(kraken_report_path, filtered_kraken_report_path,
+                                               threshold=DISTINCT_KMER_COUNT_THRESHOLD):
+    """Drop low-confidence species rows (low distinct_kmer_count) from a Kraken2 report.
+
+    Non-species rows are kept untouched, since Bracken needs them for its tree walk.
+    """
+    report = pd.read_csv(kraken_report_path, sep='\t', header=None, names=KRAKEN_REPORT_COLS)
+    species_mask = report['rank'] == 'S'
+    keep_species_mask = species_mask & (report['distinct_kmer_count'] > threshold)
+    filtered_report = report[~species_mask | keep_species_mask]
+    filtered_report.to_csv(filtered_kraken_report_path, sep='\t', header=False, index=False, float_format='%.2f')
+
+
 def get_kmer_length_options(kraken_db):
     pattern = r'database(.*?)mers\.kraken'
     # List to store the extracted *** parts
@@ -96,7 +111,7 @@ def get_min_reads_for_bracken(metadata_path: str, species_coverage_threshold: fl
     if len(lengths) == 0 or avg_sum <= 0:
         return 0
     min_genome_length = lengths.min()
-    return max(0, int(np.ceil(species_coverage_threshold * min_genome_length / avg_sum)))
+    return max(0, int(np.ceil(species_coverage_threshold * min_genome_length / avg_sum) * bracken_relaxation_factor)) 
 
 
 def run_bracken(kraken_report, bracken_output, bracken_report, kraken_db, min_reads_for_bracken, max_read_len: int):
@@ -279,13 +294,15 @@ def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_pa
     pu.check_and_makedir(kraken_output_path)
     pu.check_and_make_dir_no_file_name(references_folder)
     run_kraken(reads_1, reads_2, threads, kraken_output_path, kraken_report_path, kraken_db)
+    filtered_kraken_report_path = f'{kraken_report_path}.distinct_kmer_filtered'
+    filter_kraken_report_by_distinct_kmer_count(kraken_report_path, filtered_kraken_report_path)
 
     avg1, max1, avg2, max2 = get_paired_reads_seqkit_stats(reads_1, reads_2)
     avg_sum = avg1 + avg2
     max_read_len = max(max1, max2)
 
     min_reads_for_bracken = get_min_reads_for_bracken(metadata_path, species_coverage_threshold, avg_sum)
-    run_bracken(kraken_report_path, bracken_output, bracken_report, kraken_db, min_reads_for_bracken, max_read_len)
+    run_bracken(filtered_kraken_report_path, bracken_output, bracken_report, kraken_db, min_reads_for_bracken, max_read_len)
     top_species = get_species_passing_coverage_threshold(bracken_output, avg_sum, metadata_path,
                                                          max_species_representatives, species_coverage_threshold)
     selected_species_df = generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path,
