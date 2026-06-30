@@ -178,11 +178,13 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
             kraken_report_path = f'{out_dir}/kraken_report_file.tsv'
             bracken_output = f'{out_dir}/bracken_output_file.tsv'
             bracken_report = f'{out_dir}/bracken_report_file.tsv'
+            species_included_in_analysis_path = c.SPECIES_INCLUDED_IN_ANALYSIS_TEMPLATE.format(out_dir=out_dir)
             rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads, kraken_output_path,
                                                  kraken_report_path, bracken_output, bracken_report, species_coverage_threshold,
                                                  reference_genomes_metadata, downloaded_references_dir, sample_specific_references,
                                                  references_used_path,
-                                                 max_species_representatives, kraken_db)
+                                                 max_species_representatives, kraken_db,
+                                                 species_included_in_analysis_path)
     if not sample_specific_references.endswith('mmi'):
         indexed_reference = sau.generate_index(sample_specific_references, sau.INDEXING_PRESET)
     else:

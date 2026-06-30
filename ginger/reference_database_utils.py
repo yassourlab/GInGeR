@@ -176,38 +176,67 @@ def get_species_median_genome_length_by_quality(metadata: pd.DataFrame, species_
     return medians
 
 
-def get_species_passing_coverage_threshold(bracken_output_path: str,
-                                          avg_sum: float,
-                                          metadata_path: str,
-                                          max_refs_per_species: int,
-                                          species_coverage_threshold: float):
-    """Return species list filtered by estimated coverage.
+def get_species_coverage_stats(bracken_output_path: str,
+                              avg_sum: float,
+                              metadata_path: str,
+                              max_refs_per_species: int) -> pd.DataFrame:
+    """Bracken output enriched with per-species estimated genome length and estimated coverage.
 
-    estimated_coverage = new_est_reads * (avg_len_r1 + avg_len_r2) / median_genome_length
+    estimated_coverage = new_est_reads * (avg_len_r1 + avg_len_r2) / estimated_genome_length
     """
     bracken_out = pd.read_csv(bracken_output_path, sep='\t')
     if 'name' not in bracken_out.columns or 'new_est_reads' not in bracken_out.columns:
         raise ValueError('Bracken output must include columns: name, new_est_reads')
 
+    bracken_out['name'] = bracken_out['name'].astype(str)
     bracken_out['new_est_reads'] = pd.to_numeric(bracken_out['new_est_reads'], errors='coerce').fillna(0)
-    detected_species = bracken_out['name'].dropna().astype(str).tolist()
+    detected_species = bracken_out['name'].dropna().tolist()
 
     metadata = pd.read_csv(metadata_path, sep='\t')
     median_len_by_species = get_species_median_genome_length_by_quality(metadata, detected_species, max_refs_per_species)
 
-    passing = []
-    for _, row in bracken_out.iterrows():
-        species = str(row['name'])
-        reads_est = float(row['new_est_reads'])
-        med_len = median_len_by_species.get(species)
-        if not med_len or med_len <= 0:
-            continue
-        coverage = (reads_est * avg_sum) / float(med_len)
-        if coverage > species_coverage_threshold:
-            passing.append(species)
+    bracken_out['estimated_genome_length'] = bracken_out['name'].map(median_len_by_species)
+    bracken_out['estimated_coverage'] = (bracken_out['new_est_reads'] * avg_sum) / bracken_out['estimated_genome_length']
+    return bracken_out
 
-    log.info(f"Detected {len(detected_species)} species by Bracken, keeping {len(passing)} with estimated_coverage > {species_coverage_threshold}")
+
+def get_species_passing_coverage_threshold(bracken_output_path: str,
+                                          avg_sum: float,
+                                          metadata_path: str,
+                                          max_refs_per_species: int,
+                                          species_coverage_threshold: float):
+    """Return species list filtered by estimated coverage."""
+    stats = get_species_coverage_stats(bracken_output_path, avg_sum, metadata_path, max_refs_per_species)
+    passing_mask = stats['estimated_genome_length'].notna() & (stats['estimated_genome_length'] > 0) & \
+        (stats['estimated_coverage'] > species_coverage_threshold)
+    passing = stats.loc[passing_mask, 'name'].tolist()
+
+    log.info(f"Detected {len(stats)} species by Bracken, keeping {len(passing)} with estimated_coverage > {species_coverage_threshold}")
     return passing
+
+
+def get_distinct_minimizers_by_species(kraken_report_path: str) -> dict:
+    """Map species name -> distinct minimizer count, from a Kraken2 report's species-rank rows."""
+    kraken_report = pd.read_csv(kraken_report_path, sep='\t', header=None, names=KRAKEN_REPORT_COLS)
+    species_rows = kraken_report[kraken_report['rank'] == 'S'].copy()
+    species_rows['name'] = species_rows['name'].str.strip()
+    return species_rows.set_index('name')['distinct_kmer_count'].to_dict()
+
+
+def get_species_included_in_analysis_df(bracken_output_path: str,
+                                       kraken_report_path: str,
+                                       avg_sum: float,
+                                       metadata_path: str,
+                                       max_refs_per_species: int,
+                                       top_species) -> pd.DataFrame:
+    """Bracken output restricted to species included in the analysis, with distinct minimizers,
+    estimated genome length and estimated coverage added."""
+    stats = get_species_coverage_stats(bracken_output_path, avg_sum, metadata_path, max_refs_per_species)
+    distinct_minimizers_by_species = get_distinct_minimizers_by_species(kraken_report_path)
+
+    included = stats[stats['name'].isin(top_species)].copy()
+    included['distinct_minimizers'] = included['name'].map(distinct_minimizers_by_species)
+    return included
 
 
 def download_and_write_content_to_file(references_folder, references_folder_content, ftp_download_str: str,
@@ -290,7 +319,8 @@ def take_top_species_and_download_to_file(max_refs_per_species, single_species_t
 def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_path, kraken_report_path,
                                      bracken_output,
                                      bracken_report, species_coverage_threshold, metadata_path, references_folder,
-                                     merged_filtered_fasta, references_used_path, max_species_representatives, kraken_db):
+                                     merged_filtered_fasta, references_used_path, max_species_representatives, kraken_db,
+                                     species_included_in_analysis_path):
     pu.check_and_makedir(kraken_output_path)
     pu.check_and_make_dir_no_file_name(references_folder)
     run_kraken(reads_1, reads_2, threads, kraken_output_path, kraken_report_path, kraken_db)
@@ -305,6 +335,10 @@ def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_pa
     run_bracken(filtered_kraken_report_path, bracken_output, bracken_report, kraken_db, min_reads_for_bracken, max_read_len)
     top_species = get_species_passing_coverage_threshold(bracken_output, avg_sum, metadata_path,
                                                          max_species_representatives, species_coverage_threshold)
+    species_included_in_analysis_df = get_species_included_in_analysis_df(bracken_output, filtered_kraken_report_path,
+                                                                          avg_sum, metadata_path,
+                                                                          max_species_representatives, top_species)
+    species_included_in_analysis_df.to_csv(species_included_in_analysis_path, index=False, sep='\t')
     selected_species_df = generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path,
                                                                                      references_folder,
                                                                                      merged_filtered_fasta,

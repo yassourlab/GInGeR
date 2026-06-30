@@ -1,0 +1,6 @@
+100.00	1000	0	5000	100000	U	0	unclassified
+100.00	1000	10	5000	100000	R	1	root
+90.00	900	5	4500	150000	G	100	  Genusone
+50.00	500	500	2500	400000	S	3510	    Enterobacter cloacae
+40.00	400	400	2000	350000	S	3346	    Salmonella enterica
+10.00	100	100	500	300000	S	3307	    Yersinia enterocolitica

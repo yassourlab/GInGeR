@@ -179,6 +179,17 @@ GInGeR outputs the following result files:
     * plasmid_score - (only when `--add-plasmid-score` is set, default) GeNomad's plasmid score for the full contig the
       gene was found on. 0 if GeNomad did not report a score for this contig.
 
+4. **species_included_in_analysis.csv** - The Bracken output (see [Reference database](#reference-database) below),
+   restricted to the species that passed `--species-coverage-threshold` and so were included in the sample-specific
+   reference database. In addition to Bracken's columns (`name`, `taxonomy_id`, `taxonomy_lvl`,
+   `kraken_assigned_reads`, `added_reads`, `new_est_reads`, `fraction_total_reads`), it includes:
+    * estimated_genome_length - the median genome length used for this species' coverage estimation (see
+      [Reference database](#reference-database))
+    * estimated_coverage - the estimated sequencing coverage for this species (see
+      [Reference database](#reference-database))
+    * distinct_minimizers - the number of distinct minimizers Kraken2 found for this species (the
+      `distinct_kmer_count` column of Kraken2's report, generated with `--report-minimizer-data`)
+
 # Reference database
 
 By default, GInGeR uses the Unified Human Gastrointestinal Genome collection (UHGG,
