@@ -1,0 +1,3 @@
+Genome	Completeness	Contamination	N50	FTP_download	species	Length
+SP_1	99.0	0.0	100000	ftp://example/SP_1.gff.gz	SpeciesPass	3000000
+SF_1	99.0	0.0	100000	ftp://example/SF_1.gff.gz	SpeciesFail	5000000
