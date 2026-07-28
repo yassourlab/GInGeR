@@ -90,10 +90,14 @@ class MyTestCase(unittest.TestCase):
 
     def test_filter_kraken_report_by_distinct_kmer_count(self):
         kraken_report_path = f'{TEST_FILES}/kraken_report_filter_test.txt'
+        metadata_path = f'{TEST_FILES}/kraken_report_filter_test_metadata.tsv'
         with tempfile.TemporaryDirectory() as tmpdir:
             filtered_path = os.path.join(tmpdir, 'filtered_report.txt')
-            rdu.filter_kraken_report_by_distinct_kmer_count(kraken_report_path, filtered_path, threshold=200000)
+            rdu.filter_kraken_report_by_distinct_kmer_count(kraken_report_path, filtered_path,
+                                                             metadata_path, max_refs_per_species=1)
             filtered = pd.read_csv(filtered_path, sep='\t', header=None, names=rdu.KRAKEN_REPORT_COLS)
+
+        # SpeciesPass: 300000 / 3000000 = 0.1 (pass); SpeciesFail: 50000 / 5000000 = 0.01 (fail)
 
         # non-species rows (U, R, G) are kept regardless of distinct_kmer_count
         self.assertEqual(set(filtered.loc[filtered['rank'] != 'S', 'taxid']), {0, 1, 100})

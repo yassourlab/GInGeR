@@ -22,7 +22,7 @@ URLOPEN_TIMEOUT = 60
 N_ATTEMPTS = 10
 SLEEP_SECS = 60
 BRACKEN_MIN_READS_RELAXATION_FACTOR = 0.5
-DISTINCT_KMER_COUNT_THRESHOLD = 200000
+DISTINCT_KMER_RATIO_THRESHOLD = 0.05
 KRAKEN_REPORT_COLS = ['pct', 'reads_clade', 'reads_direct', 'kmer_count', 'distinct_kmer_count', 'rank', 'taxid', 'name']
 
 
@@ -70,14 +70,24 @@ def run_kraken(reads_1, reads_2, threads, output_path, report_path, kraken_db):
 
 
 def filter_kraken_report_by_distinct_kmer_count(kraken_report_path, filtered_kraken_report_path,
-                                               threshold=DISTINCT_KMER_COUNT_THRESHOLD):
-    """Drop low-confidence species rows (low distinct_kmer_count) from a Kraken2 report.
+                                               metadata_path, max_refs_per_species,
+                                               threshold=DISTINCT_KMER_RATIO_THRESHOLD):
+    """Drop low-confidence species rows (low distinct_kmer_count / genome_length ratio) from a Kraken2 report.
 
-    Non-species rows are kept untouched, since Bracken needs them for its tree walk.
+    Species with no estimable genome length (e.g. missing from the reference metadata) are dropped,
+    since the ratio can't be computed. Non-species rows are kept untouched, since Bracken needs them
+    for its tree walk.
     """
     report = pd.read_csv(kraken_report_path, sep='\t', header=None, names=KRAKEN_REPORT_COLS)
     species_mask = report['rank'] == 'S'
-    keep_species_mask = species_mask & (report['distinct_kmer_count'] > threshold)
+    species_names = report.loc[species_mask, 'name'].str.strip().tolist()
+
+    metadata = pd.read_csv(metadata_path, sep='\t')
+    genome_length_by_species = get_species_median_genome_length_by_quality(metadata, species_names, max_refs_per_species)
+
+    genome_lengths = report['name'].str.strip().map(genome_length_by_species)
+    kmer_ratio = report['distinct_kmer_count'] / genome_lengths
+    keep_species_mask = species_mask & (kmer_ratio > threshold)
     filtered_report = report[~species_mask | keep_species_mask]
     filtered_report.to_csv(filtered_kraken_report_path, sep='\t', header=False, index=False, float_format='%.2f')
 
@@ -325,7 +335,8 @@ def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_pa
     pu.check_and_make_dir_no_file_name(references_folder)
     run_kraken(reads_1, reads_2, threads, kraken_output_path, kraken_report_path, kraken_db)
     filtered_kraken_report_path = f'{kraken_report_path}.distinct_kmer_filtered'
-    filter_kraken_report_by_distinct_kmer_count(kraken_report_path, filtered_kraken_report_path)
+    filter_kraken_report_by_distinct_kmer_count(kraken_report_path, filtered_kraken_report_path,
+                                                metadata_path, max_species_representatives)
 
     avg1, max1, avg2, max2 = get_paired_reads_seqkit_stats(reads_1, reads_2)
     avg_sum = avg1 + avg2
