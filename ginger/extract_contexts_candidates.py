@@ -19,18 +19,19 @@ def save_paths_to_fasta_io_paths_approach(paths, paths_fasta_name, records_dict,
     with open(paths_fasta_name, 'a') as f:  # there is an 'a' here because I call this function once per gene location in the graph
         for path in paths:
             seq, node_start = pu.generate_str_from_list_of_nodes(records_dict, path, node_to_find)
+            covered_by_gene_int = int(covered_by_gene)
+            # trim off the gene-covered portion (and cap at max_context_len) BEFORE checking
+            # min_context_len, so the length check reflects the actual context that gets written
+            if in_or_out == 'in':
+                seq = seq[:len(seq) - covered_by_gene_int]
+                if len(seq) > max_context_len:
+                    seq = seq[-int(max_context_len):]
+            if in_or_out == 'out':
+                seq = seq[covered_by_gene_int:]
+                if len(seq) > max_context_len:
+                    seq = seq[:int(max_context_len)]
             if len(seq) > min_context_len:
                 node_locations['_'.join(path)] = node_start
-                if len(seq) > max_context_len:
-                    if in_or_out == 'in':
-                        seq = seq[-(int(max_context_len + covered_by_gene)):-int(covered_by_gene)]
-                    if in_or_out == 'out':
-                        seq = seq[int(covered_by_gene):int(covered_by_gene + max_context_len)]
-                else:
-                    if in_or_out == 'in':
-                        seq = seq[:-int(covered_by_gene)]
-                    if in_or_out == 'out':
-                        seq = seq[int(covered_by_gene):]
                 in_paths_lengths['_'.join(path)] = len(seq)
                 match_score_str = f"_match_{match_score:.4f}" if match_score is not None else ""
                 f.write(f">{gene_and_node}{match_score_str}_path_{'_'.join(path)}\n" if gene_and_node else f">{'_'.join(path)}\n")
