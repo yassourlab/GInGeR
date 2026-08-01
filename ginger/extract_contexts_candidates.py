@@ -39,6 +39,34 @@ def save_paths_to_fasta_io_paths_approach(paths, paths_fasta_name, records_dict,
     return in_paths_lengths, node_locations
 
 
+def save_context_from_contig_to_fasta(contigs_index, gene_contigs_match, paths_fasta_name, in_or_out, min_context_len,
+                                      max_context_len, gene_and_node):
+    """Writes a gene's flank sliced straight out of the contig, for a side where the assembly graph
+    could not supply a context of at least min_context_len. This happens when the contig was
+    assembled from several graph paths joined using paired-end evidence - the gene then sits on a
+    node that is usually a dead end in the graph, even though the contig has plenty of flanking
+    sequence.
+
+    Such a context may cross one of those paired-end-inferred joins, which is weaker evidence than
+    pure graph sequence - hence the identifiable 'contigfallback' path name it gets in the output.
+
+    Returns whether a context was written.
+    """
+    contig_seq = str(contigs_index[gene_contigs_match.contig].seq)
+    if in_or_out == 'in':
+        seq = contig_seq[max(0, gene_contigs_match.start - max_context_len):gene_contigs_match.start]
+    else:
+        seq = contig_seq[gene_contigs_match.end:gene_contigs_match.end + max_context_len]
+    if len(seq) <= min_context_len:
+        return False
+
+    path_name = f'contigfallback_{gene_contigs_match.contig}_{gene_contigs_match.start}_{gene_contigs_match.end}'
+    with open(paths_fasta_name, 'a') as f:
+        f.write(f'>{gene_and_node}_match_{gene_contigs_match.score:.4f}_path_{path_name}\n')
+        f.write(f'{seq}\n')
+    return True
+
+
 def paths_enumerator(graph, stack, max_depth, max_length, neighbors_func, reverse=False, covered_by_gene=0):
     out_paths = []
     while stack:
@@ -60,9 +88,12 @@ def paths_enumerator(graph, stack, max_depth, max_length, neighbors_func, revers
 def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                       nodes_with_edges_and_sequences: Dict[str, SeqIO.SeqRecord],
                                                       genes_to_contigs, depth_limit, min_context_len, max_context_len,
-                                                      in_paths_fasta, out_paths_fasta):
+                                                      in_paths_fasta, out_paths_fasta, contigs_path,
+                                                      contig_context_fallback=True):
     gene_and_nodes_path_set = set()
     gene_lengths = {}
+    contigs_index = SeqIO.index(contigs_path, 'fasta') if contig_context_fallback else None
+    n_in_contig_fallbacks, n_out_contig_fallbacks = 0, 0
     # delete fasta file if it exists
     for fasta_file in [in_paths_fasta, out_paths_fasta]:
         if os.path.exists(fasta_file):
@@ -114,8 +145,21 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                                          covered_by_gene=out_covered_by_gene,
                                                                          gene_and_node=gene_and_nodes_path_str,
                                                                          match_score=gene_contigs_match.score)
+            # the graph could not supply a context on this side - slice it out of the contig instead
+            if contig_context_fallback and not in_paths_lengths:
+                n_in_contig_fallbacks += save_context_from_contig_to_fasta(contigs_index, gene_contigs_match,
+                                                                          in_paths_fasta, 'in', min_context_len,
+                                                                          max_context_len, gene_and_nodes_path_str)
+            if contig_context_fallback and not out_paths_lengths:
+                n_out_contig_fallbacks += save_context_from_contig_to_fasta(contigs_index, gene_contigs_match,
+                                                                           out_paths_fasta, 'out', min_context_len,
+                                                                           max_context_len, gene_and_nodes_path_str)
+
             gene_lengths[gene_name] = gene_length
             if len(in_paths) == 0 or len(out_paths) == 0:
                 log.info(f'{gene_contigs_match} in {len(in_paths)} out {len(out_paths)}')
 
+    if contig_context_fallback:
+        log.info(f'used the contig sequence as a fallback for {n_in_contig_fallbacks} incoming and '
+                 f'{n_out_contig_fallbacks} outgoing contexts')
     return gene_lengths

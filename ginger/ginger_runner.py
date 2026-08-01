@@ -131,11 +131,13 @@ def cleanup_intermediate_files(out_dir, keep_options):
 @click.option('--genomad-db', type=click.Path(),
               default=os.path.join(os.path.dirname(__file__), '..', 'genomad_db'),
               help="The path to GeNomad's database directory (create one with `genomad download-database <path>`). Only used when --add-plasmid-score is set.")
+@click.option('--contig-context-fallback/--no-contig-context-fallback', default=True,
+              help='When the assembly graph yields no context of at least --min-context-len on one side of a gene, use the flanking sequence of the contig the gene was found on as that side\'s context. Such contexts may cross a join that SPAdes inferred from paired-end evidence rather than from a graph edge, and are named "..._path_contigfallback_{contig}_{start}_{end}" in the output. Default: True')
 def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                    kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
                    max_gap_ratio, max_context_len, min_context_len, gene_pident_filtering_th,
                    paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
-                   add_plasmid_score, genomad_db):
+                   add_plasmid_score, genomad_db, contig_context_fallback):
     """GInGeR - A tool for analyzing the genomic contexts of genes in metagenomic samples.
 
     \b
@@ -155,14 +157,14 @@ t
                            kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path,
                            depth_limit, max_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
                            paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
-                           add_plasmid_score, genomad_db)
+                           add_plasmid_score, genomad_db, contig_context_fallback)
 
 
 def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                     kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
                     max_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
                     paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
-                    add_plasmid_score=True, genomad_db=None):
+                    add_plasmid_score=True, genomad_db=None, contig_context_fallback=True):
     # Log the command that was run
     log.info(f"Running GInGeR with command: {' '.join(sys.argv)}")
     
@@ -218,7 +220,9 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, assembly_graph_nodes,
                                                               genes_with_location_in_graph, depth_limit,
                                                               min_context_len, max_context_len, in_paths_fasta,
-                                                              out_paths_fasta)
+                                                              out_paths_fasta,
+                                                              c.CONTIGS_PATH_TEMPLATE.format(assembly_dir=assembly_dir),
+                                                              contig_context_fallback)
 
     # map them to the reference
     in_contexts_to_ref_genomes = c.IN_MAPPING_TO_REF_GENOMES_PATH_TEMPLATE.format(temp_folder=out_dir)

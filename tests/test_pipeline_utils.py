@@ -226,13 +226,34 @@ class PipelineUtilsTest(unittest.TestCase):
         paths_w_gaps_file = f'{TEST_FILES}/SPAdes/contigs_w_added_gaps.paths'
         assembly_graph =  pyfastg.parse_fastg(f'{TEST_FILES}/SPAdes/assembly_graph.fastg')
 
-        parsed_paths_without_gaps, contigs_with_gaps = pu.parse_paths_file(paths_file, assembly_graph.nodes)
-        self.assertEqual(len(parsed_paths_without_gaps), 2)
+        parsed_paths, contigs_with_gaps = pu.parse_paths_file(paths_file, assembly_graph.nodes)
+        self.assertEqual(len(parsed_paths), 2)
         self.assertEqual(len(contigs_with_gaps), 0)
+        # a contig assembled from a single graph path is a single segment
+        self.assertEqual(parsed_paths['NODE_1_length_1000_cov_140.620106'], [['5+']])
+        self.assertEqual(parsed_paths["NODE_1_length_1000_cov_140.620106'"], [['5-']])
 
-        parsed_paths_without_gaps, contigs_with_gaps = pu.parse_paths_file(paths_w_gaps_file, assembly_graph.nodes)
-        self.assertEqual(len(parsed_paths_without_gaps), 1)
-        self.assertEqual(len(contigs_with_gaps), 1)
+        parsed_paths, contigs_with_gaps = pu.parse_paths_file(paths_w_gaps_file, assembly_graph.nodes)
+        self.assertEqual(len(parsed_paths), 2)
+        self.assertEqual(contigs_with_gaps, {'NODE_1_length_1000_cov_140.620106'})
+        # the path of a gap-containing contig is kept, split into one segment per part
+        self.assertEqual(parsed_paths['NODE_1_length_1000_cov_140.620106'], [['5+'], ['6+']])
+
+    def test_parse_paths_file_with_multiple_segments(self):
+        paths_file = f'{TEST_FILES}/test_contigs.paths'
+        assembly_graph = pyfastg.parse_fastg(f'{TEST_FILES}/SPAdes/assembly_graph.fastg')
+
+        parsed_paths, contigs_with_gaps = pu.parse_paths_file(paths_file, assembly_graph.nodes)
+        self.assertEqual(contigs_with_gaps, {'NODE_7_length_41181_cov_4.618952',
+                                             "NODE_7_length_41181_cov_4.618952'",
+                                             'NODE_9_length_39416_cov_5.216737',
+                                             "NODE_9_length_39416_cov_5.216737'"})
+        self.assertEqual(parsed_paths['NODE_7_length_41181_cov_4.618952'],
+                         [['597920+'], ['6335-'],
+                          ['99310+', '66769-', '66771+', '316649+', '153255+', '424761-', '424763+', '47+']])
+        self.assertEqual(parsed_paths['NODE_9_length_39416_cov_5.216737'], [['74101+'], ['69851+']])
+        # the last line of the file has no trailing newline
+        self.assertEqual(parsed_paths["NODE_10_length_36078_cov_6.312495'"], [['76999-']])
 
 
 if __name__ == '__main__':
