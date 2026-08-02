@@ -126,8 +126,12 @@ class TestExtractContextsCandidates(unittest.TestCase):
                                                               self.fallback_out_paths_fasta, CONTIGS_PATH,
                                                               contig_context_fallback=False)
 
-        self.assertFalse(os.path.exists(self.fallback_in_paths_fasta), 'Incoming context should not have been written')
-        self.assertFalse(os.path.exists(self.fallback_out_paths_fasta), 'Outgoing context should not have been written')
+        # the fastas are still created (downstream minimap2 needs them to exist), but the graph
+        # supplies no context here, so with the fallback off they must stay empty
+        with open(self.fallback_in_paths_fasta) as f:
+            self.assertEqual(f.read(), '', 'Incoming context should not have been written')
+        with open(self.fallback_out_paths_fasta) as f:
+            self.assertEqual(f.read(), '', 'Outgoing context should not have been written')
 
     def test_contig_fallback_context_name_is_parseable(self):
         query_name = f'fallback_gene_nodes_1+_match_1.0000_path_contigfallback_{CONTIG_NAME}_401_700'

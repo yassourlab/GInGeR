@@ -26,7 +26,9 @@ class PathRefGenomeMatch:
         self.strand = str(paf_line.strand)
 
         self.ref_genome = paf_line.tname
-        self.species = contigs_to_species.get(re.split(self.ref_genome, '[\._]')[0], f'unknown_{self.ref_genome}')
+        # reference contigs are named {genome}_{contig}, and the species metadata is keyed by genome
+        genome = re.split(r'[._]', self.ref_genome)[0]
+        self.species = contigs_to_species.get(genome, f'unknown_{self.ref_genome}')
         self.ref_genome_length = paf_line.tlen
         self.ref_genome_start = paf_line.tstart
         self.ref_genome_end = paf_line.tend
