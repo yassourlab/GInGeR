@@ -110,7 +110,7 @@ def cleanup_intermediate_files(out_dir, keep_options):
 @click.option('--max-gap-ratio', type=float, default=1.5,
               help="The maximal ratio between the length of the gene and the gap between it's contexts in the database")
 @click.option('--max-context-len', type=int, default=2500, help='The maximal length for context candidates')
-@click.option('--min-context-len', type=int, default=0, help='The minimal length for context candidates')
+@click.option('--min-context-len', type=int, default=1500, help='The minimal length for context candidates')
 @click.option('--gene-pident-filtering-th', type=float, default=0.9,
               help='The minimal % of matched base pairs required for locating a gene in the graph')
 @click.option('--paths-pident-filtering-th', type=float, default=0.9,
