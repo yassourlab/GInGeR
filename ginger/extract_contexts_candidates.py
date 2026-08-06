@@ -3,9 +3,8 @@ from ginger import pipeline_utils as pu
 import math
 import logging
 import datetime as dt
-from typing import Dict
+from typing import Dict, Set
 from Bio import SeqIO
-import os
 
 log = logging.getLogger(__name__)
 
@@ -40,32 +39,40 @@ def save_paths_to_fasta_io_paths_approach(paths, paths_fasta_name, records_dict,
     return in_paths_lengths, node_locations
 
 
-def save_context_from_contig_to_fasta(contigs_index, gene_contigs_match, paths_fasta_name, in_or_out, min_context_len,
-                                      max_context_len, gene_and_node):
-    """Writes a gene's flank sliced straight out of the contig, for a side where the assembly graph
-    could not supply a context of at least min_context_len. This happens when the contig was
-    assembled from several graph paths joined using paired-end evidence - the gene then sits on a
-    node that is usually a dead end in the graph, even though the contig has plenty of flanking
-    sequence.
+def gene_and_nodes_name(gene_contigs_match):
+    """The '{gene}_nodes_{nodes}' prefix of a context's name in the output fasta. A gene that could
+    not be located in the assembly graph has no nodes, and gets an empty nodes part."""
+    return f"{gene_contigs_match.gene}_nodes_{'_'.join(gene_contigs_match.nodes_list or [])}"
 
-    Such a context may cross one of those paired-end-inferred joins, which is weaker evidence than
-    pure graph sequence - hence the identifiable 'contigfallback' path name it gets in the output.
 
-    Returns whether a context was written.
+def write_contexts_from_contig(contigs_index, gene_contigs_match, in_paths_fasta, out_paths_fasta, min_context_len,
+                               max_context_len):
+    """Writes both of a gene's flanks, sliced straight out of the contig it was found on.
+
+    This is done for every gene found on a gap-containing contig - a contig SPAdes assembled from
+    several graph paths joined using paired-end evidence. On such a contig the gene sits on a node
+    that is usually a dead end in the graph, and sometimes it can't be located in the graph at all,
+    so the graph describes its context poorly or not at all, while the contig has flanking sequence
+    on both sides. A context taken from the contig may cross one of those paired-end-inferred joins,
+    which is weaker evidence than pure graph sequence - hence the identifiable 'contigfallback' path
+    name it gets in the output.
+
+    Returns how many contexts were written (0, 1 or 2 - a side with less than min_context_len of
+    flanking sequence in the contig is skipped).
     """
     contig_seq = str(contigs_index[gene_contigs_match.contig].seq)
-    if in_or_out == 'in':
-        seq = contig_seq[max(0, gene_contigs_match.start - max_context_len):gene_contigs_match.start]
-    else:
-        seq = contig_seq[gene_contigs_match.end:gene_contigs_match.end + max_context_len]
-    if len(seq) <= min_context_len:
-        return False
+    name = (f'{gene_and_nodes_name(gene_contigs_match)}_match_{gene_contigs_match.score:.4f}_path_'
+            f'contigfallback_{gene_contigs_match.contig}_{gene_contigs_match.start}_{gene_contigs_match.end}')
+    sides = [(in_paths_fasta, contig_seq[max(0, gene_contigs_match.start - max_context_len):gene_contigs_match.start]),
+             (out_paths_fasta, contig_seq[gene_contigs_match.end:gene_contigs_match.end + max_context_len])]
 
-    path_name = f'contigfallback_{gene_contigs_match.contig}_{gene_contigs_match.start}_{gene_contigs_match.end}'
-    with open(paths_fasta_name, 'a') as f:
-        f.write(f'>{gene_and_node}_match_{gene_contigs_match.score:.4f}_path_{path_name}\n')
-        f.write(f'{seq}\n')
-    return True
+    n_written = 0
+    for paths_fasta, seq in sides:
+        if len(seq) > min_context_len:
+            with open(paths_fasta, 'a') as f:
+                f.write(f'>{name}\n{seq}\n')
+            n_written += 1
+    return n_written
 
 
 def paths_enumerator(graph, stack, max_depth, max_length, neighbors_func, reverse=False, covered_by_gene=0):
@@ -90,81 +97,74 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                       nodes_with_edges_and_sequences: Dict[str, SeqIO.SeqRecord],
                                                       genes_to_contigs, depth_limit, min_context_len, max_context_len,
                                                       in_paths_fasta, out_paths_fasta, contigs_path,
-                                                      contig_context_fallback=True):
+                                                      contigs_with_gaps: Set[str] = frozenset()):
+    """Writes a context candidate fasta for the incoming and for the outgoing side of every gene.
+
+    Contexts are read off the assembly graph. A gene found on one of contigs_with_gaps additionally
+    gets contexts sliced straight out of the contig, whether or not the graph could locate it or
+    describe its context (see write_contexts_from_contig). Pass an empty contigs_with_gaps to turn
+    that off.
+    """
     gene_and_nodes_path_set = set()
     gene_lengths = {}
-    contigs_index = SeqIO.index(contigs_path, 'fasta') if contig_context_fallback else None
-    n_in_contig_fallbacks, n_out_contig_fallbacks = 0, 0
-    # delete fasta file if it exists
+    n_contig_contexts = 0
+    contigs_index = SeqIO.index(contigs_path, 'fasta') if contigs_with_gaps else None
+    # start from empty fastas - everything below appends to them
     for fasta_file in [in_paths_fasta, out_paths_fasta]:
-        if os.path.exists(fasta_file):
-            os.remove(fasta_file)
+        open(fasta_file, 'w').close()
     try:
         for gene_contigs_match in genes_to_contigs:
-            gene_and_nodes_path_str = f"{gene_contigs_match.gene}_nodes_{'_'.join(gene_contigs_match.nodes_list)}"
-            if gene_contigs_match.start_in_first_node is None:  # I already ran the pipeline for this and there is no need to do it again
-                log.info(
-                    f'{dt.datetime.now()} pipeline did not run for {gene_and_nodes_path_str} {gene_contigs_match.start_in_first_node} because start_in_first_node is None')
-            elif gene_and_nodes_path_str not in gene_and_nodes_path_set:
-                # unpacking variables
-                gene_and_nodes_path_set.add(gene_and_nodes_path_str)
-                first_node = gene_contigs_match.nodes_list[0]
-                last_node = gene_contigs_match.nodes_list[-1]
-                gene_name = gene_contigs_match.gene
-                nodes_list_for_gene = gene_contigs_match.nodes_list
-                start_in_first_node = gene_contigs_match.start_in_first_node
-                gene_length = gene_contigs_match.gene_length
-                gene_nodes_length = len(
-                    pu.generate_str_from_list_of_nodes(nodes_with_edges_and_sequences, nodes_list_for_gene, None)[0])
+            gene_lengths[gene_contigs_match.gene] = gene_contigs_match.gene_length
+            if gene_contigs_match.contig in contigs_with_gaps:
+                n_contig_contexts += write_contexts_from_contig(contigs_index, gene_contigs_match, in_paths_fasta,
+                                                                out_paths_fasta, min_context_len, max_context_len)
 
-                # in paths
-                in_covered_by_gene = assembly_graph.nodes[first_node]['length'] - start_in_first_node
-                in_paths_initial_stack = [(first_node, [(first_node, assembly_graph.nodes[first_node]['length'])])]
-                in_paths = paths_enumerator(assembly_graph, in_paths_initial_stack, depth_limit, max_context_len,
-                                            nx.DiGraph.predecessors, reverse=True, covered_by_gene=in_covered_by_gene)
-                in_paths_lengths, _ = save_paths_to_fasta_io_paths_approach(in_paths, in_paths_fasta,
-                                                                            nodes_with_edges_and_sequences,
-                                                                            max_context_len=max_context_len,
-                                                                            min_context_len=min_context_len,
-                                                                            in_or_out='in',
-                                                                            covered_by_gene=in_covered_by_gene,
-                                                                            gene_and_node=gene_and_nodes_path_str,
-                                                                            match_score=gene_contigs_match.score)
+            gene_and_nodes_path_str = gene_and_nodes_name(gene_contigs_match)
+            if gene_contigs_match.start_in_first_node is None:  # the gene was not located in the graph
+                log.info(f'{dt.datetime.now()} did not extract contexts from the graph for '
+                         f'{gene_and_nodes_path_str} because start_in_first_node is None')
+                continue
+            if gene_and_nodes_path_str in gene_and_nodes_path_set:  # already ran the pipeline for this gene location
+                continue
+            gene_and_nodes_path_set.add(gene_and_nodes_path_str)
 
-                # out paths
-                out_paths_initial_stack = [(last_node, [(last_node, assembly_graph.nodes[last_node][
-                    'length'])])]
-                gene_end_in_last_node = gene_nodes_length - start_in_first_node - gene_length
-                out_covered_by_gene = assembly_graph.nodes[last_node]['length'] - gene_end_in_last_node
+            # unpacking variables
+            first_node = gene_contigs_match.nodes_list[0]
+            last_node = gene_contigs_match.nodes_list[-1]
+            nodes_list_for_gene = gene_contigs_match.nodes_list
+            start_in_first_node = gene_contigs_match.start_in_first_node
+            gene_length = gene_contigs_match.gene_length
+            gene_nodes_length = len(
+                pu.generate_str_from_list_of_nodes(nodes_with_edges_and_sequences, nodes_list_for_gene, None)[0])
 
-                out_paths = paths_enumerator(assembly_graph, out_paths_initial_stack, depth_limit, max_context_len,
-                                             nx.DiGraph.successors, covered_by_gene=out_covered_by_gene)
-                out_paths_lengths, _ = save_paths_to_fasta_io_paths_approach(out_paths, out_paths_fasta,
-                                                                             nodes_with_edges_and_sequences,
-                                                                             max_context_len=max_context_len,
-                                                                             min_context_len=min_context_len,
-                                                                             in_or_out='out',
-                                                                             covered_by_gene=out_covered_by_gene,
-                                                                             gene_and_node=gene_and_nodes_path_str,
-                                                                             match_score=gene_contigs_match.score)
-                # the graph could not supply a context on this side - slice it out of the contig instead
-                if contig_context_fallback and not in_paths_lengths:
-                    n_in_contig_fallbacks += save_context_from_contig_to_fasta(contigs_index, gene_contigs_match,
-                                                                              in_paths_fasta, 'in', min_context_len,
-                                                                              max_context_len, gene_and_nodes_path_str)
-                if contig_context_fallback and not out_paths_lengths:
-                    n_out_contig_fallbacks += save_context_from_contig_to_fasta(contigs_index, gene_contigs_match,
-                                                                               out_paths_fasta, 'out', min_context_len,
-                                                                               max_context_len, gene_and_nodes_path_str)
+            # in paths
+            in_covered_by_gene = assembly_graph.nodes[first_node]['length'] - start_in_first_node
+            in_paths_initial_stack = [(first_node, [(first_node, assembly_graph.nodes[first_node]['length'])])]
+            in_paths = paths_enumerator(assembly_graph, in_paths_initial_stack, depth_limit, max_context_len,
+                                        nx.DiGraph.predecessors, reverse=True, covered_by_gene=in_covered_by_gene)
+            save_paths_to_fasta_io_paths_approach(in_paths, in_paths_fasta, nodes_with_edges_and_sequences,
+                                                  max_context_len=max_context_len, min_context_len=min_context_len,
+                                                  in_or_out='in', covered_by_gene=in_covered_by_gene,
+                                                  gene_and_node=gene_and_nodes_path_str,
+                                                  match_score=gene_contigs_match.score)
 
-                gene_lengths[gene_name] = gene_length
-                if len(in_paths) == 0 or len(out_paths) == 0:
-                    log.info(f'{gene_contigs_match} in {len(in_paths)} out {len(out_paths)}')
+            # out paths
+            out_paths_initial_stack = [(last_node, [(last_node, assembly_graph.nodes[last_node]['length'])])]
+            gene_end_in_last_node = gene_nodes_length - start_in_first_node - gene_length
+            out_covered_by_gene = assembly_graph.nodes[last_node]['length'] - gene_end_in_last_node
+            out_paths = paths_enumerator(assembly_graph, out_paths_initial_stack, depth_limit, max_context_len,
+                                         nx.DiGraph.successors, covered_by_gene=out_covered_by_gene)
+            save_paths_to_fasta_io_paths_approach(out_paths, out_paths_fasta, nodes_with_edges_and_sequences,
+                                                  max_context_len=max_context_len, min_context_len=min_context_len,
+                                                  in_or_out='out', covered_by_gene=out_covered_by_gene,
+                                                  gene_and_node=gene_and_nodes_path_str,
+                                                  match_score=gene_contigs_match.score)
+
+            if len(in_paths) == 0 or len(out_paths) == 0:
+                log.info(f'{gene_contigs_match} in {len(in_paths)} out {len(out_paths)}')
     finally:
         if contigs_index is not None:
             contigs_index.close()
 
-    if contig_context_fallback:
-        log.info(f'used the contig sequence as a fallback for {n_in_contig_fallbacks} incoming and '
-                 f'{n_out_contig_fallbacks} outgoing contexts')
+    log.info(f'took {n_contig_contexts} contexts from the sequence of gap-containing contigs')
     return gene_lengths

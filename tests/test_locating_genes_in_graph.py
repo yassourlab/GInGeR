@@ -76,6 +76,21 @@ class LocatingGenesInGraphTest(unittest.TestCase):
         self.assertEqual([match.nodes_list for match in matches], [['2+']])
         self.assertEqual([match.start_in_first_node for match in matches], [50])
 
+    def test_add_node_list_to_genes_to_contigs_keeps_unlocated_gene_on_a_gappy_contig(self):
+        # the gene is at 800-900 in the contig, where no segment could be anchored and no node
+        # aligned - it is kept anyway, because its context will be taken from the contig
+        matches = lg.add_node_list_to_genes_to_contigs([gene_contig_match(800, 900)],
+                                                       {CONTIG_NAME: [['4+'], ['5+']]}, NODE_SEQUENCES,
+                                                       NODES_TO_CONTIGS_DF, {CONTIG_NAME})
+        self.assertEqual([match.nodes_list for match in matches], [None])
+        self.assertEqual([match.start_in_first_node for match in matches], [None])
+
+    def test_add_node_list_to_genes_to_contigs_drops_unlocated_gene_on_a_gap_free_contig(self):
+        matches = lg.add_node_list_to_genes_to_contigs([gene_contig_match(800, 900)],
+                                                       {CONTIG_NAME: [['4+'], ['5+']]}, NODE_SEQUENCES,
+                                                       NODES_TO_CONTIGS_DF)
+        self.assertEqual(matches, [])
+
     # def test_get_nodes_dict_from_fastg_file(self):
     #     nodes_with_edges_and_sequences = lg.get_nodes_dict_from_fastg_file(f'{TEST_FILES}/SPAdes/assembly_graph.fastg')
     #     self.assertEqual(len(nodes_with_edges_and_sequences), 2)

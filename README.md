@@ -68,13 +68,14 @@ decrease runtime and generate shorter contexts with higher certainty.
 `--max-context-len` - The required length of one-sided context candidate. Default is 2500. Shorter contexts can be
 generated if the algorithm reaches a dead end in the assembly graph or if the path reaches the `--depth-limit`.
 
-`--contig-context-fallback` / `--no-contig-context-fallback` - Whether to use the flanking sequence of the contig a gene
-was found on as its context, for a side on which the assembly graph yields no context of at least `--min-context-len`.
-This happens when SPAdes assembled the contig from several graph paths joined using paired-end evidence - the gene then
-sits on a node that is usually a dead end in the graph, even though the contig has flanking sequence on both sides.
-Contexts taken from the contig may cross such a join, which is weaker evidence than pure graph sequence, so they are
-identifiable in the output by the `..._path_contigfallback_{contig}_{gene_start}_{gene_end}` context name. Contexts that
-the graph could supply are never replaced. Default is enabled.
+`--contig-context-fallback` / `--no-contig-context-fallback` - Whether to also take the context of a gene from the
+flanking sequence of the contig it was found on, when that contig is a gap-containing contig - one that SPAdes assembled
+from several graph paths joined using paired-end evidence (marked with a `;` in `contigs.paths`). A gene on such a contig
+sits on a node that is usually a dead end in the graph, and sometimes cannot be located in the graph at all, so the
+assembly graph describes its context poorly or not at all, while the contig has flanking sequence on both sides.
+Contexts taken from the contig may cross one of those joins, which is weaker evidence than pure graph sequence, so they
+are identifiable in the output by the `..._path_contigfallback_{contig}_{gene_start}_{gene_end}` context name. Contexts
+that the graph supplies are kept as well. Default is enabled.
 
 `--gene-pident-filtering-th` - A float in the range [0,1] specifying the minimal % of matched base pairs required for
 locating a gene in the graph. Default is 0.9.

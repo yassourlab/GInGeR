@@ -15,7 +15,7 @@ from tests import helper
 TEST_FILES = helper.get_filedir()
 CONTIGS_PATH = f'{TEST_FILES}/SPAdes/contigs.fasta'
 CONTIG_NAME = 'NODE_1_length_1000_cov_140.620106'
-# the node the gene sits on in build_short_dead_end_locus is shorter than this, so the graph can't
+# the node the gene sits on in build_gene_on_gappy_contig is shorter than this, so the graph can't
 # supply a context, while the contig has 400bp of flanking sequence on either side of the gene
 FALLBACK_MIN_CONTEXT_LEN = 50
 FALLBACK_MAX_CONTEXT_LEN = 100
@@ -82,56 +82,88 @@ class TestExtractContextsCandidates(unittest.TestCase):
 
 
     @staticmethod
-    def build_short_dead_end_locus():
-        """A gene located on a graph node that is a dead end and is too short to supply a context of
-        min_context_len on either side, on a 1000bp contig that has plenty of flanking sequence -
-        the situation the contig fallback exists for."""
+    def build_gene_on_gappy_contig(located_in_graph=True):
+        """A gene on a 1000bp gap-containing contig that has plenty of flanking sequence, located on
+        a graph node that is a dead end and is too short to supply a context of min_context_len on
+        either side - the situation the contig fallback exists for. With located_in_graph=False the
+        gene could not be located in the graph at all."""
         gene_contig_match = mc.GeneContigMatch(f'{CONTIG_NAME}\tfallback_gene\t401\t700\t100\t100')
-        gene_contig_match.nodes_list = ['1+']
-        gene_contig_match.start_in_first_node = 10
+        if located_in_graph:
+            gene_contig_match.nodes_list = ['1+']
+            gene_contig_match.start_in_first_node = 10
 
         assembly_graph = nx.DiGraph()
         assembly_graph.add_node('1+', length=40)
         nodes_with_edges_and_sequences = {'1+': SeqRecord(Seq('A' * 40), id='1+')}
         return assembly_graph, nodes_with_edges_and_sequences, [gene_contig_match]
 
-    def test_contig_context_fallback(self):
-        assembly_graph, nodes_with_edges_and_sequences, genes_to_contigs = self.build_short_dead_end_locus()
+    def _extract_for_gappy_contig(self, assembly_graph, nodes_with_edges_and_sequences, genes_to_contigs,
+                                  contigs_with_gaps=frozenset({CONTIG_NAME})):
+        return ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
+                                                                     nodes_with_edges_and_sequences,
+                                                                     genes_to_contigs, 12,
+                                                                     FALLBACK_MIN_CONTEXT_LEN,
+                                                                     FALLBACK_MAX_CONTEXT_LEN,
+                                                                     self.fallback_in_paths_fasta,
+                                                                     self.fallback_out_paths_fasta,
+                                                                     CONTIGS_PATH, contigs_with_gaps)
 
-        gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
-                                                                             nodes_with_edges_and_sequences,
-                                                                             genes_to_contigs, 12,
-                                                                             FALLBACK_MIN_CONTEXT_LEN,
-                                                                             FALLBACK_MAX_CONTEXT_LEN,
-                                                                             self.fallback_in_paths_fasta,
-                                                                             self.fallback_out_paths_fasta,
-                                                                             CONTIGS_PATH)
-
+    def _assert_contexts_were_sliced_out_of_the_contig(self, expected_header):
         contig_seq = str(SeqIO.index(CONTIGS_PATH, 'fasta')[CONTIG_NAME].seq)
-        expected_header = f'>fallback_gene_nodes_1+_match_1.0000_path_contigfallback_{CONTIG_NAME}_401_700\n'
         with open(self.fallback_in_paths_fasta) as f:
             self.assertListEqual(f.readlines(), [expected_header, f'{contig_seq[301:401]}\n'],
                                  'Incoming context was not sliced out of the contig')
         with open(self.fallback_out_paths_fasta) as f:
             self.assertListEqual(f.readlines(), [expected_header, f'{contig_seq[700:800]}\n'],
                                  'Outgoing context was not sliced out of the contig')
+
+    def test_contig_context_for_gene_on_gappy_contig(self):
+        gene_lengths = self._extract_for_gappy_contig(*self.build_gene_on_gappy_contig())
+
+        self._assert_contexts_were_sliced_out_of_the_contig(
+            f'>fallback_gene_nodes_1+_match_1.0000_path_contigfallback_{CONTIG_NAME}_401_700\n')
         self.assertDictEqual(gene_lengths, {'fallback_gene': 300}, 'Genes length dictionary is incorrect')
 
-    def test_contig_context_fallback_disabled(self):
-        assembly_graph, nodes_with_edges_and_sequences, genes_to_contigs = self.build_short_dead_end_locus()
+    def test_contig_context_for_gene_not_located_in_the_graph(self):
+        # the gene has no nodes_list, so the graph is not consulted at all - being on a gap-containing
+        # contig is enough to get contexts, and the nodes part of their name is left empty
+        gene_lengths = self._extract_for_gappy_contig(*self.build_gene_on_gappy_contig(located_in_graph=False))
 
-        ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, nodes_with_edges_and_sequences,
-                                                              genes_to_contigs, 12, FALLBACK_MIN_CONTEXT_LEN,
-                                                              FALLBACK_MAX_CONTEXT_LEN, self.fallback_in_paths_fasta,
-                                                              self.fallback_out_paths_fasta, CONTIGS_PATH,
-                                                              contig_context_fallback=False)
+        self._assert_contexts_were_sliced_out_of_the_contig(
+            f'>fallback_gene_nodes__match_1.0000_path_contigfallback_{CONTIG_NAME}_401_700\n')
+        self.assertDictEqual(gene_lengths, {'fallback_gene': 300}, 'Genes length dictionary is incorrect')
+
+    def test_no_contig_context_when_the_contig_has_no_gaps(self):
+        self._extract_for_gappy_contig(*self.build_gene_on_gappy_contig(), contigs_with_gaps=frozenset())
 
         # the fastas are still created (downstream minimap2 needs them to exist), but the graph
-        # supplies no context here, so with the fallback off they must stay empty
+        # supplies no context here and the contig is not consulted, so they must stay empty
         with open(self.fallback_in_paths_fasta) as f:
             self.assertEqual(f.read(), '', 'Incoming context should not have been written')
         with open(self.fallback_out_paths_fasta) as f:
             self.assertEqual(f.read(), '', 'Outgoing context should not have been written')
+
+    def test_contig_context_is_added_next_to_the_graph_contexts(self):
+        # a gene on a gap-containing contig gets its contexts from the contig even when the graph
+        # supplied contexts of its own
+        assembly_graph = pyfastg.parse_fastg(f'{TEST_FILES}/SPAdes/assembly_graph.fastg')
+        with open(f'{TEST_FILES}/nodes_with_edges_and_sequences.pkl', 'rb') as f:
+            nodes_with_edges_and_sequences = pickle.load(f)
+        with open(f'{TEST_FILES}/genes_with_location_in_graph.pkl', 'rb') as f:
+            genes_with_location_in_graph = pickle.load(f)
+
+        ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, nodes_with_edges_and_sequences,
+                                                              genes_with_location_in_graph, 12, self.min_context_len,
+                                                              self.max_context_len, self.fallback_in_paths_fasta,
+                                                              self.fallback_out_paths_fasta, CONTIGS_PATH,
+                                                              frozenset({CONTIG_NAME}))
+
+        contig_seq = str(SeqIO.index(CONTIGS_PATH, 'fasta')[CONTIG_NAME].seq)
+        with open(self.fallback_in_paths_fasta) as f:
+            records = dict(zip(*[iter(line.strip() for line in f)] * 2))
+        self.assertIn('>test_gene_nodes_5+_match_1.0000_path_5+', records, 'The graph context is missing')
+        self.assertEqual(records.get(f'>test_gene_nodes_5+_match_1.0000_path_contigfallback_{CONTIG_NAME}_337_615'),
+                         contig_seq[237:337], 'The contig context is missing')
 
     def test_contig_fallback_context_name_is_parseable(self):
         query_name = f'fallback_gene_nodes_1+_match_1.0000_path_contigfallback_{CONTIG_NAME}_401_700'
