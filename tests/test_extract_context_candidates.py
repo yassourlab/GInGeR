@@ -17,8 +17,7 @@ CONTIGS_PATH = f'{TEST_FILES}/SPAdes/contigs.fasta'
 CONTIG_NAME = 'NODE_1_length_1000_cov_140.620106'
 # the node the gene sits on in build_gene_on_gappy_contig is shorter than this, so the graph can't
 # supply a context, while the contig has 400bp of flanking sequence on either side of the gene
-FALLBACK_MIN_CONTEXT_LEN = 50
-FALLBACK_MAX_CONTEXT_LEN = 100
+FALLBACK_CONTEXT_LEN = 100
 
 
 class TestExtractContextsCandidates(unittest.TestCase):
@@ -32,8 +31,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
         if os.path.exists(cls.test_outputs_dir):
             rmtree(cls.test_outputs_dir)
         os.mkdir(cls.test_outputs_dir)
-        cls.min_context_len = 10
-        cls.max_context_len = 100
+        cls.context_len = 100
 
     @classmethod
     def tearDownClass(cls):
@@ -52,8 +50,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
         gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                                              nodes_with_edges_and_sequences,
                                                                              genes_with_location_in_graph,
-                                                                             12, self.min_context_len,
-                                                                             self.max_context_len,
+                                                                             12, self.context_len,
                                                                              self.in_paths_fasta, self.out_paths_fasta,
                                                                              CONTIGS_PATH)
         self.assertTrue(os.path.exists(self.in_paths_fasta))
@@ -62,7 +59,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
         with open(self.in_paths_fasta) as f:
             lines = f.readlines()
             # the -1 is beacuse of the \n in the end of the line
-            self.assertEqual(len(lines[1]) - 1, self.max_context_len, 'Incoming context are not of correct length')
+            self.assertEqual(len(lines[1]) - 1, self.context_len, 'Incoming context are not of correct length')
             self.assertListEqual(lines,
                                  ['>test_gene_nodes_5+_match_1.0000_path_5+\n',
                                   'GGTAACGGTGCGGGCTGACGCGTACAGGAAACACAGAAAAAAGCCCGCACCTGACAGTGCGGGCTTTTTTTTTCGACCAAAGGTAACGAGGTAACAACCA\n'],
@@ -71,7 +68,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
 
         with open(self.out_paths_fasta) as f:
             lines = f.readlines()
-            self.assertEqual(len(lines[1]) - 1, self.max_context_len, 'Outgoing context are not of correct length')
+            self.assertEqual(len(lines[1]) - 1, self.context_len, 'Outgoing context are not of correct length')
             self.assertListEqual(lines,
                                  ['>test_gene_nodes_5+_match_1.0000_path_5+\n',
                                   'TCGATCAGGAATTTGCCCAAATAAAACATGTCCTGCATGGCATTAGTTTGTTGGGGCAGTGCCCGGATAGCATCAACGCTGCGCTGATTTGCCGTGGCGA\n'],
@@ -84,7 +81,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
     @staticmethod
     def build_gene_on_gappy_contig(located_in_graph=True):
         """A gene on a 1000bp gap-containing contig that has plenty of flanking sequence, located on
-        a graph node that is a dead end and is too short to supply a context of min_context_len on
+        a graph node that is a dead end and is too short to supply a context of context_len on
         either side - the situation the contig fallback exists for. With located_in_graph=False the
         gene could not be located in the graph at all."""
         gene_contig_match = mc.GeneContigMatch(f'{CONTIG_NAME}\tfallback_gene\t401\t700\t100\t100')
@@ -101,9 +98,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
                                   contigs_with_gaps=frozenset({CONTIG_NAME})):
         return ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                                      nodes_with_edges_and_sequences,
-                                                                     genes_to_contigs, 12,
-                                                                     FALLBACK_MIN_CONTEXT_LEN,
-                                                                     FALLBACK_MAX_CONTEXT_LEN,
+                                                                     genes_to_contigs, 12, FALLBACK_CONTEXT_LEN,
                                                                      self.fallback_in_paths_fasta,
                                                                      self.fallback_out_paths_fasta,
                                                                      CONTIGS_PATH, contigs_with_gaps)
@@ -153,8 +148,8 @@ class TestExtractContextsCandidates(unittest.TestCase):
             genes_with_location_in_graph = pickle.load(f)
 
         ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, nodes_with_edges_and_sequences,
-                                                              genes_with_location_in_graph, 12, self.min_context_len,
-                                                              self.max_context_len, self.fallback_in_paths_fasta,
+                                                              genes_with_location_in_graph, 12, self.context_len,
+                                                              self.fallback_in_paths_fasta,
                                                               self.fallback_out_paths_fasta, CONTIGS_PATH,
                                                               frozenset({CONTIG_NAME}))
 
@@ -184,9 +179,8 @@ class FakeSeqRecord:
 
 
 class TestSavePathsToFastaIoPathsApproach(unittest.TestCase):
-    """Regression tests for the min_context_len/max_context_len bug: the length written to the
-    fasta (after covered_by_gene is trimmed off) must itself satisfy
-    min_context_len < len(seq) <= max_context_len, not the untrimmed node-path length."""
+    """The length written to the fasta is measured after covered_by_gene is trimmed off, and a
+    context is written only if it is exactly context_len long."""
 
     def setUp(self):
         self.test_outputs_dir = 'save_paths_tests_output'
@@ -203,50 +197,45 @@ class TestSavePathsToFastaIoPathsApproach(unittest.TestCase):
             lines = f.readlines()
         return [lines[i + 1].strip() for i in range(0, len(lines), 2)]
 
-    def test_path_dropped_when_trimmed_length_is_below_min_context_len(self):
+    def test_path_dropped_when_trimmed_length_is_below_context_len(self):
         # node is 30bp, but 25bp of it is covered by the gene -> only 5bp of real context remain,
-        # which is below min_context_len=10. Before the fix this path was incorrectly written
-        # because the min_context_len check ran on the untrimmed 30bp length.
+        # which is short of context_len=10. The length check must not run on the untrimmed 30bp.
         node = '1+'
         records_dict = {node: FakeSeqRecord('A' * 30)}
         in_paths_lengths, node_locations = ecc.save_paths_to_fasta_io_paths_approach(
-            [[node]], self.fasta_path, records_dict,
-            max_context_len=100, min_context_len=10, in_or_out='in', covered_by_gene=25)
+            [[node]], self.fasta_path, records_dict, 10, in_or_out='in', covered_by_gene=25)
 
         self.assertEqual(self._read_written_seqs(), [], 'A too-short (post-trim) context should not be written')
         self.assertEqual(in_paths_lengths, {})
         self.assertEqual(node_locations, {})
 
-    def test_path_kept_when_trimmed_length_is_within_bounds(self):
+    def test_path_kept_when_trimmed_length_is_exactly_context_len(self):
         node = '1+'
         records_dict = {node: FakeSeqRecord('A' * 50)}
         in_paths_lengths, _ = ecc.save_paths_to_fasta_io_paths_approach(
-            [[node]], self.fasta_path, records_dict,
-            max_context_len=100, min_context_len=10, in_or_out='in', covered_by_gene=10)
+            [[node]], self.fasta_path, records_dict, 40, in_or_out='in', covered_by_gene=10)
 
         written = self._read_written_seqs()
         self.assertEqual(len(written), 1)
         self.assertEqual(len(written[0]), 40)
         self.assertEqual(in_paths_lengths['1+'], 40)
 
-    def test_trimmed_length_is_capped_at_max_context_len(self):
+    def test_trimmed_length_is_cut_down_to_context_len(self):
         node = '1+'
         records_dict = {node: FakeSeqRecord('A' * 200)}
         in_paths_lengths, _ = ecc.save_paths_to_fasta_io_paths_approach(
-            [[node]], self.fasta_path, records_dict,
-            max_context_len=100, min_context_len=10, in_or_out='in', covered_by_gene=10)
+            [[node]], self.fasta_path, records_dict, 100, in_or_out='in', covered_by_gene=10)
 
         written = self._read_written_seqs()
         self.assertEqual(len(written), 1)
         self.assertEqual(len(written[0]), 100)
         self.assertEqual(in_paths_lengths['1+'], 100)
 
-    def test_out_path_dropped_when_trimmed_length_is_below_min_context_len(self):
+    def test_out_path_dropped_when_trimmed_length_is_below_context_len(self):
         node = '1+'
         records_dict = {node: FakeSeqRecord('A' * 30)}
         in_paths_lengths, _ = ecc.save_paths_to_fasta_io_paths_approach(
-            [[node]], self.fasta_path, records_dict,
-            max_context_len=100, min_context_len=10, in_or_out='out', covered_by_gene=25)
+            [[node]], self.fasta_path, records_dict, 10, in_or_out='out', covered_by_gene=25)
 
         self.assertEqual(self._read_written_seqs(), [])
         self.assertEqual(in_paths_lengths, {})
@@ -256,13 +245,22 @@ class TestSavePathsToFastaIoPathsApproach(unittest.TestCase):
         node = '1+'
         records_dict = {node: FakeSeqRecord('A' * 50)}
         in_paths_lengths, _ = ecc.save_paths_to_fasta_io_paths_approach(
-            [[node]], self.fasta_path, records_dict,
-            max_context_len=100, min_context_len=10, in_or_out='in', covered_by_gene=0)
+            [[node]], self.fasta_path, records_dict, 50, in_or_out='in', covered_by_gene=0)
 
         written = self._read_written_seqs()
         self.assertEqual(len(written), 1)
         self.assertEqual(len(written[0]), 50)
         self.assertEqual(in_paths_lengths['1+'], 50)
+
+    def test_the_flanking_end_of_the_path_is_the_one_that_is_kept(self):
+        # 'in' contexts end at the gene, so the last context_len bases are kept; 'out' contexts
+        # start at the gene, so the first context_len bases are kept
+        node = '1+'
+        records_dict = {node: FakeSeqRecord('C' * 20 + 'G' * 20)}
+        ecc.save_paths_to_fasta_io_paths_approach([[node]], self.fasta_path, records_dict, 10, in_or_out='in')
+        ecc.save_paths_to_fasta_io_paths_approach([[node]], self.fasta_path, records_dict, 10, in_or_out='out')
+
+        self.assertEqual(self._read_written_seqs(), ['G' * 10, 'C' * 10])
 
 
 if __name__ == '__main__':
