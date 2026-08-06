@@ -109,8 +109,8 @@ def cleanup_intermediate_files(out_dir, keep_options):
               help='The maximal depth for paths describing context candidates in the assembly graph')
 @click.option('--max-gap-ratio', type=float, default=1.5,
               help="The maximal ratio between the length of the gene and the gap between it's contexts in the database")
-@click.option('--max-context-len', type=int, default=2500, help='The maximal length for context candidates')
-@click.option('--min-context-len', type=int, default=0, help='The minimal length for context candidates')
+@click.option('--context-len', type=int, default=2500,
+              help='The length of a one-sided context candidate. Contexts are always exactly this long - a side that cannot supply that much sequence gets no context, and a gene needs a context on both sides to be reported.')
 @click.option('--gene-pident-filtering-th', type=float, default=0.9,
               help='The minimal % of matched base pairs required for locating a gene in the graph')
 @click.option('--paths-pident-filtering-th', type=float, default=0.9,
@@ -131,11 +131,13 @@ def cleanup_intermediate_files(out_dir, keep_options):
 @click.option('--genomad-db', type=click.Path(),
               default=os.path.join(os.path.dirname(__file__), '..', 'genomad_db'),
               help="The path to GeNomad's database directory (create one with `genomad download-database <path>`). Only used when --add-plasmid-score is set.")
+@click.option('--contig-context-fallback/--no-contig-context-fallback', default=True,
+              help='For a gene found on a gap-containing contig (a contig SPAdes assembled from several graph paths joined using paired-end evidence), also take its context from the flanking sequence of the contig itself. The assembly graph describes such a gene\'s context poorly or not at all, but a context taken from the contig may cross one of those joins rather than a graph edge, so it is named "..._path_contigfallback_{contig}_{start}_{end}" in the output. Default: True')
 def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                    kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
-                   max_gap_ratio, max_context_len, min_context_len, gene_pident_filtering_th,
+                   max_gap_ratio, context_len, gene_pident_filtering_th,
                    paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
-                   add_plasmid_score, genomad_db):
+                   add_plasmid_score, genomad_db, contig_context_fallback):
     """GInGeR - A tool for analyzing the genomic contexts of genes in metagenomic samples.
 
     \b
@@ -153,16 +155,16 @@ t
     """
     return ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                            kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path,
-                           depth_limit, max_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
+                           depth_limit, max_gap_ratio, context_len, gene_pident_filtering_th,
                            paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
-                           add_plasmid_score, genomad_db)
+                           add_plasmid_score, genomad_db, contig_context_fallback)
 
 
 def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                     kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
-                    max_gap_ratio, min_context_len, max_context_len, gene_pident_filtering_th,
+                    max_gap_ratio, context_len, gene_pident_filtering_th,
                     paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
-                    add_plasmid_score=True, genomad_db=None):
+                    add_plasmid_score=True, genomad_db=None, contig_context_fallback=True):
     # Log the command that was run
     log.info(f"Running GInGeR with command: {' '.join(sys.argv)}")
     
@@ -196,14 +198,14 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
         au.run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, assembly_dir, threads)
     # run tool
 
-    assembly_graph, genes_with_location_in_graph, assembly_graph_nodes = lg.locate_genes_in_graph(assembly_dir,
+    assembly_graph, genes_to_analyze, assembly_graph_nodes, contigs_with_gaps = lg.locate_genes_in_graph(assembly_dir,
                                                                                                   gene_pident_filtering_th,
                                                                                                   genes_path,
                                                                                                   threads,
                                                                                                   out_dir,
                                                                                                   return_all_gene_matches,
                                                                                                   nms_iou_threshold)
-    if not genes_with_location_in_graph:
+    if not genes_to_analyze:
         log.info(
             'No genes of interest detected in assembly. GInGeR run stopped - no results generated')
         return
@@ -216,9 +218,11 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     in_paths_fasta = c.IN_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
     out_paths_fasta = c.OUT_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
     gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, assembly_graph_nodes,
-                                                              genes_with_location_in_graph, depth_limit,
-                                                              min_context_len, max_context_len, in_paths_fasta,
-                                                              out_paths_fasta)
+                                                              genes_to_analyze, depth_limit,
+                                                              context_len, in_paths_fasta,
+                                                              out_paths_fasta,
+                                                              c.CONTIGS_PATH_TEMPLATE.format(assembly_dir=assembly_dir),
+                                                              contigs_with_gaps if contig_context_fallback else frozenset())
 
     # map them to the reference
     in_contexts_to_ref_genomes = c.IN_MAPPING_TO_REF_GENOMES_PATH_TEMPLATE.format(temp_folder=out_dir)
@@ -239,7 +243,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
         genes_with_context_matches = {gene for gene, _ in context_level_results.keys()} if context_level_results else set()
         plasmid_input_fasta = c.PLASMID_DETECTION_INPUT_FASTA_TEMPLATE.format(temp_folder=out_dir)
         plasmid_fasta_path = pdu.write_plasmid_detection_input_fasta(
-            context_level_results, genes_with_location_in_graph, genes_with_context_matches,
+            context_level_results, genes_to_analyze, genes_with_context_matches,
             in_paths_fasta, out_paths_fasta, c.CONTIGS_PATH_TEMPLATE.format(assembly_dir=assembly_dir),
             plasmid_input_fasta)
         if plasmid_fasta_path:
@@ -249,7 +253,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
 
     if not context_level_results:
         wrote_no_species_match_csv = pu.write_genes_detected_in_graph_with_no_species_match(
-            genes_with_location_in_graph,
+            genes_to_analyze,
             matched_genes=set(),
             csv_path=genes_detected_no_species_match_output_path,
         )
@@ -285,7 +289,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
         matched_genes = set(species_level_df.index.get_level_values(0))
 
     wrote_no_species_match_csv = pu.write_genes_detected_in_graph_with_no_species_match(
-        genes_with_location_in_graph,
+        genes_to_analyze,
         matched_genes=matched_genes,
         csv_path=genes_detected_no_species_match_output_path,
     )

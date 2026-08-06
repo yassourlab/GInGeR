@@ -65,8 +65,19 @@ account in the aggregation of results at the species level. Default is 100.
 Default is 12. Greater values can increase runtime and generate longer and lower certainty contexts. Smaller values can
 decrease runtime and generate shorter contexts with higher certainty.
 
-`--max-context-len` - The required length of one-sided context candidate. Default is 2500. Shorter contexts can be
-generated if the algorithm reaches a dead end in the assembly graph or if the path reaches the `--depth-limit`.
+`--context-len` - The length of a one-sided context candidate. Default is 2500. Every context GInGeR reports is exactly
+this long: a side that cannot supply that much sequence - because the path reaches a dead end in the assembly graph or
+the `--depth-limit`, or because the contig ends - gets no context at all, and a gene needs a context on both of its
+sides to be reported.
+
+`--contig-context-fallback` / `--no-contig-context-fallback` - Whether to also take the context of a gene from the
+flanking sequence of the contig it was found on, when that contig is a gap-containing contig - one that SPAdes assembled
+from several graph paths joined using paired-end evidence (marked with a `;` in `contigs.paths`). A gene on such a contig
+sits on a node that is usually a dead end in the graph, and sometimes cannot be located in the graph at all, so the
+assembly graph describes its context poorly or not at all, while the contig has flanking sequence on both sides.
+Contexts taken from the contig may cross one of those joins, which is weaker evidence than pure graph sequence, so they
+are identifiable in the output by the `..._path_contigfallback_{contig}_{gene_start}_{gene_end}` context name. Contexts
+that the graph supplies are kept as well. Default is enabled.
 
 `--gene-pident-filtering-th` - A float in the range [0,1] specifying the minimal % of matched base pairs required for
 locating a gene in the graph. Default is 0.9.

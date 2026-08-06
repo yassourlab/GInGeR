@@ -80,36 +80,48 @@ def minimap_results_from_path(path, head_size=None):
     return minimap_results
 
 
-def parse_paths_file(paths_path, assembly_graph_nodes, path_is_contig_name_func=is_contig_name_func):
-    parsed_paths_without_gaps = {}
-    contigs_with_gaps = set()
+def parse_path_segments(path_lines, assembly_graph_nodes):
+    """Splits the path lines of a single contig into segments, each a list of oriented graph nodes.
+    SPAdes writes one line per segment, ending with ';' when another segment follows, but a segment
+    may also be wrapped over several lines.
+    """
+    segments = []
+    current_segment = []
+    for line in path_lines:
+        for part_index, part in enumerate(line.split(';')):
+            if part_index and current_segment:  # the ';' preceding this part closed a segment
+                segments.append(current_segment)
+                current_segment = []
+            if part.strip():
+                current_segment += parse_list_of_nodes(part.strip(), assembly_graph_nodes)
+    if current_segment:
+        segments.append(current_segment)
+    return segments
 
-    contig_name = None
-    path_in_graph = []
-    had_gaps = False
+
+def parse_paths_file(paths_path, assembly_graph_nodes, path_is_contig_name_func=is_contig_name_func):
+    """Parses SPAdes' contigs.paths into {contig name: ordered list of path segments}.
+
+    A contig assembled from a single graph path has a single segment. SPAdes splits a path with ';'
+    when the contig was assembled from several graph paths joined using paired-end evidence - such a
+    contig gets one segment per part and its name is also returned in the set of contigs with gaps
+    (a join is real sequence in the contig, but it is not an edge of the graph, so the segments
+    can't be stitched into one path).
+    """
+    contigs_to_path_lines = {}
     with open(paths_path) as paths_file:
         for line in paths_file.readlines():
-            line_no_newline = line[:-len('\n')]
-            if path_is_contig_name_func(line_no_newline):
-                if contig_name:  # add contig name to the dict of parsed paths or to the list of paths with gaps
-                    if had_gaps:
-                        contigs_with_gaps.add(contig_name)
-                    else:
-                        parsed_paths_without_gaps[contig_name] = path_in_graph
-
-                contig_name = line_no_newline
-                path_in_graph = []
-                had_gaps = False
+            stripped_line = line.strip()
+            if path_is_contig_name_func(stripped_line):
+                contig_name = stripped_line
+                contigs_to_path_lines[contig_name] = []
             else:
-                had_gaps = had_gaps or (';' in line)
-                if not had_gaps:
-                    path_in_graph += parse_list_of_nodes(line_no_newline, assembly_graph_nodes)
-        # add the last contig
-        if had_gaps:
-            contigs_with_gaps.add(contig_name)
-        else:
-            parsed_paths_without_gaps[contig_name] = path_in_graph
-        return parsed_paths_without_gaps, contigs_with_gaps
+                contigs_to_path_lines[contig_name].append(stripped_line)
+
+    parsed_paths = {contig_name: parse_path_segments(path_lines, assembly_graph_nodes) for contig_name, path_lines in
+                    contigs_to_path_lines.items()}
+    contigs_with_gaps = {contig_name for contig_name, segments in parsed_paths.items() if len(segments) > 1}
+    return parsed_paths, contigs_with_gaps
 
 
 def get_sequence_overlap(seq_a, seq_b):

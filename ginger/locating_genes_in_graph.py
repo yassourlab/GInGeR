@@ -5,7 +5,7 @@ from ginger import sequence_alignment_utils as sau
 from ginger import matches_classes as mc
 from ginger import constants as c
 from Bio import SeqIO
-from typing import Dict, Iterator, List
+from typing import Dict, Iterator, List, Set
 import pandas as pd
 import os
 
@@ -29,10 +29,12 @@ def get_short_node_name(long_node_name):
         return node_num + '+'
 
 
-def add_location_in_graph_based_on_contigs_paths(nodes_sequences_dict, nodes_in_path, gene_contig_match):
+def add_location_in_graph_based_on_contigs_paths(nodes_sequences_dict, nodes_in_path, gene_contig_match, offset=0):
     #  this is not the exact start but it's good enough
-    contig_start = gene_contig_match.start
-    contig_end = gene_contig_match.end
+    #  offset is where nodes_in_path starts in contig coordinates - 0 for a contig assembled from a
+    #  single graph path, the segment's origin for one of the segments of a gap-containing contig
+    contig_start = gene_contig_match.start - offset
+    contig_end = gene_contig_match.end - offset
     if len(nodes_in_path) == 1:
         gene_contig_match.nodes_list = nodes_in_path
         gene_contig_match.start_in_first_node = contig_start
@@ -101,26 +103,72 @@ def add_location_in_graph_based_on_nodes_to_contigs(gene_contig_match, nodes_to_
     return gene_contig_match
 
 
+def anchor_segment_in_contig(segment, contig_nodes_to_contigs):
+    """Where a path segment of a gap-containing contig starts in contig coordinates, taken from the
+    alignment of the segment's first node to the contig. Gap lengths are unknown, so this can't be
+    derived from node lengths. Returns None if the first node has no alignment above the score cutoff
+    applied in map_nodes_to_contigs_w_gaps.
+    """
+    # a node and its reverse complement align to the same contig interval and only one of them
+    # survives the deduplication in map_nodes_to_contigs_w_gaps, so the node's orientation in the
+    # segment is ignored here and only the node number is matched
+    first_node_number = segment[0][:-1]
+    anchors = contig_nodes_to_contigs[
+        contig_nodes_to_contigs.node.apply(lambda node: node.split('_')[1]) == first_node_number]
+    if anchors.empty:
+        return None
+    return anchors.iloc[0].contig_start
+
+
+def add_location_in_graph_based_on_gappy_contig_paths(nodes_sequences_dict, segments, gene_contig_match,
+                                                      nodes_to_contigs_df):
+    """Locates a gene in the graph when its contig was assembled from several graph paths joined
+    using paired-end evidence, by walking the single segment that covers the gene. Returns None if
+    no segment covering the gene could be anchored in contig coordinates.
+    """
+    contig_nodes_to_contigs = nodes_to_contigs_df[nodes_to_contigs_df.contig == gene_contig_match.contig]
+    for segment in segments:
+        origin = anchor_segment_in_contig(segment, contig_nodes_to_contigs)
+        if origin is None:
+            continue
+        segment_length = len(pu.generate_str_from_list_of_nodes(nodes_sequences_dict, segment)[0])
+        if origin <= gene_contig_match.start and gene_contig_match.end <= origin + segment_length:
+            return add_location_in_graph_based_on_contigs_paths(nodes_sequences_dict, segment, gene_contig_match,
+                                                                offset=origin)
+    return None
+
+
 def add_node_list_to_genes_to_contigs(genes_to_contigs: Iterator[mc.GeneContigMatch],
-                                      parsed_paths_without_gaps: Dict[str, List],
+                                      parsed_paths: Dict[str, List[List[str]]],
                                       nodes_sequences_dict: Dict[str, SeqIO.SeqRecord],
-                                      nodes_to_contigs_df: pd.DataFrame):
-    matches_with_nodes_list_and_start_location = []
-    
+                                      nodes_to_contigs_df: pd.DataFrame,
+                                      contigs_with_gaps: Set[str] = frozenset()):
+    """Adds a nodes_list and a start_in_first_node to every gene-contig match that can be located in
+    the assembly graph, and returns the matches worth analyzing.
+
+    A match on one of contigs_with_gaps is kept even when it could not be located, because its
+    context is taken from the contig rather than from the graph.
+    """
+    matches_to_analyze = []
+
     for gene_contig_match in genes_to_contigs:
-        contig_path_in_graph = parsed_paths_without_gaps.get(gene_contig_match.contig, None)
-        if contig_path_in_graph:
-            updated_gene_contig_match = add_location_in_graph_based_on_contigs_paths(nodes_sequences_dict,
-                                                                                     contig_path_in_graph,
+        segments = parsed_paths.get(gene_contig_match.contig, [])
+        located_gene_contig_match = None
+        if len(segments) == 1:
+            located_gene_contig_match = add_location_in_graph_based_on_contigs_paths(nodes_sequences_dict,
+                                                                                     segments[0],
                                                                                      gene_contig_match)
-        else:
-            updated_gene_contig_match = add_location_in_graph_based_on_nodes_to_contigs(gene_contig_match,
+        elif segments:
+            located_gene_contig_match = add_location_in_graph_based_on_gappy_contig_paths(nodes_sequences_dict,
+                                                                                          segments,
+                                                                                          gene_contig_match,
+                                                                                          nodes_to_contigs_df)
+        if located_gene_contig_match is None:
+            located_gene_contig_match = add_location_in_graph_based_on_nodes_to_contigs(gene_contig_match,
                                                                                         nodes_to_contigs_df)
-        if updated_gene_contig_match is not None:
-            matches_with_nodes_list_and_start_location.append(updated_gene_contig_match)
-        # else:
-        #     log.warning(f'gene {gene_contig_match.gene} not found in the assembly graph')
-    return matches_with_nodes_list_and_start_location
+        if located_gene_contig_match is not None or gene_contig_match.contig in contigs_with_gaps:
+            matches_to_analyze.append(gene_contig_match)
+    return matches_to_analyze
 
 
 def get_nodes_dict_from_fastg_file(assembly_graph_path: str) -> Dict[str, SeqIO.SeqRecord]:
@@ -164,20 +212,22 @@ def locate_genes_in_graph(assembly_dir: str, gene_pident_filtering_th: float, ge
                                              gene_pident_filtering_th, genes_to_contigs_path,
                                              return_all_gene_matches, nms_iou_threshold)
     if not genes_to_contigs:
-        return None, None, None
+        return None, None, None, None
 
     assembly_graph_nodes = get_nodes_dict_from_fastg_file(assembly_graph_path)
     assembly_graph = pyfastg.parse_fastg(assembly_graph_path)
     # find nodes in contigs with gaps
-    parsed_paths_without_gaps, contigs_with_gaps = pu.parse_paths_file(
+    parsed_paths, contigs_with_gaps = pu.parse_paths_file(
         c.PATHS_PATH_TEMPLATE.format(assembly_dir=assembly_dir), assembly_graph.nodes)
     nodes_to_contigs_df = map_nodes_to_contigs_w_gaps(contigs_with_gaps, assembly_graph_path, contigs_path, n_threads,
                                                       nodes_to_contigs_w_gaps_path)
 
-    genes_with_location_in_graph = add_node_list_to_genes_to_contigs(genes_to_contigs, parsed_paths_without_gaps,
-                                                                     assembly_graph_nodes, nodes_to_contigs_df)
-    log.info(f'found locations in the assembly graph for {len(genes_with_location_in_graph)} genes')
-    return assembly_graph, genes_with_location_in_graph, assembly_graph_nodes
+    genes_to_analyze = add_node_list_to_genes_to_contigs(genes_to_contigs, parsed_paths, assembly_graph_nodes,
+                                                         nodes_to_contigs_df, contigs_with_gaps)
+    n_located = sum(1 for match in genes_to_analyze if match.start_in_first_node is not None)
+    log.info(f'found locations in the assembly graph for {n_located} genes, and kept '
+             f'{len(genes_to_analyze) - n_located} more genes that were found on gap-containing contigs')
+    return assembly_graph, genes_to_analyze, assembly_graph_nodes, contigs_with_gaps
 
 
 @pu.step_timing
@@ -192,14 +242,17 @@ def map_nodes_to_contigs_w_gaps(contigs_with_gaps, assembly_graph_path, contigs_
                                                      nodes_to_contigs_w_gaps_path,
                                                      nthreads=n_threads)
     nodes_to_contigs_df = pu.minimap_results_from_path(nodes_to_contigs_path)
+    node_to_contig_columns = ['contig', 'contig_start', 'contig_end', 'node', 'score', 'strand']
     if len(nodes_to_contigs_df):
         nodes_to_contigs_df['node'] = nodes_to_contigs_df.qname.apply(lambda x: x[:-1].split(':')[0])
         nodes_to_contigs_df['score'] = nodes_to_contigs_df.mlen / nodes_to_contigs_df.qlen
         nodes_to_contigs_df = \
             nodes_to_contigs_df[(nodes_to_contigs_df.score > 0.95)].rename(
                 columns={'tname': 'contig', 'tstart': 'contig_start', 'tend': 'contig_end'})[
-                ['contig', 'contig_start', 'contig_end', 'node', 'score', 'strand']]
+                node_to_contig_columns]
         nodes_to_contigs_df.sort_values(['score', 'node'], inplace=True, ascending=(False, True))
         nodes_to_contigs_df.drop_duplicates(subset=['contig', 'contig_start', 'contig_end', 'score'],
                                             keep='first', inplace=True)
+    else:  # keep the columns so that downstream filtering works on an empty result too
+        nodes_to_contigs_df = pd.DataFrame(columns=node_to_contig_columns)
     return nodes_to_contigs_df
