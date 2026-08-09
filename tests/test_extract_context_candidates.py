@@ -2,7 +2,6 @@ import unittest
 from shutil import rmtree
 import os
 import networkx as nx
-from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from pafpy import PafRecord
@@ -56,7 +55,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
         # test_gene is aligned to 1-based 337-615 of the contig, which is GENE_START:GENE_END
         # 0-based. the contexts are the context_len bases that flank exactly that interval - no base
         # of the gene may appear in them, and no base of the contig may be skipped between them.
-        contig_seq = str(SeqIO.index(CONTIGS_PATH, 'fasta')[CONTIG_NAME].seq)
+        contig_seq = helper.get_contig_seq(CONTIG_NAME)
         with open(self.in_paths_fasta) as f:
             lines = f.readlines()
             # the -1 is beacuse of the \n in the end of the line
@@ -90,7 +89,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
                                                               genes_with_location_in_graph, 12, self.context_len,
                                                               self.in_paths_fasta, self.out_paths_fasta, CONTIGS_PATH)
 
-        contig_seq = str(SeqIO.index(CONTIGS_PATH, 'fasta')[CONTIG_NAME].seq)
+        contig_seq = helper.get_contig_seq(CONTIG_NAME)
         with open(self.out_paths_fasta) as f:
             self.assertEqual(f.readlines()[1].strip(), contig_seq[GENE_END:GENE_END + self.context_len],
                              'The outgoing context was placed using gene_length instead of aligned_length')
@@ -124,7 +123,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
     def _assert_contexts_were_sliced_out_of_the_contig(self, expected_header):
         # the gene is at 1-based 401-700 of the contig, so 400:700 0-based half-open. the flanks
         # abut it exactly on both sides.
-        contig_seq = str(SeqIO.index(CONTIGS_PATH, 'fasta')[CONTIG_NAME].seq)
+        contig_seq = helper.get_contig_seq(CONTIG_NAME)
         with open(self.fallback_in_paths_fasta) as f:
             self.assertListEqual(f.readlines(), [expected_header, f'{contig_seq[300:400]}\n'],
                                  'Incoming context was not sliced out of the contig')
@@ -171,7 +170,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
                                                               self.fallback_out_paths_fasta, CONTIGS_PATH,
                                                               frozenset({CONTIG_NAME}))
 
-        contig_seq = str(SeqIO.index(CONTIGS_PATH, 'fasta')[CONTIG_NAME].seq)
+        contig_seq = helper.get_contig_seq(CONTIG_NAME)
         with open(self.fallback_in_paths_fasta) as f:
             records = dict(zip(*[iter(line.strip() for line in f)] * 2))
         self.assertIn('>test_gene_nodes_5+_match_1.0000_path_5+', records, 'The graph context is missing')

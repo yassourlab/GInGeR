@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 import pyfastg
+from Bio import SeqIO
 
 from ginger import locating_genes_in_graph as lg
 from ginger import matches_classes as mc
@@ -11,6 +12,17 @@ from ginger import pipeline_utils as pu
 def get_filedir() -> str:
     currentdir = Path(__file__).resolve().parent
     return f"{currentdir}/test_files"
+
+
+def get_contig_seq(contig_name, contigs_path=None):
+    """The sequence of a single contig, read without leaving the fasta handle open the way
+    SeqIO.index does."""
+    contigs_path = contigs_path or f'{get_filedir()}/SPAdes/contigs.fasta'
+    with open(contigs_path) as f:
+        for record in SeqIO.parse(f, 'fasta'):
+            if record.id == contig_name:
+                return str(record.seq)
+    raise KeyError(f'{contig_name} is not in {contigs_path}')
 
 
 # the columns map_nodes_to_contigs_w_gaps produces, needed so that filtering works on an empty frame

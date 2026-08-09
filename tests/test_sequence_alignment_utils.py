@@ -17,8 +17,11 @@ class SequenceAlignmentUtilsTest(unittest.TestCase):
         self.assertEqual(len(genes_to_contigs), 1)
         match = genes_to_contigs[0]
         self.assertEqual(match.contig, 'NODE_1_length_1000_cov_140.620106')
-        self.assertEqual(match.start, 337)
+        # mmseqs2 reports this hit as 1-based 337-615; GeneContigMatch stores it 0-based half-open,
+        # so that end - start is the 279bp the gene covers on the contig
+        self.assertEqual(match.start, 336)
         self.assertEqual(match.end, 615)
+        self.assertEqual(match.aligned_length, 279)
         self.assertEqual(match.gene, 'test_gene')
         self.assertEqual(match.score, 1)
 

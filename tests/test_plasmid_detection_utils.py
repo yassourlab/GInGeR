@@ -172,7 +172,7 @@ class StitchedContextGeneContextTest(unittest.TestCase):
     def test_stitched_record_is_an_exact_substring_of_the_contig(self):
         stitched, _, _ = self._stitch()
 
-        contig_seq = str(SeqIO.index(CONTIGS_PATH, 'fasta')[CONTIG_NAME].seq)
+        contig_seq = helper.get_contig_seq(CONTIG_NAME)
         self.assertIn(stitched, contig_seq,
                       'the stitched context-gene-context is not a contiguous stretch of the contig')
         self.assertEqual(len(stitched), 2 * self.CONTEXT_LEN + 279)
@@ -190,7 +190,7 @@ class StitchedContextGeneContextTest(unittest.TestCase):
         # leave exactly the gene, at the offset mmseqs2 reported for it
         stitched, in_context_seq, out_context_seq = self._stitch()
 
-        contig_seq = str(SeqIO.index(CONTIGS_PATH, 'fasta')[CONTIG_NAME].seq)
+        contig_seq = helper.get_contig_seq(CONTIG_NAME)
         gene_start = contig_seq.index(stitched) + len(in_context_seq)
         self.assertEqual((gene_start, gene_start + 279), (336, 615),
                          'the gene does not sit where mmseqs2 aligned it (1-based 337-615)')

@@ -29,6 +29,9 @@ def run_meta_or_hybrid_spades_mock(short_reads_1, short_reads_2, long_reads, out
 
 
 class GingerRunnerTest(unittest.TestCase):
+    # the output dir is removed in tearDownClass, so a mismatch against the ground truth csv can only
+    # be read off the failure message - print it in full rather than truncating it
+    maxDiff = None
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -50,6 +53,25 @@ class GingerRunnerTest(unittest.TestCase):
         if os.path.exists(cls.out_dir):
             rmtree(cls.out_dir)
 
+    GROUND_TRUTH_OUTPUTS = ['context_level_matches.csv', 'species_level_matches.csv']
+
+    def _assert_outputs_match_ground_truth(self):
+        """Compares every output csv against its ground truth, reporting all the mismatching files
+        in one go and quoting what was produced.
+
+        Stopping at the first failing assertion would hide the rest, and the output dir is deleted
+        in tearDownClass - so when a deliberate change moves these numbers, the failure message is
+        the only place the new ground truth can be read off.
+        """
+        mismatches = []
+        for name in self.GROUND_TRUTH_OUTPUTS:
+            with open(f'{self.out_dir}/{name}') as test_out, open(f'{TEST_FILES}/{name}') as gt:
+                lines_out, lines_gt = test_out.readlines(), gt.readlines()
+            if lines_out != lines_gt:
+                mismatches.append(f'\n=== {name} - produced:\n{"".join(lines_out)}'
+                                  f'=== {name} - ground truth:\n{"".join(lines_gt)}')
+        self.assertEqual([], mismatches, ''.join(mismatches))
+
     @patch('ginger.assembly_utils.run_meta_or_hybrid_spades', run_meta_or_hybrid_spades_mock)
     def test_ginger_e2e_func(self):
         ginger_e2e_func(None, self.short_reads_1, self.short_reads_2, self.out_dir, None, self.threads, None,
@@ -60,23 +82,7 @@ class GingerRunnerTest(unittest.TestCase):
         self.assertTrue(os.path.exists(f'{self.out_dir}/context_level_matches.csv'))
         self.assertTrue(os.path.exists(f'{self.out_dir}/species_level_matches.csv'))
 
-        with open(f'{self.out_dir}/context_level_matches.csv', 'r') as test_out, open(
-                f'{TEST_FILES}/context_level_matches.csv', 'r') as gt:
-            lines_out = test_out.readlines()
-            print(lines_out)
-            lines_gt = gt.readlines()
-            self.assertEqual(len(lines_out), len(lines_gt))
-            self.assertEqual(len(lines_out[1].split('/')), len(lines_gt[1].split('/')))
-            for field, field_gt in zip(lines_out[1].split(','), lines_gt[1].split(',')):
-                self.assertEqual(field, field_gt)
-
-            self.assertListEqual(lines_out, lines_gt)
-
-        with open(f'{self.out_dir}/species_level_matches.csv', 'r') as test_out, open(
-                f'{TEST_FILES}/species_level_matches.csv', 'r') as gt:
-            lines_out = test_out.readlines()
-            lines_gt = gt.readlines()
-        self.assertListEqual(lines_out, lines_gt)
+        self._assert_outputs_match_ground_truth()
 
         no_match_csv = f'{self.out_dir}/genes_detected_in_graph_with_no_species_match.csv'
         if os.path.exists(no_match_csv):
@@ -105,17 +111,7 @@ class GingerRunnerTest(unittest.TestCase):
         self.assertTrue(os.path.exists(f'{self.out_dir}/context_level_matches.csv'))
         self.assertTrue(os.path.exists(f'{self.out_dir}/species_level_matches.csv'))
 
-        with open(f'{self.out_dir}/context_level_matches.csv', 'r') as test_out, open(
-                f'{TEST_FILES}/context_level_matches.csv', 'r') as gt:
-            lines_out = test_out.readlines()
-            lines_gt = gt.readlines()
-        self.assertListEqual(lines_out, lines_gt)
-
-        with open(f'{self.out_dir}/species_level_matches.csv', 'r') as test_out, open(
-                f'{TEST_FILES}/species_level_matches.csv', 'r') as gt:
-            lines_out = test_out.readlines()
-            lines_gt = gt.readlines()
-        self.assertListEqual(lines_out, lines_gt)
+        self._assert_outputs_match_ground_truth()
 
         no_match_csv = f'{self.out_dir}/genes_detected_in_graph_with_no_species_match.csv'
         if os.path.exists(no_match_csv):
