@@ -238,7 +238,8 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     context_level_results = vcc.process_in_and_out_paths_to_results(in_contexts_to_ref_genomes,
                                                                     out_contexts_to_ref_genomes,
                                                                     gene_lengths, paths_pident_filtering_th, 0,
-                                                                    max_gap_ratio, reference_genomes_metadata)
+                                                                    max_gap_ratio, reference_genomes_metadata,
+                                                                    contexts_to_loci)
 
     # run GeNomad on the gene contexts and on the contigs of genes with no species-level match
     context_plasmid_scores, contig_plasmid_scores = None, None

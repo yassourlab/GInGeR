@@ -88,7 +88,10 @@ class GeneContigMatch:
 
 
 class InOutPathsMatch:
-    def __init__(self, in_path, out_path, start, end, gap_ratio, score, gene_length, gene=None, ref_genome=None, gene_match_score=None, in_context_score=None, out_context_score=None):
+    def __init__(self, in_path, out_path, start, end, gap_ratio, score, gene_length, gene=None, ref_genome=None, gene_match_score=None, in_context_score=None, out_context_score=None, locus=None):
+        # the copy of the gene both contexts were cut from - they are only ever paired within one,
+        # so the pair describes a real stretch of the assembly
+        self.locus = locus
         self.in_path = in_path
         self.out_path = out_path
         if gene is None:

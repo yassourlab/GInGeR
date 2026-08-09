@@ -2,11 +2,17 @@ from Bio import SeqIO
 import unittest
 import pickle
 
+from ginger import matches_classes as mc
 from ginger import verify_context_candidates as pcc
 
 from tests import helper
 
 TEST_FILES = helper.get_filedir()
+
+# every record in the two paf fixtures is for this one context, cut from this one gene copy
+FIXTURE_CONTEXT_NAME = 'test_gene_nodes_5+_path_5+'
+FIXTURE_LOCUS = mc.GeneLocus('NODE_1_length_1000_cov_140.620106', 336, 615)
+CONTEXTS_TO_LOCI = {FIXTURE_CONTEXT_NAME: FIXTURE_LOCUS}
 
 
 class ProcessContextCandidatesTest(unittest.TestCase):
@@ -27,7 +33,7 @@ class ProcessContextCandidatesTest(unittest.TestCase):
                                                                                out_path_mapping_to_bugs, genes_lengths,
                                                                                paths_pident_filtering_th,
                                                                                minimal_gap_ratio, maximal_gap_ratio,
-                                                                               self.metadata_path)
+                                                                               self.metadata_path, CONTEXTS_TO_LOCI)
 
         with open(f'{TEST_FILES}/matches_per_gene_no_overlaps.pkl', 'rb') as f:
             expected_matches_per_gene_no_overlaps = pickle.load(f)
@@ -41,6 +47,7 @@ class ProcessContextCandidatesTest(unittest.TestCase):
         self.assertEqual(match.score, 0.9775)
         self.assertEqual(match.start, 5077972)
         self.assertEqual(match.end, 5078172)
+        self.assertEqual(match.locus, FIXTURE_LOCUS)
 
 
 if __name__ == '__main__':
