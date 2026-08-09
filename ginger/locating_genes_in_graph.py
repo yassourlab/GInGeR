@@ -1,4 +1,5 @@
 import pyfastg
+from collections import Counter
 from ginger import pipeline_utils as pu
 import logging
 from ginger import sequence_alignment_utils as sau
@@ -70,36 +71,45 @@ def add_location_in_graph_based_on_contigs_paths(nodes_sequences_dict, nodes_in_
     return gene_contig_match
 
 
-def format_contig_name_for_nodes_list(contig_name):
-    contig_num = contig_name.split('_')[1]
-    if contig_num[-1] == "'":
-        return contig_num + '-'
-    else:
-        return contig_num + '+'
+def node_oriented_with_contig(node_name, strand):
+    """The short name of the graph node that runs in the same direction as the contig.
+
+    A nodes_list is always oriented with the contig - that is what contigs.paths gives the routes
+    that read it - so that the contexts extracted from it flank the gene the way they flank it on
+    the contig. An alignment can reach that node from either of its two fastg records: the forward
+    one aligning on the plus strand, or the reverse complement one aligning on the minus strand.
+    Both orientations of every edge are nodes of the graph, so flipping is always possible.
+    """
+    short_node_name = get_short_node_name(node_name)
+    if strand == '+':
+        return short_node_name
+    return short_node_name[:-1] + ('-' if short_node_name.endswith('+') else '+')
 
 
 def get_start_in_first_node(gene_contig_match, top_nodes_to_contigs_match):
-    if top_nodes_to_contigs_match.strand == '+':
-        return gene_contig_match.start - top_nodes_to_contigs_match.contig_start
-    else:
-        return top_nodes_to_contigs_match.contig_end - gene_contig_match.end
+    """Where the gene starts inside the node. The node runs with the contig, so its coordinates are
+    the contig's, shifted to where it aligned."""
+    return gene_contig_match.start - top_nodes_to_contigs_match.contig_start
 
 
 def add_location_in_graph_based_on_nodes_to_contigs(gene_contig_match, nodes_to_contigs_df):
-    pos_stran_conditions = ((nodes_to_contigs_df.contig_start <= gene_contig_match.start) & (
-            gene_contig_match.start <= nodes_to_contigs_df.contig_end) & (nodes_to_contigs_df.strand == '+'))
-    neg_strand_conditions = ((nodes_to_contigs_df.contig_start <= gene_contig_match.end) & (
-            gene_contig_match.end <= nodes_to_contigs_df.contig_end) & (nodes_to_contigs_df.strand == '-'))
-    or_between_conditions = pos_stran_conditions | neg_strand_conditions
+    """Locates a gene on the single graph node that aligned over the gene's start, for when the
+    contig's path could not place it.
+
+    The node has to cover the start rather than merely overlap the gene, because start_in_first_node
+    is an offset into it.
+    """
+    covers_gene_start = ((nodes_to_contigs_df.contig_start <= gene_contig_match.start) &
+                         (gene_contig_match.start <= nodes_to_contigs_df.contig_end))
     filtered_nodes_to_contigs = nodes_to_contigs_df[
-        (nodes_to_contigs_df.contig == gene_contig_match.contig) & or_between_conditions]
+        (nodes_to_contigs_df.contig == gene_contig_match.contig) & covers_gene_start]
 
     if filtered_nodes_to_contigs.empty:
         return None
-    else:
-        top_nodes_to_contigs_match = filtered_nodes_to_contigs.iloc[0]
-        gene_contig_match.nodes_list = [format_contig_name_for_nodes_list(top_nodes_to_contigs_match.node)]
-        gene_contig_match.start_in_first_node = get_start_in_first_node(gene_contig_match, top_nodes_to_contigs_match)
+    top_nodes_to_contigs_match = filtered_nodes_to_contigs.iloc[0]
+    gene_contig_match.nodes_list = [node_oriented_with_contig(top_nodes_to_contigs_match.node,
+                                                              top_nodes_to_contigs_match.strand)]
+    gene_contig_match.start_in_first_node = get_start_in_first_node(gene_contig_match, top_nodes_to_contigs_match)
     return gene_contig_match
 
 
@@ -150,24 +160,33 @@ def add_node_list_to_genes_to_contigs(genes_to_contigs: Iterator[mc.GeneContigMa
     context is taken from the contig rather than from the graph.
     """
     matches_to_analyze = []
+    genes_located_per_route = Counter()
 
     for gene_contig_match in genes_to_contigs:
         segments = parsed_paths.get(gene_contig_match.contig, [])
         located_gene_contig_match = None
+        route = None
         if len(segments) == 1:
             located_gene_contig_match = add_location_in_graph_based_on_contigs_paths(nodes_sequences_dict,
                                                                                      segments[0],
                                                                                      gene_contig_match)
+            route = 'the contig path'
         elif segments:
             located_gene_contig_match = add_location_in_graph_based_on_gappy_contig_paths(nodes_sequences_dict,
                                                                                           segments,
                                                                                           gene_contig_match,
                                                                                           nodes_to_contigs_df)
+            route = 'a gap-containing contig path segment'
         if located_gene_contig_match is None:
             located_gene_contig_match = add_location_in_graph_based_on_nodes_to_contigs(gene_contig_match,
                                                                                         nodes_to_contigs_df)
+            route = 'a single aligned node'
+        if gene_contig_match.start_in_first_node is not None:
+            genes_located_per_route[route] += 1
         if located_gene_contig_match is not None or gene_contig_match.contig in contigs_with_gaps:
             matches_to_analyze.append(gene_contig_match)
+    for route, count in genes_located_per_route.most_common():
+        log.info(f'located {count} genes in the assembly graph by {route}')
     return matches_to_analyze
 
 

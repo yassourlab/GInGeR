@@ -17,11 +17,18 @@ def _fasta_to_dict(fasta_path: str) -> dict:
 
 
 def _get_gene_sequence(contig_seq: str, gene_match) -> str:
-    # gene_match's coordinates are 0-based half-open (see matches_classes.GeneContigMatch), so this
-    # slice is exactly the aligned part of the gene.
-    # in/out path sequences are always extracted in the contig's forward orientation
-    # (see extract_contexts_candidates.py), so the gene segment must stay forward too -
-    # reverse-complementing it here would splice a flipped middle into forward-oriented flanks.
+    """The gene segment to splice between a pair of contexts, in the contig's forward orientation.
+
+    Every route that produces a context produces it in that orientation: the ones that read
+    contigs.paths get their nodes in contig order, the one that falls back to a single aligned node
+    takes whichever of its two orientations runs with the contig (see
+    locating_genes_in_graph.node_oriented_with_contig), and the contig fallback slices the contig
+    itself. So the segment must stay forward too, whatever gene_match.strand says - reverse
+    complementing it here would splice a flipped middle into forward-oriented flanks.
+
+    gene_match's coordinates are 0-based half-open (see matches_classes.GeneContigMatch), so this
+    slice is exactly the aligned part of the gene.
+    """
     return contig_seq[gene_match.start:gene_match.end]
 
 
