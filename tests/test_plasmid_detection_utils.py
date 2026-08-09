@@ -9,6 +9,7 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 
 from ginger import extract_contexts_candidates as ecc
+from ginger import matches_classes as mc
 from ginger import plasmid_detection_utils as pdu
 from tests import helper
 
@@ -18,15 +19,13 @@ CONTIG_NAME = 'NODE_1_length_1000_cov_140.620106'
 
 
 class FakeGeneMatch:
-    """start/end are 0-based half-open, as they are on matches_classes.GeneContigMatch."""
+    """A gene located on a contig. Only the gene and the contig matter now - the trios take their
+    sequence from the locus their match carries, so this is left for the unmatched contig listing."""
 
-    def __init__(self, gene, contig, score, start, end, strand):
+    def __init__(self, gene, contig, score):
         self.gene = gene
         self.contig = contig
         self.score = score
-        self.start = start
-        self.end = end
-        self.strand = strand
 
 
 class FakePathMatch:
@@ -35,10 +34,11 @@ class FakePathMatch:
 
 
 class FakeInOutMatch:
-    def __init__(self, gene, in_context, out_context):
+    def __init__(self, gene, in_context, out_context, locus=None):
         self.gene = gene
         self.in_path = FakePathMatch(in_context)
         self.out_path = FakePathMatch(out_context)
+        self.locus = locus
 
 
 class WritePlasmidDetectionInputFastaTest(unittest.TestCase):
@@ -64,11 +64,12 @@ class WritePlasmidDetectionInputFastaTest(unittest.TestCase):
         })
 
         genes_with_location_in_graph = [
-            FakeGeneMatch('geneA', 'contig1', 1.0, 2, 6, '+'),
-            FakeGeneMatch('geneB', 'contig2', 1.0, 0, 4, '-'),
+            FakeGeneMatch('geneA', 'contig1', 1.0),
+            FakeGeneMatch('geneB', 'contig2', 1.0),
         ]
         context_level_results = {
-            ('geneA', 'ref_genome1'): [FakeInOutMatch('geneA', 'in_ctx1', 'out_ctx1')],
+            ('geneA', 'ref_genome1'): [FakeInOutMatch('geneA', 'in_ctx1', 'out_ctx1',
+                                                      mc.GeneLocus('contig1', 2, 6))],
         }
         matched_genes = {'geneA'}
 
@@ -85,18 +86,17 @@ class WritePlasmidDetectionInputFastaTest(unittest.TestCase):
         self.assertEqual(records['contig2'], 'GGGGCCCCAA')
         self.assertNotIn('contig1', records)
 
-    def test_minus_strand_gene_sequence_is_not_reverse_complemented(self):
-        # in/out path sequences are always extracted in the contig's forward orientation, so
-        # the spliced gene segment must stay forward too, even when gene_match.strand is '-'.
+    def test_gene_segment_is_taken_forward_out_of_the_contig(self):
+        # in/out path sequences are always extracted in the contig's forward orientation, so the
+        # spliced gene segment stays forward too, however the gene itself is oriented
         in_paths_fasta = self._write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII'})
         out_paths_fasta = self._write_fasta('out.fasta', {'out_ctx1': 'OOOOOOOO'})
         contigs_fasta = self._write_fasta('contigs.fasta', {'contig1': 'AAAAACCCCC'})
 
-        genes_with_location_in_graph = [
-            FakeGeneMatch('geneA', 'contig1', 1.0, 2, 6, '-'),
-        ]
+        genes_with_location_in_graph = [FakeGeneMatch('geneA', 'contig1', 1.0)]
         context_level_results = {
-            ('geneA', 'ref_genome1'): [FakeInOutMatch('geneA', 'in_ctx1', 'out_ctx1')],
+            ('geneA', 'ref_genome1'): [FakeInOutMatch('geneA', 'in_ctx1', 'out_ctx1',
+                                                      mc.GeneLocus('contig1', 2, 6))],
         }
 
         output_fasta_path = os.path.join(self.tmp_dir, 'plasmid_input.fasta')
@@ -109,14 +109,39 @@ class WritePlasmidDetectionInputFastaTest(unittest.TestCase):
         # in/out paths are already extracted in the contig's forward orientation.
         self.assertEqual(records['geneA|in_ctx1|out_ctx1'], 'IIIIIIIIAAACOOOOOOOO')
 
+    def test_the_gene_segment_comes_from_the_copy_the_contexts_flank(self):
+        # geneA is on two contigs. the trio's contexts were cut from the copy on contig2, so that is
+        # the copy whose sequence goes between them - not the copy that happens to match best
+        in_paths_fasta = self._write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII'})
+        out_paths_fasta = self._write_fasta('out.fasta', {'out_ctx1': 'OOOOOOOO'})
+        contigs_fasta = self._write_fasta('contigs.fasta', {'contig1': 'AAAAAAAAAA',
+                                                            'contig2': 'CCCCGGGGTT'})
+
+        genes_with_location_in_graph = [
+            FakeGeneMatch('geneA', 'contig1', 1.0),
+            FakeGeneMatch('geneA', 'contig2', 0.5),
+        ]
+        context_level_results = {
+            ('geneA', 'ref_genome1'): [FakeInOutMatch('geneA', 'in_ctx1', 'out_ctx1',
+                                                      mc.GeneLocus('contig2', 4, 8))],
+        }
+
+        output_fasta_path = os.path.join(self.tmp_dir, 'plasmid_input.fasta')
+        pdu.write_plasmid_detection_input_fasta(
+            context_level_results, genes_with_location_in_graph, {'geneA'},
+            in_paths_fasta, out_paths_fasta, contigs_fasta, output_fasta_path)
+
+        records = pdu._fasta_to_dict(output_fasta_path)
+        # contig2[4:8], not contig1[2:6] - splicing the other copy's sequence in would produce a
+        # sequence that is on neither contig
+        self.assertEqual(records['geneA|in_ctx1|out_ctx1'], 'IIIIIIIIGGGGOOOOOOOO')
+
     def test_returns_none_and_removes_file_when_nothing_to_write(self):
         in_paths_fasta = self._write_fasta('in.fasta', {})
         out_paths_fasta = self._write_fasta('out.fasta', {})
         contigs_fasta = self._write_fasta('contigs.fasta', {'contig1': 'ACGTACGTAC'})
 
-        genes_with_location_in_graph = [
-            FakeGeneMatch('geneA', 'contig1', 1.0, 2, 6, '+'),
-        ]
+        genes_with_location_in_graph = [FakeGeneMatch('geneA', 'contig1', 1.0)]
         matched_genes = {'geneA'}  # geneA is matched, so its contig is not included
 
         output_fasta_path = os.path.join(self.tmp_dir, 'plasmid_input.fasta')
@@ -160,9 +185,11 @@ class StitchedContextGeneContextTest(unittest.TestCase):
         self.assertEqual(len(out_contexts), 1, 'expected exactly one outgoing context for test_gene')
         in_context, out_context = next(iter(in_contexts)), next(iter(out_contexts))
 
+        gene_match = genes_with_location_in_graph[0]
+        locus = mc.GeneLocus(gene_match.contig, gene_match.start, gene_match.end)
         output_fasta_path = os.path.join(self.tmp_dir, 'plasmid_input.fasta')
         pdu.write_plasmid_detection_input_fasta(
-            {('test_gene', 'ref_genome1'): [FakeInOutMatch('test_gene', in_context, out_context)]},
+            {('test_gene', 'ref_genome1'): [FakeInOutMatch('test_gene', in_context, out_context, locus)]},
             genes_with_location_in_graph, {'test_gene'},
             self.in_paths_fasta, self.out_paths_fasta, CONTIGS_PATH, output_fasta_path)
 

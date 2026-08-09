@@ -16,20 +16,21 @@ def _fasta_to_dict(fasta_path: str) -> dict:
         return {rec.id: str(rec.seq) for rec in SeqIO.parse(f, 'fasta')}
 
 
-def _get_gene_sequence(contig_seq: str, gene_match) -> str:
+def _get_gene_sequence(contig_seq: str, locus) -> str:
     """The gene segment to splice between a pair of contexts, in the contig's forward orientation.
 
     Every route that produces a context produces it in that orientation: the ones that read
     contigs.paths get their nodes in contig order, the one that falls back to a single aligned node
     takes whichever of its two orientations runs with the contig (see
     locating_genes_in_graph.node_oriented_with_contig), and the contig fallback slices the contig
-    itself. So the segment must stay forward too, whatever gene_match.strand says - reverse
-    complementing it here would splice a flipped middle into forward-oriented flanks.
+    itself. So the segment stays forward - reverse complementing it would splice a flipped middle
+    into forward-oriented flanks. A locus carries no strand, so there is nothing here to be tempted
+    by.
 
-    gene_match's coordinates are 0-based half-open (see matches_classes.GeneContigMatch), so this
-    slice is exactly the aligned part of the gene.
+    Its coordinates are 0-based half-open (see matches_classes.GeneLocus), so this slice is exactly
+    the aligned part of the gene.
     """
-    return contig_seq[gene_match.start:gene_match.end]
+    return contig_seq[locus.start:locus.end]
 
 
 def write_plasmid_detection_input_fasta(context_level_results, genes_with_location_in_graph, matched_genes,
@@ -40,14 +41,12 @@ def write_plasmid_detection_input_fasta(context_level_results, genes_with_locati
     - for every gene in genes_with_location_in_graph that is not in matched_genes, the full
       sequence of the contig it was found on, with header "{contig}"
 
+    The gene sequence comes from the copy of the gene the trio's two contexts were cut from, which
+    the match carries: they are only ever paired within one copy, so splicing that copy's sequence
+    between them reproduces a stretch of the contig exactly.
+
     Returns the path to the written fasta, or None if there was nothing to write.
     """
-    best_match_by_gene = {}
-    for gene_match in genes_with_location_in_graph:
-        current_best = best_match_by_gene.get(gene_match.gene)
-        if current_best is None or gene_match.score > current_best.score:
-            best_match_by_gene[gene_match.gene] = gene_match
-
     contig_seq_by_id = _fasta_to_dict(contigs_fasta)
 
     wrote_any = False
@@ -59,13 +58,10 @@ def write_plasmid_detection_input_fasta(context_level_results, genes_with_locati
             trios = set()
             for matches_list in context_level_results.values():
                 for match in matches_list:
-                    trios.add((match.gene, match.in_path.query_name, match.out_path.query_name))
+                    trios.add((match.gene, match.in_path.query_name, match.out_path.query_name, match.locus))
 
-            for gene, in_context, out_context in trios:
-                gene_match = best_match_by_gene.get(gene)
-                if gene_match is None:
-                    continue
-                gene_seq = _get_gene_sequence(contig_seq_by_id[gene_match.contig], gene_match)
+            for gene, in_context, out_context, locus in trios:
+                gene_seq = _get_gene_sequence(contig_seq_by_id[locus.contig], locus)
                 full_seq = in_seq_by_id[in_context] + gene_seq + out_seq_by_id[out_context]
                 f.write(f'>{gene}|{in_context}|{out_context}\n{full_seq}\n')
                 wrote_any = True
