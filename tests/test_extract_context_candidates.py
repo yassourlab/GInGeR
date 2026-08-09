@@ -43,7 +43,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
         nodes_with_edges_and_sequences = helper.get_assembly_graph_nodes()
         genes_with_location_in_graph = helper.get_genes_with_location_in_graph()
 
-        gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
+        gene_lengths, _ = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                                              nodes_with_edges_and_sequences,
                                                                              genes_with_location_in_graph,
                                                                              12, self.context_len,
@@ -95,6 +95,48 @@ class TestExtractContextsCandidates(unittest.TestCase):
                              'The outgoing context was placed using gene_length instead of aligned_length')
 
 
+    def test_contexts_are_mapped_to_the_locus_they_were_cut_from(self):
+        contexts_to_loci_path = f'{self.test_outputs_dir}/contexts_to_loci.tsv'
+
+        _, contexts_to_loci = ecc.extract_all_in_out_paths_and_write_them_to_fastas(
+            helper.get_assembly_graph(), helper.get_assembly_graph_nodes(),
+            helper.get_genes_with_location_in_graph(), 12, self.context_len,
+            self.in_paths_fasta, self.out_paths_fasta, CONTIGS_PATH,
+            contexts_to_loci_path=contexts_to_loci_path)
+
+        context_name = 'test_gene_nodes_5+_match_1.0000_path_5+'
+        self.assertEqual(contexts_to_loci, {context_name: mc.GeneLocus(CONTIG_NAME, GENE_START, GENE_END)})
+
+        with open(contexts_to_loci_path) as f:
+            header, *rows = [line.rstrip('\n').split('\t') for line in f]
+        self.assertEqual(header, ecc.CONTEXTS_TO_LOCI_COLUMNS)
+        # the gene sits on a single node, so both of its contexts are named after the same one-node
+        # path - one name, but a row per side
+        self.assertEqual(rows, [
+            [context_name, 'in', CONTIG_NAME, str(GENE_START), str(GENE_END), '5+', '1.0', 'graph'],
+            [context_name, 'out', CONTIG_NAME, str(GENE_START), str(GENE_END), '5+', '1.0', 'graph'],
+        ])
+
+    def test_contig_contexts_are_mapped_to_their_locus_without_any_nodes(self):
+        # the gene could not be located in the graph, so there are no nodes in its context names at
+        # all - nothing about the graph identifies which copy of the gene they flank
+        _, contexts_to_loci = self._extract_for_gappy_contig(
+            *self.build_gene_on_gappy_contig(located_in_graph=False))
+
+        name = f'fallback_gene_nodes__match_1.0000_path_contigfallback_{CONTIG_NAME}_400_700'
+        self.assertEqual(contexts_to_loci, {name: mc.GeneLocus(CONTIG_NAME, 400, 700)})
+
+    def test_each_copy_of_a_gene_gets_its_own_locus(self):
+        # two copies of one gene on one contig. their context names share everything up to _path_,
+        # which is the part any key built out of the gene and its nodes would keep
+        first = mc.GeneContigMatch(f'{CONTIG_NAME}\tfallback_gene\t401\t700\t100\t100')
+        second = mc.GeneContigMatch(f'{CONTIG_NAME}\tfallback_gene\t701\t1000\t100\t100')
+
+        _, contexts_to_loci = self._extract_for_gappy_contig(nx.DiGraph(), {}, [first, second])
+
+        self.assertEqual(sorted(contexts_to_loci.values()),
+                         [mc.GeneLocus(CONTIG_NAME, 400, 700), mc.GeneLocus(CONTIG_NAME, 700, 1000)])
+
     @staticmethod
     def build_gene_on_gappy_contig(located_in_graph=True):
         """A gene on a 1000bp gap-containing contig that has plenty of flanking sequence, located on
@@ -113,6 +155,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
 
     def _extract_for_gappy_contig(self, assembly_graph, nodes_with_edges_and_sequences, genes_to_contigs,
                                   contigs_with_gaps=frozenset({CONTIG_NAME})):
+        """Returns (gene_lengths, contexts_to_loci)."""
         return ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                                      nodes_with_edges_and_sequences,
                                                                      genes_to_contigs, 12, FALLBACK_CONTEXT_LEN,
@@ -132,7 +175,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
                                  'Outgoing context was not sliced out of the contig')
 
     def test_contig_context_for_gene_on_gappy_contig(self):
-        gene_lengths = self._extract_for_gappy_contig(*self.build_gene_on_gappy_contig())
+        gene_lengths, contexts_to_loci = self._extract_for_gappy_contig(*self.build_gene_on_gappy_contig())
 
         self._assert_contexts_were_sliced_out_of_the_contig(
             f'>fallback_gene_nodes_1+_match_1.0000_path_contigfallback_{CONTIG_NAME}_400_700\n')
@@ -141,7 +184,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
     def test_contig_context_for_gene_not_located_in_the_graph(self):
         # the gene has no nodes_list, so the graph is not consulted at all - being on a gap-containing
         # contig is enough to get contexts, and the nodes part of their name is left empty
-        gene_lengths = self._extract_for_gappy_contig(*self.build_gene_on_gappy_contig(located_in_graph=False))
+        gene_lengths, contexts_to_loci = self._extract_for_gappy_contig(*self.build_gene_on_gappy_contig(located_in_graph=False))
 
         self._assert_contexts_were_sliced_out_of_the_contig(
             f'>fallback_gene_nodes__match_1.0000_path_contigfallback_{CONTIG_NAME}_400_700\n')

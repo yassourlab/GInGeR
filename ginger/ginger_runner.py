@@ -38,7 +38,7 @@ def cleanup_intermediate_files(out_dir, keep_options):
     cleanup_map = {
         'assembly': ['SPAdes'],
         'alignment': ['*.paf', '*.m8', 'mmseqs_tmp', 'nodes_to_contigs_w_gaps.paf'],
-        'sequences': ['all_in_paths.fasta', 'all_out_paths.fasta'],
+        'sequences': ['all_in_paths.fasta', 'all_out_paths.fasta', 'contexts_to_loci.tsv'],
         'kraken': ['kraken_*.tsv', 'bracken_*.tsv'],
         'reference': ['merged_filtered_ref_db.*', 'references_used.csv'],
         'plasmid': ['plasmid_detection_input.fasta', 'genomad_output'],
@@ -217,12 +217,15 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     # get in and out paths
     in_paths_fasta = c.IN_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
     out_paths_fasta = c.OUT_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
-    gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, assembly_graph_nodes,
+    contexts_to_loci_path = c.CONTEXTS_TO_LOCI_TEMPLATE.format(temp_folder=out_dir)
+    gene_lengths, contexts_to_loci = ecc.extract_all_in_out_paths_and_write_them_to_fastas(
+                                                              assembly_graph, assembly_graph_nodes,
                                                               genes_to_analyze, depth_limit,
                                                               context_len, in_paths_fasta,
                                                               out_paths_fasta,
                                                               c.CONTIGS_PATH_TEMPLATE.format(assembly_dir=assembly_dir),
-                                                              contigs_with_gaps if contig_context_fallback else frozenset())
+                                                              contigs_with_gaps if contig_context_fallback else frozenset(),
+                                                              contexts_to_loci_path)
 
     # map them to the reference
     in_contexts_to_ref_genomes = c.IN_MAPPING_TO_REF_GENOMES_PATH_TEMPLATE.format(temp_folder=out_dir)

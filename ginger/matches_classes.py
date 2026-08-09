@@ -1,5 +1,12 @@
 from pafpy import PafRecord
+from collections import namedtuple
 import re
+
+# One copy of a gene in the assembly: where it sits on a contig, 0-based half-open like
+# GeneContigMatch. This is the identity of the thing a context was cut from, and everything needed
+# to slice the gene's sequence back out of the contig - so it doubles as a grouping key and as
+# something _get_gene_sequence can be handed directly.
+GeneLocus = namedtuple('GeneLocus', ['contig', 'start', 'end'])
 
 class PathRefGenomeMatch:
     def __init__(self, paf_line: PafRecord, contigs_to_species: dict):
