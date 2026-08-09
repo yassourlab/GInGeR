@@ -40,6 +40,14 @@ class PathRefGenomeMatch:
 
 
 class GeneContigMatch:
+    """A single alignment of a gene to a contig.
+
+    mmseqs2 reports tstart/tend as 1-based inclusive coordinates, with tstart > tend when the gene
+    is on the minus strand. They are normalized here to 0-based half-open - the convention every
+    consumer uses to slice contig and node sequences - so that contig_seq[match.start:match.end] is
+    the gene, and so that match.start can be used directly as an offset into a node or a segment.
+    """
+
     def __init__(self, mmseq_line: str):
         target, query, tstart, tend, nident, qlen = mmseq_line.split('\t')
         self.gene_length = int(qlen) * 3
@@ -50,12 +58,23 @@ class GeneContigMatch:
         self.strand = '+' if start_int < end_int else '-'
 
         self.contig = target
-        self.start = min(int(tstart), int(tend))
-        self.end = max(int(tstart), int(tend))
+        self.start = min(start_int, end_int) - 1
+        self.end = max(start_int, end_int)
 
         self.score = int(nident) / int(qlen)
         self.nodes_list = None
         self.start_in_first_node = None
+
+    @property
+    def aligned_length(self):
+        """How much of the contig the gene actually covers.
+
+        This is NOT gene_length, which is the full length of the reference protein (qlen * 3).
+        mmseqs2 is run with -c 0.8, so the alignment may cover as little as 80% of the protein, and
+        it can also contain gaps - the two lengths are equal only for a full-length ungapped hit.
+        Anything that has to find the end of the gene on the contig wants this one.
+        """
+        return self.end - self.start
 
     def __str__(self):
         return f'{self.gene} {self.contig} {self.score} {self.nodes_list}'

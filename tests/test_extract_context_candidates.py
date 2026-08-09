@@ -1,6 +1,5 @@
 import unittest
 from shutil import rmtree
-import pickle
 import os
 import networkx as nx
 from Bio import SeqIO
@@ -9,12 +8,14 @@ from Bio.SeqRecord import SeqRecord
 from pafpy import PafRecord
 import ginger.extract_contexts_candidates as ecc
 from ginger import matches_classes as mc
-import pyfastg
 from tests import helper
 
 TEST_FILES = helper.get_filedir()
 CONTIGS_PATH = f'{TEST_FILES}/SPAdes/contigs.fasta'
 CONTIG_NAME = 'NODE_1_length_1000_cov_140.620106'
+# where test_gene sits on that contig, 0-based half-open. mmseqs reports it as 1-based 337-615 in
+# genes_to_contigs.m8, and 615 - 337 + 1 == 279 == 93aa * 3
+GENE_START, GENE_END = 336, 615
 # the node the gene sits on in build_gene_on_gappy_contig is shorter than this, so the graph can't
 # supply a context, while the contig has 400bp of flanking sequence on either side of the gene
 FALLBACK_CONTEXT_LEN = 100
@@ -39,13 +40,9 @@ class TestExtractContextsCandidates(unittest.TestCase):
         rmtree(cls.test_outputs_dir)
 
     def test_extract_all_in_out_paths_and_write_them_to_fastas(self):
-        # with open(f'{TEST_FILES}/assembly_graph.pkl', 'rb') as f:
-            # assembly_graph = pickle.load(f)
-        assembly_graph= pyfastg.parse_fastg(f'{TEST_FILES}/SPAdes/assembly_graph.fastg')
-        with open(f'{TEST_FILES}/nodes_with_edges_and_sequences.pkl', 'rb') as f:
-            nodes_with_edges_and_sequences = pickle.load(f)
-        with open(f'{TEST_FILES}/genes_with_location_in_graph.pkl', 'rb') as f:
-            genes_with_location_in_graph = pickle.load(f)
+        assembly_graph = helper.get_assembly_graph()
+        nodes_with_edges_and_sequences = helper.get_assembly_graph_nodes()
+        genes_with_location_in_graph = helper.get_genes_with_location_in_graph()
 
         gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
                                                                              nodes_with_edges_and_sequences,
@@ -56,26 +53,47 @@ class TestExtractContextsCandidates(unittest.TestCase):
         self.assertTrue(os.path.exists(self.in_paths_fasta))
         self.assertTrue(os.path.exists(self.out_paths_fasta))
 
+        # test_gene is aligned to 1-based 337-615 of the contig, which is GENE_START:GENE_END
+        # 0-based. the contexts are the context_len bases that flank exactly that interval - no base
+        # of the gene may appear in them, and no base of the contig may be skipped between them.
+        contig_seq = str(SeqIO.index(CONTIGS_PATH, 'fasta')[CONTIG_NAME].seq)
         with open(self.in_paths_fasta) as f:
             lines = f.readlines()
             # the -1 is beacuse of the \n in the end of the line
             self.assertEqual(len(lines[1]) - 1, self.context_len, 'Incoming context are not of correct length')
             self.assertListEqual(lines,
                                  ['>test_gene_nodes_5+_match_1.0000_path_5+\n',
-                                  'GGTAACGGTGCGGGCTGACGCGTACAGGAAACACAGAAAAAAGCCCGCACCTGACAGTGCGGGCTTTTTTTTTCGACCAAAGGTAACGAGGTAACAACCA\n'],
+                                  f'{contig_seq[GENE_START - self.context_len:GENE_START]}\n'],
                                  'Wrong incoming contexts extracted')
-            
 
         with open(self.out_paths_fasta) as f:
             lines = f.readlines()
             self.assertEqual(len(lines[1]) - 1, self.context_len, 'Outgoing context are not of correct length')
             self.assertListEqual(lines,
                                  ['>test_gene_nodes_5+_match_1.0000_path_5+\n',
-                                  'TCGATCAGGAATTTGCCCAAATAAAACATGTCCTGCATGGCATTAGTTTGTTGGGGCAGTGCCCGGATAGCATCAACGCTGCGCTGATTTGCCGTGGCGA\n'],
+                                  f'{contig_seq[GENE_END:GENE_END + self.context_len]}\n'],
                                  'Wrong outgoing contexts extracted')
-            
 
         self.assertDictEqual(gene_lengths, {'test_gene': 279}, 'Genes length dictionary is incorrect')
+
+    def test_the_outgoing_context_starts_at_the_end_of_the_alignment_not_of_the_reference_gene(self):
+        # test_gene is a 93aa fragment whose alignment covers the contig exactly, so pad gene_length
+        # out to a reference protein that is 60bp longer than the aligned span. the outgoing context
+        # must not move: it follows the alignment, and gene_length says nothing about the contig.
+        assembly_graph = helper.get_assembly_graph()
+        nodes_with_edges_and_sequences = helper.get_assembly_graph_nodes()
+        genes_with_location_in_graph = helper.get_genes_with_location_in_graph()
+        for gene_contigs_match in genes_with_location_in_graph:
+            gene_contigs_match.gene_length += 60
+
+        ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, nodes_with_edges_and_sequences,
+                                                              genes_with_location_in_graph, 12, self.context_len,
+                                                              self.in_paths_fasta, self.out_paths_fasta, CONTIGS_PATH)
+
+        contig_seq = str(SeqIO.index(CONTIGS_PATH, 'fasta')[CONTIG_NAME].seq)
+        with open(self.out_paths_fasta) as f:
+            self.assertEqual(f.readlines()[1].strip(), contig_seq[GENE_END:GENE_END + self.context_len],
+                             'The outgoing context was placed using gene_length instead of aligned_length')
 
 
     @staticmethod
@@ -104,9 +122,11 @@ class TestExtractContextsCandidates(unittest.TestCase):
                                                                      CONTIGS_PATH, contigs_with_gaps)
 
     def _assert_contexts_were_sliced_out_of_the_contig(self, expected_header):
+        # the gene is at 1-based 401-700 of the contig, so 400:700 0-based half-open. the flanks
+        # abut it exactly on both sides.
         contig_seq = str(SeqIO.index(CONTIGS_PATH, 'fasta')[CONTIG_NAME].seq)
         with open(self.fallback_in_paths_fasta) as f:
-            self.assertListEqual(f.readlines(), [expected_header, f'{contig_seq[301:401]}\n'],
+            self.assertListEqual(f.readlines(), [expected_header, f'{contig_seq[300:400]}\n'],
                                  'Incoming context was not sliced out of the contig')
         with open(self.fallback_out_paths_fasta) as f:
             self.assertListEqual(f.readlines(), [expected_header, f'{contig_seq[700:800]}\n'],
@@ -116,7 +136,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
         gene_lengths = self._extract_for_gappy_contig(*self.build_gene_on_gappy_contig())
 
         self._assert_contexts_were_sliced_out_of_the_contig(
-            f'>fallback_gene_nodes_1+_match_1.0000_path_contigfallback_{CONTIG_NAME}_401_700\n')
+            f'>fallback_gene_nodes_1+_match_1.0000_path_contigfallback_{CONTIG_NAME}_400_700\n')
         self.assertDictEqual(gene_lengths, {'fallback_gene': 300}, 'Genes length dictionary is incorrect')
 
     def test_contig_context_for_gene_not_located_in_the_graph(self):
@@ -125,7 +145,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
         gene_lengths = self._extract_for_gappy_contig(*self.build_gene_on_gappy_contig(located_in_graph=False))
 
         self._assert_contexts_were_sliced_out_of_the_contig(
-            f'>fallback_gene_nodes__match_1.0000_path_contigfallback_{CONTIG_NAME}_401_700\n')
+            f'>fallback_gene_nodes__match_1.0000_path_contigfallback_{CONTIG_NAME}_400_700\n')
         self.assertDictEqual(gene_lengths, {'fallback_gene': 300}, 'Genes length dictionary is incorrect')
 
     def test_no_contig_context_when_the_contig_has_no_gaps(self):
@@ -141,11 +161,9 @@ class TestExtractContextsCandidates(unittest.TestCase):
     def test_contig_context_is_added_next_to_the_graph_contexts(self):
         # a gene on a gap-containing contig gets its contexts from the contig even when the graph
         # supplied contexts of its own
-        assembly_graph = pyfastg.parse_fastg(f'{TEST_FILES}/SPAdes/assembly_graph.fastg')
-        with open(f'{TEST_FILES}/nodes_with_edges_and_sequences.pkl', 'rb') as f:
-            nodes_with_edges_and_sequences = pickle.load(f)
-        with open(f'{TEST_FILES}/genes_with_location_in_graph.pkl', 'rb') as f:
-            genes_with_location_in_graph = pickle.load(f)
+        assembly_graph = helper.get_assembly_graph()
+        nodes_with_edges_and_sequences = helper.get_assembly_graph_nodes()
+        genes_with_location_in_graph = helper.get_genes_with_location_in_graph()
 
         ecc.extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, nodes_with_edges_and_sequences,
                                                               genes_with_location_in_graph, 12, self.context_len,
@@ -157,8 +175,10 @@ class TestExtractContextsCandidates(unittest.TestCase):
         with open(self.fallback_in_paths_fasta) as f:
             records = dict(zip(*[iter(line.strip() for line in f)] * 2))
         self.assertIn('>test_gene_nodes_5+_match_1.0000_path_5+', records, 'The graph context is missing')
-        self.assertEqual(records.get(f'>test_gene_nodes_5+_match_1.0000_path_contigfallback_{CONTIG_NAME}_337_615'),
-                         contig_seq[237:337], 'The contig context is missing')
+        self.assertEqual(
+            records.get(f'>test_gene_nodes_5+_match_1.0000_path_contigfallback_{CONTIG_NAME}'
+                        f'_{GENE_START}_{GENE_END}'),
+            contig_seq[GENE_START - self.context_len:GENE_START], 'The contig context is missing')
 
     def test_contig_fallback_context_name_is_parseable(self):
         query_name = f'fallback_gene_nodes_1+_match_1.0000_path_contigfallback_{CONTIG_NAME}_401_700'

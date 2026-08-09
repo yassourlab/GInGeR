@@ -130,7 +130,6 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
             last_node = gene_contigs_match.nodes_list[-1]
             nodes_list_for_gene = gene_contigs_match.nodes_list
             start_in_first_node = gene_contigs_match.start_in_first_node
-            gene_length = gene_contigs_match.gene_length
             gene_nodes_length = len(
                 pu.generate_str_from_list_of_nodes(nodes_with_edges_and_sequences, nodes_list_for_gene, None)[0])
 
@@ -146,8 +145,19 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
 
             # out paths
             out_paths_initial_stack = [(last_node, [(last_node, assembly_graph.nodes[last_node]['length'])])]
-            gene_end_in_last_node = gene_nodes_length - start_in_first_node - gene_length
-            out_covered_by_gene = assembly_graph.nodes[last_node]['length'] - gene_end_in_last_node
+            # the outgoing context has to start where the gene's alignment on the contig ends, which
+            # is aligned_length - not gene_length - away from its start. gene_length is the length of
+            # the reference protein and can be a good deal longer than the aligned span, which would
+            # start the context that many bases past the end of the gene and drop them from the
+            # sequence altogether.
+            bases_after_gene_in_path = gene_nodes_length - (start_in_first_node +
+                                                            gene_contigs_match.aligned_length)
+            if bases_after_gene_in_path < 0:
+                log.info(f'{dt.datetime.now()} did not extract an outgoing context from the graph for '
+                         f'{gene_and_nodes_path_str} because the gene alignment ends past the nodes it '
+                         f'was located on')
+                continue
+            out_covered_by_gene = assembly_graph.nodes[last_node]['length'] - bases_after_gene_in_path
             out_paths = paths_enumerator(assembly_graph, out_paths_initial_stack, depth_limit, context_len,
                                          nx.DiGraph.successors, covered_by_gene=out_covered_by_gene)
             save_paths_to_fasta_io_paths_approach(out_paths, out_paths_fasta, nodes_with_edges_and_sequences, context_len,
