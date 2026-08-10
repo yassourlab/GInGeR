@@ -165,5 +165,29 @@ class LocatingGenesInGraphTest(unittest.TestCase):
         self.assertEqual(lg.node_oriented_with_contig(reverse_complement, '-'), '4+')
 
 
+class GetShortNodeNameTest(unittest.TestCase):
+    """Every node name in the pipeline comes out of here, and the '+'/'-' it ends with is the
+    orientation all the traversal and stitching logic depends on."""
+
+    def test_a_node_with_no_adjacencies(self):
+        self.assertEqual(lg.get_short_node_name('EDGE_5_length_1000_cov_140.620106;'), '5+')
+
+    def test_a_reverse_complement_node_is_named_with_a_minus(self):
+        self.assertEqual(lg.get_short_node_name("EDGE_5_length_1000_cov_140.620106';"), '5-')
+
+    def test_the_adjacency_list_after_a_colon_is_dropped(self):
+        name = 'EDGE_1_length_100_cov_5:EDGE_2_length_200_cov_3,EDGE_3_length_10_cov_1;'
+        self.assertEqual(lg.get_short_node_name(name), '1+')
+
+    def test_the_orientation_comes_from_this_node_not_from_its_neighbours(self):
+        # the "'" that decides the orientation is the one before the ':', not any in the adjacencies
+        self.assertEqual(lg.get_short_node_name("EDGE_1_length_100_cov_5':EDGE_2_length_200_cov_3;"), '1-')
+        self.assertEqual(lg.get_short_node_name("EDGE_1_length_100_cov_5:EDGE_2_length_200_cov_3';"), '1+')
+
+    def test_a_bare_name_with_no_terminator(self):
+        self.assertEqual(lg.get_short_node_name('EDGE_12345_length_9_cov_0.1'), '12345+')
+        self.assertEqual(lg.get_short_node_name("EDGE_12345_length_9_cov_0.1'"), '12345-')
+
+
 if __name__ == '__main__':
     unittest.main()

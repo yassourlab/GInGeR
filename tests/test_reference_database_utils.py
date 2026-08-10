@@ -41,11 +41,8 @@ class MyTestCase(unittest.TestCase):
         bracken_output_path = f'{TEST_FILES}/bracken_out_coverage_test.txt'
         metadata_path = f'{TEST_FILES}/uhgg_metadata_coverage_test.tsv'
         avg_sum = 200.0
-        passing = rdu.get_species_passing_coverage_threshold(
-            bracken_output_path, avg_sum, metadata_path,
-            max_refs_per_species=2,
-            species_coverage_threshold=10,
-        )
+        stats = rdu.get_species_coverage_stats(bracken_output_path, avg_sum, metadata_path, max_refs_per_species=2)
+        passing = rdu.get_species_passing_coverage_threshold(stats, species_coverage_threshold=10)
 
         # Coverage calculations:
         # EC: 250000*200/4000000 = 12.5 (pass)
@@ -79,10 +76,8 @@ class MyTestCase(unittest.TestCase):
         metadata_path = f'{TEST_FILES}/uhgg_metadata_coverage_test.tsv'
         avg_sum = 200.0
         top_species = ['Enterobacter cloacae', 'Yersinia enterocolitica']
-        included = rdu.get_species_included_in_analysis_df(
-            bracken_output_path, kraken_report_path, avg_sum, metadata_path,
-            max_refs_per_species=2, top_species=top_species,
-        )
+        stats = rdu.get_species_coverage_stats(bracken_output_path, avg_sum, metadata_path, max_refs_per_species=2)
+        included = rdu.get_species_included_in_analysis_df(stats, kraken_report_path, top_species)
         self.assertEqual(set(included['name']), set(top_species))
         included_by_name = included.set_index('name')
         self.assertEqual(included_by_name.loc['Enterobacter cloacae', 'distinct_minimizers'], 400000)

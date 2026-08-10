@@ -2,15 +2,13 @@ from pafpy import PafRecord
 from collections import namedtuple
 import re
 
-# One copy of a gene in the assembly: where it sits on a contig, 0-based half-open like
-# GeneContigMatch. This is the identity of the thing a context was cut from, and everything needed
-# to slice the gene's sequence back out of the contig - so it doubles as a grouping key and as
-# something _get_gene_sequence can be handed directly.
+# One copy of a gene in the assembly - where it sits on a contig, 0-based half-open. Identifies the
+# thing a context was cut from, so it doubles as a grouping key and as a slice of the contig.
 GeneLocus = namedtuple('GeneLocus', ['contig', 'start', 'end'])
 
 # Where a graph node aligned to a gap-containing contig. node is the oriented short name of the node
-# that runs in the contig's direction ('7285+'), and origin is where that node starts in contig
-# coordinates - which is before the alignment starts, since minimap2 clips an alignment's ends.
+# running in the contig's direction ('7285+'); origin is where that node starts in contig coordinates,
+# which is before the alignment starts, since minimap2 clips an alignment's ends.
 NodePlacement = namedtuple('NodePlacement', ['node', 'origin', 'score'])
 
 CONTEXT_NAME_FIELDS = ['gene', 'contig', 'start', 'end', 'match_score', 'nodes', 'path', 'side']
@@ -60,10 +58,9 @@ class PathRefGenomeMatch:
 class GeneContigMatch:
     """A single alignment of a gene to a contig.
 
-    mmseqs2 reports tstart/tend as 1-based inclusive coordinates, with tstart > tend when the gene
-    is on the minus strand. They are normalized here to 0-based half-open - the convention every
-    consumer uses to slice contig and node sequences - so that contig_seq[match.start:match.end] is
-    the gene, and so that match.start can be used directly as an offset into a node or a segment.
+    mmseqs2 reports tstart/tend 1-based inclusive, with tstart > tend on the minus strand. Normalized
+    here to the 0-based half-open convention every consumer slices with, so that
+    contig_seq[match.start:match.end] is the gene and match.start is an offset into a node or segment.
     """
 
     def __init__(self, mmseq_line: str):
@@ -85,12 +82,12 @@ class GeneContigMatch:
 
     @property
     def aligned_length(self):
-        """How much of the contig the gene actually covers.
+        """How much of the contig the gene actually covers - what anything looking for the end of the
+        gene on the contig wants.
 
-        This is NOT gene_length, which is the full length of the reference protein (qlen * 3).
-        mmseqs2 is run with -c 0.8, so the alignment may cover as little as 80% of the protein, and
-        it can also contain gaps - the two lengths are equal only for a full-length ungapped hit.
-        Anything that has to find the end of the gene on the contig wants this one.
+        NOT gene_length, which is the full reference protein (qlen * 3): mmseqs2 runs with -c 0.8, so an
+        alignment may cover as little as 80% of it and may contain gaps. The two are equal only for a
+        full-length ungapped hit.
         """
         return self.end - self.start
 

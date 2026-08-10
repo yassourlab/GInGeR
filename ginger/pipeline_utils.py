@@ -54,14 +54,15 @@ def step_timing(func):
 
 
 def check_and_makedir(path_with_file):
-    path = '/'.join(path_with_file.split('/')[:-1])
-    if not os.path.exists(path):
-        os.makedirs(path)
+    """Creates the directory a file is about to be written into. A path with no directory part - a
+    bare file name, written into the working directory - needs nothing created."""
+    directory = os.path.dirname(path_with_file)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
 
 
 def check_and_make_dir_no_file_name(path):
-    if not os.path.exists(path):
-        os.makedirs(path)
+    os.makedirs(path, exist_ok=True)
 
 
 def parse_list_of_nodes(as_str):
@@ -145,14 +146,9 @@ def get_sequence_overlap(seq_a, seq_b):
 class PathGeometry:
     """Where each node of a graph path sits in the sequence that path spells out.
 
-    Consecutive nodes of a path share a k-mer, so the path's sequence is its nodes concatenated with
-    that overlap collapsed once per join. Everything that has to place something on a path is asking
-    about the same offsets - where a gene starts, how long a contigs.paths segment is, how much of a
-    context candidate the gene already covers - so they are computed once here.
-
-    The overlaps are memoized because finding one is a search (get_sequence_overlap tries four
-    likely k's and then scans), and the same path is walked again for every gene on the contig and
-    for every context candidate enumerated off it.
+    Consecutive nodes share a k-mer, so a path's sequence is its nodes concatenated with that overlap
+    collapsed once per join. Overlaps and offsets are memoized: finding an overlap is a search, and the
+    same path is walked again for every gene on the contig and every context enumerated off it.
     """
 
     def __init__(self, node_sequences):
@@ -191,10 +187,10 @@ class PathGeometry:
 
     def nodes_covering(self, nodes, start, end):
         """The nodes of the path that [start, end) covers, and where start falls inside the first of
-        them. Coordinates are the path's own.
+        them, in the path's own coordinates.
 
-        start_in_first_node is None when start lies outside the path, which leaves the gene
-        unplaceable: an offset into the first node is what both context sides are measured from.
+        start_in_first_node is None when start lies outside the path, leaving the gene unplaceable -
+        that offset is what both context sides are measured from.
         """
         covering = []
         start_in_first_node = None
@@ -209,11 +205,9 @@ class PathGeometry:
         return covering, start_in_first_node
 
     def holds_gene(self, nodes, start_in_first_node, aligned_length):
-        """Whether a gene of aligned_length really sits at start_in_first_node on this path.
-
-        The context extraction trims each side using these two numbers; when they don't hold it
-        takes the wrong bases instead of failing, so they are checked before they are used.
-        """
+        """Whether a gene of aligned_length really sits at start_in_first_node on this path. Checked
+        before use, because the context extraction trims each side by these two numbers and would take
+        the wrong bases rather than fail."""
         if not nodes or start_in_first_node is None:
             return False
         gene_end = start_in_first_node + aligned_length
@@ -222,53 +216,32 @@ class PathGeometry:
                 and gene_end > self.offsets(nodes)[-1])  # and reaches the last node, which the out side is measured in
 
 
-def write_genes_detected_in_graph_with_no_species_match(genes_with_location_in_graph, matched_genes, csv_path: str) -> bool:
-    """Write a CSV listing detected genes in the assembly graph that lack a species-level match.
+GENES_NO_SPECIES_MATCH_COLUMNS = ['gene', 'contig', 'gene_match_score']
 
-    The output has exactly these columns:
-    - gene
-    - contig
-    - gene_match_score
 
-    The file is written only if at least one unmatched gene exists.
-
-    Returns True if the file was written, False otherwise.
-    """
-    if not genes_with_location_in_graph:
-        return False
-
+def write_genes_detected_in_graph_with_no_species_match(genes_with_location_in_graph, matched_genes,
+                                                        csv_path: str) -> bool:
+    """Writes the genes that were found in the assembly graph but got no species level match, and
+    returns whether there were any to write - the csv is not created when there were none."""
     matched_genes = set(matched_genes or [])
-    rows = []
-    for gene_match in genes_with_location_in_graph:
-        if gene_match.gene not in matched_genes:
-            rows.append(
-                {
-                    'gene': gene_match.gene,
-                    'contig': gene_match.contig,
-                    'gene_match_score': gene_match.score,
-                }
-            )
-
+    rows = [(match.gene, match.contig, match.score) for match in genes_with_location_in_graph or []
+            if match.gene not in matched_genes]
     if not rows:
         return False
 
-    pd.DataFrame(rows, columns=['gene', 'contig', 'gene_match_score']).to_csv(csv_path, index=False)
+    pd.DataFrame(rows, columns=GENES_NO_SPECIES_MATCH_COLUMNS).to_csv(csv_path, index=False)
     return True
-
-
-
 
 
 def compute_context_species_diversity(results_df, species_reference_counts,
                                        group_cols=('gene', 'in_context', 'out_context'),
                                        species_col='species', genome_col='Genome'):
-    """For each unique in-gene-out trio (group_cols), compute the Shannon diversity index of the
-    species it was matched to.
+    """For each unique in-gene-out trio (group_cols), the Shannon diversity index of the species it was
+    matched to.
 
-    For every species matched by a trio, the number of unique references it was matched to is
-    divided by `species_reference_counts` (so species with more available references don't get
-    more weight), and the corrected counts are normalized to probabilities before computing the
-    Shannon diversity (-sum(p * ln(p))).
+    Per species matched by a trio, the number of unique references matched is divided by
+    `species_reference_counts` - so species with more available references get no extra weight - and the
+    corrected counts are normalized to probabilities before computing -sum(p * ln(p)).
     """
     group_cols = list(group_cols)
     species_counts = results_df.groupby(group_cols + [species_col])[genome_col].nunique().rename(
@@ -288,10 +261,8 @@ def compute_context_species_diversity(results_df, species_reference_counts,
 
 def _compute_single_context_confidence_score(results_df, species_reference_counts, context_col, species_col,
                                               score_col):
-    """How confidently a single context column (in_context or out_context, considered on its
-    own) points to each species it was matched to. See `compute_context_species_confidence_score`
-    for the underlying logic.
-    """
+    """How confidently one context column, considered on its own, points to each species it was matched
+    to. The scoring is described in `compute_context_species_confidence_score`."""
     species_counts = results_df.groupby([context_col, species_col]).size().rename('count').reset_index()
     species_counts['corrected_count'] = species_counts['count'] / species_counts[species_col].map(
         species_reference_counts)
@@ -304,15 +275,13 @@ def _compute_single_context_confidence_score(results_df, species_reference_count
 def compute_context_species_confidence_score(results_df, species_reference_counts,
                                                context_cols=('in_context', 'out_context'),
                                                species_col='species'):
-    """Compute how confidently a context (the in-gene-out trio) points to each species it was
-    matched to, versus other species also matched by it.
+    """How confidently a context (the in-gene-out trio) points to each species it was matched to,
+    against the other species it also matched.
 
-    The in_context and out_context are scored independently using the same logic: for every
-    species matched by the context, the number of matches is divided by
-    `species_reference_counts` (so species with more available references don't get more
-    weight), and the corrected counts are normalized so the scores of all species matched by
-    that context sum to 1. `context_species_confidence_score` is the average of the in_context
-    and out_context scores.
+    in_context and out_context are scored independently by the same rule: per species matched, the
+    number of matches divided by `species_reference_counts` - so species with more available references
+    get no extra weight - normalized so that a context's scores sum to 1. The result is the average of
+    the two.
     """
     in_context_col, out_context_col = context_cols
     in_scores = _compute_single_context_confidence_score(results_df, species_reference_counts, in_context_col,
@@ -376,16 +345,9 @@ def _fasta_to_dict(fasta_path: str) -> dict:
 
 
 def _get_gene_sequence(contig_seq: str, locus) -> str:
-    """The gene segment to splice between a pair of contexts, in the contig's forward orientation.
-
-    Every route that produces a context produces it in that orientation: the ones that read
-    contigs.paths get their nodes in contig order, and the contig fallback slices the contig itself.
-    So the segment stays forward - reverse complementing it would splice a flipped middle into
-    forward-oriented flanks. A locus carries no strand, so there is nothing here to be tempted by.
-
-    Its coordinates are 0-based half-open (see matches_classes.GeneLocus), so this slice is exactly
-    the aligned part of the gene.
-    """
+    """The gene segment to splice between a pair of contexts. Stays in the contig's forward
+    orientation, which is the one every context is produced in - reverse complementing it would splice
+    a flipped middle into forward-oriented flanks."""
     return contig_seq[locus.start:locus.end]
 
 
@@ -404,27 +366,22 @@ ContextSeqRecord = namedtuple('ContextSeqRecord',
 @step_timing
 def write_in_gene_out_contexts_fasta(context_level_results, genes_with_location_in_graph, matched_genes,
                                      in_paths_fasta, out_paths_fasta, contigs_fasta, output_fasta_path):
-    """Writes the sequence behind every conclusion GInGeR draws - what a user takes to a genome
-    browser, and GeNomad's input on the way. It contains:
-    - for every unique (gene, in_context, out_context) trio in context_level_results, the
-      concatenation of the in-path, gene and out-path sequences, named "ctx0000000" and up
-    - for every gene in genes_with_location_in_graph that is not in matched_genes, the full
-      sequence of the contig it was found on, named after the contig
+    """Writes the sequence behind every conclusion GInGeR draws - a user's input to a genome browser,
+    and GeNomad's input on the way:
+    - for every unique (gene, in_context, out_context) trio, the in-path, gene and out-path spliced
+      together, named "ctx0000000" and up
+    - for every gene in genes_with_location_in_graph not in matched_genes, the full contig it was found
+      on, named after the contig
 
-    The gene sequence comes from the copy of the gene the trio's two contexts were cut from, which
-    the match carries: they are only ever paired within one copy, so splicing that copy's sequence
-    between them reproduces a stretch of the contig exactly.
+    The gene sequence comes from the copy the trio's contexts were cut from, so splicing reproduces a
+    stretch of that contig exactly.
 
-    Record names are short and opaque on purpose. A name built out of the trio's own fields would be
-    a few hundred '|'-separated characters, and this fasta is read by GeNomad - which uses '|' in its
-    own output namespace, naming proviruses "{seq_name}|provirus_{start}_{end}" - and by viewers that
-    display a record's name. What a name stands for is a column of context_level_matches.csv instead
-    (see add_context_seq_ids_to_context_level_csv), so a row's sequence is one `seqkit grep -p` away.
-    A name is only meaningful within its own run: the numbering follows the sorted trios, so a run
-    that finds one more context renumbers every record after it.
+    Record names are deliberately short and opaque: the trio's own fields would run to a few hundred
+    '|'-separated characters, and GeNomad uses '|' in its own output namespace. What a name stands for
+    is a column of context_level_matches.csv instead (see add_context_seq_ids_to_context_level_csv).
+    Numbering follows the sorted trios, so it only means anything within one run.
 
-    Returns the path to the written fasta and a dict of seq_id -> ContextSeqRecord, or (None, {}) if
-    there was nothing to write.
+    Returns (fasta path, {seq_id: ContextSeqRecord}), or (None, {}) when there was nothing to write.
     """
     contig_seq_by_id = _fasta_to_dict(contigs_fasta)
     records_by_seq_id = {}
@@ -469,23 +426,20 @@ def write_in_gene_out_contexts_fasta(context_level_results, genes_with_location_
 
 
 def add_context_seq_ids_to_context_level_csv(context_level_csv_path, records_by_seq_id):
-    """Adds the columns that tie a context level row to its sequence in the contexts fasta: the
-    record's name, and where the gene sits inside that record.
+    """Adds the columns tying a context level row to its sequence in the contexts fasta - the record's
+    name, and where the gene sits inside it.
 
-    Built from the records the fasta was written from rather than from GeNomad's output, so a row
-    gets its sequence id whether or not GeNomad ran or scored that sequence.
-
-    (gene, in_context, out_context) identifies one record: a context's name carries the contig and
-    the offsets of the gene copy it was cut from, so two records cannot share all three.
+    Built from the records the fasta was written from rather than from GeNomad's output, so a row gets
+    its sequence id whether or not GeNomad ran. (gene, in_context, out_context) identifies one record,
+    since a context's name carries the contig and offsets of the copy it was cut from.
     """
     context_level_df = pd.read_csv(context_level_csv_path)
     ids_df = pd.DataFrame([(r.gene, r.in_context, r.out_context, r.seq_id, r.gene_start, r.gene_end)
                            for r in records_by_seq_id.values()],
                           columns=['gene', 'in_context', 'out_context', CONTEXT_SEQ_ID_COLUMN] + GENE_OFFSET_COLUMNS)
     context_level_df = context_level_df.merge(ids_df, on=['gene', 'in_context', 'out_context'], how='left')
-    # nullable ints, so that a row the fasta has no record for stays empty instead of turning the
-    # whole column into floats and writing every offset as "300.0", which is not a slice index.
-    # to_numeric first because an empty records_by_seq_id leaves these columns object-dtyped
+    # nullable ints, so an unmatched row stays empty rather than turning the column into floats and
+    # writing every offset as "300.0". to_numeric first: an empty records_by_seq_id leaves object dtype
     for column in GENE_OFFSET_COLUMNS:
         context_level_df[column] = pd.to_numeric(context_level_df[column]).astype('Int64')
     context_level_df.to_csv(context_level_csv_path, index=False)

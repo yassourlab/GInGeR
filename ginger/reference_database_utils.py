@@ -132,6 +132,16 @@ def get_list_of_top_species_by_bracken(bracken_output_path, fraction_of_reads):
     return top_species
 
 
+def compute_quality(metadata: pd.DataFrame) -> pd.Series:
+    """A UHGG reference's quality score: Completeness - 5 * Contamination + ln(N50).
+
+    Both the references that get downloaded and the genome lengths the coverage estimate is based on
+    are the top scorers by this, so they have to score them the same way.
+    """
+    return metadata['Completeness'] - 5 * metadata['Contamination'] + \
+        metadata['N50'].apply(lambda n50: 0 if n50 <= 0 else np.log(n50))
+
+
 def get_species_median_genome_length_by_quality(metadata: pd.DataFrame, species_list, max_refs_per_species: int):
     """Compute median genome length per species based on the top references by Quality.
 
@@ -160,7 +170,7 @@ def get_species_median_genome_length_by_quality(metadata: pd.DataFrame, species_
     if len(df) == 0:
         return {}
 
-    df['Quality'] = df['Completeness'] - 5 * df['Contamination'] + df['N50'].apply(lambda x: 0 if x <= 0 else np.log(x))
+    df['Quality'] = compute_quality(df)
 
     # Select the top references per species by Quality, breaking ties by Genome
     df = df.sort_values(['species', 'Quality', 'Genome'])
@@ -194,13 +204,9 @@ def get_species_coverage_stats(bracken_output_path: str,
     return bracken_out
 
 
-def get_species_passing_coverage_threshold(bracken_output_path: str,
-                                          avg_sum: float,
-                                          metadata_path: str,
-                                          max_refs_per_species: int,
-                                          species_coverage_threshold: float):
-    """Return species list filtered by estimated coverage."""
-    stats = get_species_coverage_stats(bracken_output_path, avg_sum, metadata_path, max_refs_per_species)
+def get_species_passing_coverage_threshold(stats: pd.DataFrame, species_coverage_threshold: float):
+    """The species of a `get_species_coverage_stats` table whose estimated coverage clears the
+    threshold - the ones GInGeR will download references for and look for genes in."""
     passing_mask = stats['estimated_genome_length'].notna() & (stats['estimated_genome_length'] > 0) & \
         (stats['estimated_coverage'] > species_coverage_threshold)
     passing = stats.loc[passing_mask, 'name'].tolist()
@@ -217,15 +223,9 @@ def get_distinct_minimizers_by_species(kraken_report_path: str) -> dict:
     return species_rows.set_index('name')['distinct_kmer_count'].to_dict()
 
 
-def get_species_included_in_analysis_df(bracken_output_path: str,
-                                       kraken_report_path: str,
-                                       avg_sum: float,
-                                       metadata_path: str,
-                                       max_refs_per_species: int,
-                                       top_species) -> pd.DataFrame:
-    """Bracken output restricted to species included in the analysis, with distinct minimizers,
-    estimated genome length and estimated coverage added."""
-    stats = get_species_coverage_stats(bracken_output_path, avg_sum, metadata_path, max_refs_per_species)
+def get_species_included_in_analysis_df(stats: pd.DataFrame, kraken_report_path: str, top_species) -> pd.DataFrame:
+    """A `get_species_coverage_stats` table restricted to the species included in the analysis, with
+    each one's distinct minimizer count added."""
     distinct_minimizers_by_species = get_distinct_minimizers_by_species(kraken_report_path)
 
     included = stats[stats['name'].isin(top_species)].copy()
@@ -246,8 +246,12 @@ def download_and_write_content_to_file(references_folder, references_folder_cont
         for attempt in range(N_ATTEMPTS):
             try:
                 data = urllib.request.urlopen(ftp_download_str, timeout=URLOPEN_TIMEOUT).read()
-                with open(local_tar_gz_path, 'wb') as f:
+                # written beside the real name and moved onto it, so that a download interrupted
+                # mid-write leaves nothing behind rather than a truncated file that the next run finds
+                # in references_folder_content and treats as already downloaded
+                with open(f'{local_tar_gz_path}.part', 'wb') as f:
                     f.write(data)
+                os.replace(f'{local_tar_gz_path}.part', local_tar_gz_path)
                 break
             except Exception as e:
                 # the last attempt raises rather than sleeping through a retry it will not make
@@ -275,27 +279,22 @@ def gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f):
 def generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path, references_folder,
                                                                merged_filtered_fasta, max_refs_per_species):
     metadata = pd.read_csv(metadata_path, sep='\t')
-    # Create column 'Quality' as Completeness - 5 * Contamination + ln(N50)
-    metadata['Quality'] = metadata.Completeness - 5 * metadata.Contamination + \
-                                      metadata.N50.apply(lambda x: 0 if x <= 0 else np.log(x))
-    # metadata['species'] = metadata.Lineage.apply(lambda x: x.split('s__')[-1])
+    metadata['Quality'] = compute_quality(metadata)
+    # max_refs_per_species applies per subspecies when the metadata names them, and to the species as
+    # a whole when it does not
+    has_subspecies = 'subspecies' in metadata.columns
     references_folder_content = [x.split('/')[-1] for x in glob(references_folder + '/*')]
     selected_samples_dfs_list = []
     with open(merged_filtered_fasta, 'w') as merged_filtered_fasta_f:
         for species in top_species:
             single_species_table = metadata[
                 (metadata.species == species) & (metadata.FTP_download.str.startswith('ftp'))]
-            if 'subspecies' in single_species_table.columns:
-                for subspecies, subspecies_table in single_species_table.groupby('subspecies'):
-                    top_x_df = take_top_species_and_download_to_file(max_refs_per_species, subspecies_table,
-                                                                     references_folder, references_folder_content,
-                                                                     merged_filtered_fasta_f)
-                    selected_samples_dfs_list.append(top_x_df)
-            else:
-                top_x_df = take_top_species_and_download_to_file(max_refs_per_species, single_species_table,
-                                                                 references_folder,
-                                                                 references_folder_content, merged_filtered_fasta_f)
-                selected_samples_dfs_list.append(top_x_df)
+            tables_to_download = ([table for _, table in single_species_table.groupby('subspecies')]
+                                  if has_subspecies else [single_species_table])
+            for table in tables_to_download:
+                selected_samples_dfs_list.append(
+                    take_top_species_and_download_to_file(max_refs_per_species, table, references_folder,
+                                                          references_folder_content, merged_filtered_fasta_f))
 
     return pd.concat(selected_samples_dfs_list)
 
@@ -304,10 +303,9 @@ def take_top_species_and_download_to_file(max_refs_per_species, single_species_t
                                           references_folder_content, merged_filtered_fasta_f):
     # Take top X references according to Quality score, breaking ties alphabetically by Genome
     top_x_df = single_species_table.sort_values(['Quality', 'Genome']).tail(max_refs_per_species)
-    top_x_df.apply(lambda x: download_and_write_content_to_file(references_folder,
-                                                                references_folder_content,
-                                                                x.FTP_download,
-                                                                merged_filtered_fasta_f), axis=1)
+    for ftp_download in top_x_df['FTP_download']:
+        download_and_write_content_to_file(references_folder, references_folder_content, ftp_download,
+                                           merged_filtered_fasta_f)
     return top_x_df
 
 
@@ -330,11 +328,12 @@ def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_pa
 
     min_reads_for_bracken = get_min_reads_for_bracken(metadata_path, species_coverage_threshold, avg_sum)
     run_bracken(filtered_kraken_report_path, bracken_output, bracken_report, kraken_db, min_reads_for_bracken, max_read_len)
-    top_species = get_species_passing_coverage_threshold(bracken_output, avg_sum, metadata_path,
-                                                         max_species_representatives, species_coverage_threshold)
-    species_included_in_analysis_df = get_species_included_in_analysis_df(bracken_output, filtered_kraken_report_path,
-                                                                          avg_sum, metadata_path,
-                                                                          max_species_representatives, top_species)
+    # both of the steps below read the same coverage table, which costs a pass over the reference
+    # metadata to estimate every detected species' genome length - so it is built once here
+    coverage_stats = get_species_coverage_stats(bracken_output, avg_sum, metadata_path, max_species_representatives)
+    top_species = get_species_passing_coverage_threshold(coverage_stats, species_coverage_threshold)
+    species_included_in_analysis_df = get_species_included_in_analysis_df(coverage_stats, filtered_kraken_report_path,
+                                                                          top_species)
     species_included_in_analysis_df.to_csv(species_included_in_analysis_path, index=False, sep='\t')
     selected_species_df = generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path,
                                                                                      references_folder,

@@ -1,3 +1,5 @@
+import os
+import tempfile
 import unittest
 
 from pafpy import PafRecord
@@ -82,6 +84,82 @@ class ReadAndFilterPathMatchesPerGeneTest(unittest.TestCase):
 
         self.assertEqual(sorted(grouped), [('test_gene', self.LOCUS, 'MGYG000077121_281'),
                                            ('test_gene', self.LOCUS, 'MGYG000260594_1')])
+
+
+class RefGenomeSpeciesDictTest(unittest.TestCase):
+    """Every context level row's species comes from this dict, and the reference metadata does not
+    always name the species in a column of its own."""
+
+    def _dict_from(self, content):
+        with tempfile.NamedTemporaryFile('w', suffix='.tsv', delete=False) as f:
+            f.write(content)
+        try:
+            return vcc.get_ref_genome_species_dict_from_metadata_path(f.name)
+        finally:
+            os.unlink(f.name)
+
+    def test_reads_the_species_column(self):
+        self.assertEqual(self._dict_from('Genome\tspecies\nG1\tE. coli\nG2\tS. aureus\n'),
+                         {'G1': 'E. coli', 'G2': 'S. aureus'})
+
+    def test_falls_back_to_the_lineage_when_the_species_is_empty(self):
+        self.assertEqual(
+            self._dict_from('Genome\tspecies\tLineage\nG1\t\td__Bacteria;g__Escherichia;s__Escherichia coli\n'),
+            {'G1': 'Escherichia coli'})
+
+    def test_falls_back_to_the_lineage_when_there_is_no_species_column(self):
+        self.assertEqual(self._dict_from('Genome\tLineage\nG1\td__Bacteria;s__Blautia faecis\n'),
+                         {'G1': 'Blautia faecis'})
+
+    def test_a_lineage_with_no_species_rank_gives_no_species(self):
+        self.assertEqual(self._dict_from('Genome\tspecies\tLineage\nG1\t\td__Bacteria;g__Escherichia\n'), {'G1': ''})
+
+    def test_falls_back_to_the_first_column_when_none_is_named_genome(self):
+        self.assertEqual(self._dict_from('Accession\tspecies\nA1\tE. coli\n'), {'A1': 'E. coli'})
+
+    def test_headers_are_matched_ignoring_case_and_padding(self):
+        self.assertEqual(self._dict_from(' GENOME \t SPECIES \nG1\tE. coli\n'), {'G1': 'E. coli'})
+
+    def test_a_row_with_no_genome_is_skipped(self):
+        self.assertEqual(self._dict_from('Genome\tspecies\nG1\tE. coli\n\tOrphan\n'), {'G1': 'E. coli'})
+
+    def test_a_row_that_stops_short_of_the_species(self):
+        self.assertEqual(self._dict_from('Genome\tspecies\tLineage\nG1\nG2\tE. coli\n'), {'G1': '', 'G2': 'E. coli'})
+
+    def test_a_quote_in_a_field_is_not_treated_as_quoting(self):
+        self.assertEqual(self._dict_from('Genome\tspecies\nG1\tstrain "x" sp.\n'), {'G1': 'strain "x" sp.'})
+
+    def test_a_table_with_no_rows(self):
+        self.assertEqual(self._dict_from('Genome\tspecies\n'), {})
+        self.assertEqual(self._dict_from(''), {})
+
+
+class KeepBestMatchesTest(unittest.TestCase):
+    """keep_best_matches and the gene alignment NMS share one loop but break ties in opposite
+    directions - so the direction is what has to be pinned."""
+
+    class Match:
+        def __init__(self, score, start, end, tag):
+            self.score, self.start, self.end, self.tag = score, start, end, tag
+            self.gene = tag
+
+    def test_the_higher_scoring_of_two_overlapping_matches_wins(self):
+        low = self.Match(0.90, 0, 100, 'low')
+        high = self.Match(0.95, 5, 105, 'high')
+        self.assertEqual([m.tag for m in vcc.keep_best_matches([low, high], iou_th=0.3)], ['high'])
+
+    def test_matches_that_do_not_overlap_are_both_kept(self):
+        left = self.Match(0.9, 0, 100, 'left')
+        right = self.Match(0.9, 5000, 5100, 'right')
+        kept = {m.tag for m in vcc.keep_best_matches([left, right], iou_th=0.3)}
+        self.assertEqual(kept, {'left', 'right'})
+
+    def test_an_exact_tie_goes_to_the_leftmost_match(self):
+        # the gene alignment NMS sorts the same key with reverse=True and would keep 'right' instead
+        left = self.Match(0.9, 0, 100, 'left')
+        right = self.Match(0.9, 5, 105, 'right')
+        for order in ([left, right], [right, left]):  # and the input's order must not decide it
+            self.assertEqual([m.tag for m in vcc.keep_best_matches(order, iou_th=0.3)], ['left'])
 
 
 if __name__ == '__main__':

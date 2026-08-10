@@ -24,14 +24,11 @@ def run_genomad(fasta_path, output_dir, genomad_db, threads):
 
 
 def keep_only_plasmid_summary(genomad_out_dir, plasmid_summary_path, kept_summary_path):
-    """Moves the one file GInGeR reads out of GeNomad's output tree and removes the rest of it.
+    """Moves the one file GInGeR reads out of GeNomad's output tree and removes the rest.
 
-    An end-to-end run leaves ~80MB per sample of which the plasmid summary is ~100KB; everything else
-    is per-module intermediates - protein fastas, mmseqs2 hits, feature matrices - that nothing
-    downstream reads. `--cleanup`, which GENOMAD_COMMAND already passes, does not remove any of them.
-
-    Call this only once the summary has been read, so that a run which failed anywhere inside GeNomad
-    keeps its whole output tree to be debugged.
+    An end-to-end run leaves ~80MB per sample of per-module intermediates nothing downstream reads, and
+    GENOMAD_COMMAND's `--cleanup` removes none of them. Call this only once the summary has been read,
+    so a run that failed inside GeNomad keeps its output tree to be debugged.
     """
     genomad_out_dir, kept_summary_path = os.path.abspath(genomad_out_dir), os.path.abspath(kept_summary_path)
     if os.path.commonpath([genomad_out_dir, kept_summary_path]) == genomad_out_dir:
@@ -45,16 +42,12 @@ def keep_only_plasmid_summary(genomad_out_dir, plasmid_summary_path, kept_summar
 
 
 def read_plasmid_scores(plasmid_summary_path, records_by_seq_id):
-    """Reads GeNomad's plasmid_summary.tsv and splits the results into context-level and
-    contig-level plasmid scores.
+    """Splits GeNomad's plasmid_summary.tsv into context-level and contig-level plasmid scores.
 
-    A sequence is a gene context if records_by_seq_id - as returned by
-    pipeline_utils.write_in_gene_out_contexts_fasta - names it, and a contig otherwise. Membership is
-    exact, so no contig can be mistaken for a context whatever it is called.
+    A sequence is a gene context if records_by_seq_id names it - exactly, so no contig can be mistaken
+    for one - and a contig otherwise.
 
-    Returns a tuple (context_plasmid_scores, contig_plasmid_scores):
-    - context_plasmid_scores has columns [gene, in_context, out_context, plasmid_score]
-    - contig_plasmid_scores has columns [contig, plasmid_score]
+    Returns ([gene, in_context, out_context, plasmid_score], [contig, plasmid_score]).
     """
     summary_df = pd.read_csv(plasmid_summary_path, sep='\t')[['seq_name', 'plasmid_score']]
     is_context = summary_df['seq_name'].isin(records_by_seq_id)

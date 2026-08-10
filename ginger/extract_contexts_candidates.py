@@ -7,21 +7,19 @@ from Bio import SeqIO
 log = logging.getLogger(__name__)
 
 CONTIG_FALLBACK_PATH_NAME = 'contigfallback'
+# the k-mer overlap two adjacent nodes are assumed to share while enumerating paths. The real overlap
+# is found per pair by pipeline_utils.get_sequence_overlap, which is too expensive to call per step of
+# the traversal
+ASSUMED_NODE_OVERLAP = 55
 
 
 def context_name(gene_contigs_match, path_name, side):
-    """The name a context is written under, which is also everything downstream knows about it.
+    """The name a context is written under - which is everything downstream knows about it, including
+    the copy of the gene it was cut from (two copies can sit on the same nodes).
 
-    A context has to carry the copy of the gene it was cut from, not just which gene and which nodes:
-    a gene that could not be located in the graph has no nodes, and two copies of a gene can sit on
-    the same ones. The alternative - a side table keyed by name - is a second channel that has to
-    stay in step with fasta files that get written, deleted and regenerated, and the name has to be
-    unique per copy either way.
-
-    Fields are '|'-separated with the gene first, so the name can be taken apart again from the
-    right by PathRefGenomeMatch however many '|' the gene's own name contains - SARG's and CARD's
-    have several. Nothing else here may contain a '|', and nodes are joined with '_' rather than the
-    ',' contigs.paths uses so that a name needs no quoting in the output csvs.
+    '|'-separated with the gene first, so PathRefGenomeMatch can split it from the right whatever '|'
+    the gene's own name contains. No other field may contain one, and nodes are joined with '_' rather
+    than contigs.paths' ',' so a name needs no quoting in the output csvs.
     """
     match = gene_contigs_match
     return '|'.join([match.gene, match.contig, str(match.start), str(match.end), f'{match.score:.4f}',
@@ -30,14 +28,13 @@ def context_name(gene_contigs_match, path_name, side):
 
 def save_paths_to_fasta_io_paths_approach(paths, paths_fasta_name, geometry, context_len,
                                           in_or_out, covered_by_gene, gene_contigs_match):
-    """Writes the context_len bases of every path that flank the gene. Contexts are always exactly
-    context_len long - a path that has less than that left once the gene-covered part is trimmed off
-    is dropped.
+    """Writes the context_len bases of every path that flank the gene, and returns the names written.
 
-    Returns the names written, which is fewer than the paths given whenever some were too short."""
+    Contexts are always exactly context_len long, so a path with less than that left once the
+    gene-covered part is trimmed off is dropped - fewer names come back than paths went in."""
     written_context_names = []
 
-    with open(paths_fasta_name, 'a') as f:  # there is an 'a' here because I call this function once per gene location in the graph
+    with open(paths_fasta_name, 'a') as f:  # appended to: called once per gene location in the graph
         for path in paths:
             seq = geometry.sequence(path)
             covered_by_gene_int = int(covered_by_gene)
@@ -56,18 +53,12 @@ def save_paths_to_fasta_io_paths_approach(paths, paths_fasta_name, geometry, con
 
 
 def write_contexts_from_contig(contigs_index, gene_contigs_match, in_paths_fasta, out_paths_fasta, context_len):
-    """Writes both of a gene's flanks, sliced straight out of the contig it was found on.
+    """Writes both of a gene's flanks, sliced straight out of the contig it was found on, and returns
+    the 0, 1 or 2 names written - a side with less than context_len of flanking sequence is skipped.
 
-    This is done for every gene found on a gap-containing contig - a contig SPAdes assembled from
-    several graph paths joined using paired-end evidence. On such a contig the gene sits on a node
-    that is usually a dead end in the graph, and sometimes it can't be located in the graph at all,
-    so the graph describes its context poorly or not at all, while the contig has flanking sequence
-    on both sides. A context taken from the contig may cross one of those paired-end-inferred joins,
-    which is weaker evidence than pure graph sequence - hence the identifiable 'contigfallback' path
-    name it gets in the output.
-
-    Returns the names written - 0, 1 or 2 of them, since a side that has less than context_len of
-    flanking sequence left in the contig is skipped.
+    Done for genes on gap-containing contigs, where the graph describes the context poorly or not at
+    all. Such a context may cross a paired-end-inferred join rather than a graph edge, which is weaker
+    evidence - hence the identifiable 'contigfallback' path name.
     """
     contig_seq = str(contigs_index[gene_contigs_match.contig].seq)
     sides = [('in', in_paths_fasta,
@@ -89,7 +80,12 @@ def paths_enumerator(graph, stack, max_depth, max_length, neighbors_func, revers
     out_paths = []
     while stack:
         (vertex, path) = stack.pop()
-        total_length_estimation = sum([length for node, length in path]) - (len(path) * 55) - covered_by_gene
+        # an estimate, not the length: it assumes every join collapses ASSUMED_NODE_OVERLAP bases and
+        # charges one join per node rather than per pair, so it runs a little short. Only the bound on
+        # how far to keep walking depends on it - what gets written is cut to length from the real
+        # sequence in save_paths_to_fasta_io_paths_approach
+        total_length_estimation = sum([length for node, length in path]) - (
+                len(path) * ASSUMED_NODE_OVERLAP) - covered_by_gene
         neighbors = list(neighbors_func(graph, vertex))
         if len(neighbors) > 0 and total_length_estimation < max_length and len(path) < max_depth:
             for neighbor in neighbors:
@@ -107,20 +103,17 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, geometry: 
                                                       genes_to_contigs, depth_limit, context_len,
                                                       in_paths_fasta, out_paths_fasta, contigs_path,
                                                       contigs_with_gaps: Set[str] = frozenset()):
-    """Writes a context candidate fasta for the incoming and for the outgoing side of every gene.
+    """Writes a context candidate fasta for the incoming and for the outgoing side of every gene, and
+    returns the length of every gene.
 
-    Every context is exactly context_len long, and a side that cannot supply that much sequence gets
-    no context. Contexts are read off the assembly graph. A gene found on one of contigs_with_gaps additionally
-    gets contexts sliced straight out of the contig, whether or not the graph could locate it or
-    describe its context (see write_contexts_from_contig). Pass an empty contigs_with_gaps to turn
-    that off.
+    Every context is exactly context_len long, and a side that cannot supply that much gets no context.
+    Contexts are read off the assembly graph; a gene on one of contigs_with_gaps additionally gets
+    contexts sliced out of the contig (see write_contexts_from_contig) - pass an empty set to turn that
+    off.
 
-    Every copy of a gene is handled on its own, even when two copies were located on the same nodes:
-    their contexts are the same sequence but belong to different places in the assembly, and pairing
-    an incoming context of one with the outgoing context of the other would describe a stretch that
-    exists in no contig.
-
-    Returns the length of every gene.
+    Every copy of a gene is handled on its own even when two copies sit on the same nodes: pairing one
+    copy's incoming context with another's outgoing context would describe a stretch that is in no
+    contig.
     """
     gene_lengths = {}
     n_contig_contexts = n_graph_contexts = 0

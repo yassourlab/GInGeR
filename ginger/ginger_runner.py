@@ -152,15 +152,15 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     # create output directory if it doesn't exist
     pu.check_and_make_dir_no_file_name(out_dir)
     # filter reference database using kraken
-    references_used_path = f'{out_dir}/references_used.csv'
+    references_used_path = c.REFERENCES_USED_TEMPLATE.format(out_dir=out_dir)
     if sample_specific_references is None:
-        sample_specific_references = f'{out_dir}/merged_filtered_ref_db.fasta'
+        sample_specific_references = c.MERGED_FILTERED_REF_DB_TEMPLATE.format(out_dir=out_dir)
         # if the file was not specified or the specified file does not exist
         if kraken_output_path is None or not os.path.exists(kraken_output_path):
-            kraken_output_path = f'{out_dir}/kraken_output_file.tsv'
-            kraken_report_path = f'{out_dir}/kraken_report_file.tsv'
-            bracken_output = f'{out_dir}/bracken_output_file.tsv'
-            bracken_report = f'{out_dir}/bracken_report_file.tsv'
+            kraken_output_path = c.KRAKEN_OUTPUT_TEMPLATE.format(out_dir=out_dir)
+            kraken_report_path = c.KRAKEN_REPORT_TEMPLATE.format(out_dir=out_dir)
+            bracken_output = c.BRACKEN_OUTPUT_TEMPLATE.format(out_dir=out_dir)
+            bracken_report = c.BRACKEN_REPORT_TEMPLATE.format(out_dir=out_dir)
             species_included_in_analysis_path = c.SPECIES_INCLUDED_IN_ANALYSIS_TEMPLATE.format(out_dir=out_dir)
             rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads, kraken_output_path,
                                                  kraken_report_path, bracken_output, bracken_report, species_coverage_threshold,
@@ -174,7 +174,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
         indexed_reference = sample_specific_references
     # run assembly
     if assembly_dir is None:
-        assembly_dir = f'{out_dir}/SPAdes'
+        assembly_dir = c.ASSEMBLY_DIR_TEMPLATE.format(out_dir=out_dir)
     if not skip_assembly:
         au.run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, assembly_dir, threads)
     # run tool

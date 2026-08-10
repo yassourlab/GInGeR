@@ -9,6 +9,7 @@ from ginger import constants as c
 from Bio import SeqIO
 from typing import Dict, Iterator, List, Set
 import os
+import re
 
 log = logging.getLogger(__name__)
 
@@ -21,22 +22,15 @@ NODE_TO_CONTIG_SCORE_TH = 0.95
 MAX_ANCHOR_DISAGREEMENT = 300
 
 
-def get_node_without_adj(long_node_name):
-    split_by_dots = long_node_name.split(':')[0]
-    split_by_comma_dot = long_node_name.split(';')[0]
-    if len(split_by_comma_dot) <= len(split_by_dots):
-        return split_by_comma_dot
-    return split_by_dots
-
-
 def get_short_node_name(long_node_name):
-    node_without_adj = get_node_without_adj(long_node_name)
-    node_num = node_without_adj.split('_')[1]
-    last_char_chuku = node_without_adj[-1] == "'"
-    if last_char_chuku:
-        return node_num + '-'
-    else:
-        return node_num + '+'
+    """The oriented name a graph node is known by everywhere downstream - '5+' or '5-'.
+
+    A fastg record is named 'EDGE_{num}_length_{len}_cov_{cov}', with a trailing "'" on the reverse
+    complement of an edge, followed by the edges it leads into after a ':' - or by a ';' when it leads
+    nowhere. Only the number and the orientation survive here.
+    """
+    node_without_adjacencies = re.split(r'[:;]', long_node_name)[0]
+    return node_without_adjacencies.split('_')[1] + ("-" if node_without_adjacencies.endswith("'") else '+')
 
 
 def locate_gene_on_path(geometry, nodes_in_path, gene_contig_match, origin=0):
@@ -56,13 +50,12 @@ def locate_gene_on_path(geometry, nodes_in_path, gene_contig_match, origin=0):
 
 
 def node_oriented_with_contig(node_name, strand):
-    """The short name of the graph node that runs in the same direction as the contig.
+    """The short name of the graph node running in the contig's direction, which is the orientation
+    every nodes_list is in - so that contexts flank the gene the way they flank it on the contig.
 
-    A nodes_list is always oriented with the contig - that is what contigs.paths gives the routes
-    that read it - so that the contexts extracted from it flank the gene the way they flank it on
-    the contig. An alignment can reach that node from either of its two fastg records: the forward
-    one aligning on the plus strand, or the reverse complement one aligning on the minus strand.
-    Both orientations of every edge are nodes of the graph, so flipping is always possible.
+    An alignment reaches that node from either of the edge's two fastg records: the forward one on the
+    plus strand, the reverse complement on the minus. Both orientations are nodes, so flipping always
+    resolves.
     """
     short_node_name = get_short_node_name(node_name)
     if strand == '+':
@@ -73,18 +66,15 @@ def node_oriented_with_contig(node_name, strand):
 def anchor_segment_in_contig(geometry, segment, placements_by_node, max_disagreement=MAX_ANCHOR_DISAGREEMENT):
     """Where a path segment of a gap-containing contig starts in contig coordinates.
 
-    The gaps between segments are of unknown length, so a segment's origin cannot be derived from
-    node lengths - it has to come from an aligned node. Any node of the segment will do: its offset
-    within the segment is known exactly from the sequence walk, so the origin it implies is
-    origin = where the node aligned - its offset in the segment. Using any node rather than only the
-    first matters because short nodes never align (minimap2 reports nothing below ~200bp) and
-    segments regularly start with one.
+    The gaps are of unknown length, so the origin cannot come from node lengths - it comes from an
+    aligned node, as (where the node aligned - its offset in the segment). Any node will do, and it has
+    to be any rather than the first, because minimap2 reports nothing below ~200bp and segments
+    regularly start with a node that short.
 
-    Returns None when no node of the segment aligned, or when the candidate origins do not agree:
-    a node that also aligned to a repeat elsewhere on the contig contributes a candidate far from
-    the rest, and a segment whose candidates are spread out is not reliably anywhere. The median is
-    taken rather than the best-scoring candidate because agreement, not alignment quality, is what
-    says the segment is really there.
+    Returns None when no node aligned, or when the candidate origins disagree - a node that also
+    aligned to a repeat elsewhere contributes a far-off candidate, and a spread-out segment is not
+    reliably anywhere. Taken as the median, since agreement rather than alignment quality is the
+    evidence here.
     """
     offsets = geometry.offsets(segment)
     origins = sorted(placement.origin - offset
@@ -102,13 +92,13 @@ def anchor_segment_in_contig(geometry, segment, placements_by_node, max_disagree
 
 
 def locate_gene_in_gappy_contig(geometry, segments, gene_contig_match, placements_by_node):
-    """Locates a gene on a contig that SPAdes assembled from several graph paths joined using
-    paired-end evidence.
+    """Locates a gene on a contig SPAdes assembled from several graph paths joined by paired-end
+    evidence.
 
-    A segment is a run of nodes that really are adjacent in the graph - ';' in contigs.paths marks
-    exactly the joins that are not graph edges - so requiring the gene's whole span to fall inside
-    one segment is what makes its context a path the graph actually supports. A gene lying across a
-    join belongs to no segment and is not located here; its context comes from the contig instead.
+    A segment is a run of nodes genuinely adjacent in the graph, since ';' in contigs.paths marks
+    exactly the joins that are not graph edges - so requiring the gene's whole span inside one segment
+    is what makes its context a path the graph supports. A gene lying across a join belongs to no
+    segment and takes its context from the contig instead.
     """
     for segment in segments:
         origin = anchor_segment_in_contig(geometry, segment, placements_by_node)
@@ -161,11 +151,7 @@ def add_node_list_to_genes_to_contigs(genes_to_contigs: Iterator[mc.GeneContigMa
 
 
 def get_nodes_dict_from_fastg_file(assembly_graph_path: str) -> Dict[str, SeqIO.SeqRecord]:
-    """
-    parses an assembly graph fastg file (reads it as a fasta file)
-    :param assembly_graph_path: a fastg file representing the assembly graph (one of the outputs of spades)
-    :return:
-    """
+    """The assembly graph's node sequences, keyed by oriented short name - a .fastg read as a fasta."""
     with open(assembly_graph_path) as handle:
         records = list(SeqIO.parse(handle, "fasta"))
     nodes_sequences_dict = {get_short_node_name(record.name): record for record in records}
@@ -223,15 +209,11 @@ def locate_genes_in_graph(assembly_dir: str, gene_pident_filtering_th: float, ge
 @pu.step_timing
 def map_nodes_to_contigs_w_gaps(contigs_with_gaps, assembly_graph_path, contigs_path, n_threads,
                                 nodes_to_contigs_w_gaps_path):
-    """Aligns the graph's nodes to the gap-containing contigs, and returns where each node landed as
-    {contig: {node: [NodePlacement]}}.
+    """Aligns the graph's nodes to the gap-containing contigs - the only ones whose segments need
+    anchoring - and returns where each landed as {contig: {node: [NodePlacement]}}.
 
-    Only gap-containing contigs are mapped, because they are the only ones whose path segments need
-    anchoring - every other contig's path already places its nodes exactly.
-
-    Nodes are named and oriented the way the rest of the pipeline names them, here rather than at
-    every use: a placement's node is the one that runs in the contig's direction, and its origin is
-    where the node itself starts, not where the alignment does.
+    Named and oriented here rather than at every use: a placement's node is the one running in the
+    contig's direction, and its origin is where that node starts, not where the alignment does.
     """
     # filter contigs fasta to keep only contigs with gaps
     contigs_w_gaps_path = contigs_path.replace('.fasta', '_w_gaps.fasta')
