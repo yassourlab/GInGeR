@@ -15,45 +15,33 @@ from tests import helper
 
 TEST_FILES = helper.get_filedir()
 
-"""
-This test does not pass locally, but should pass on githubs CI.
-When running it locally you will get the following error:
-"FileNotFoundError: [Errno 2] No such file or directory: 'ginger/UHGG-metadata.tsv'"
-If you do wish for it to pass locally (is a reasonable request), replace "cls.metadata_path = 'ginger/UHGG-metadata.tsv'"
-with cls.metadata_path = '../ginger/UHGG-metadata.tsv' 
-"""
-
 
 class PipelineUtilsTest(unittest.TestCase):
+    # 'with_dups' fixtures are ones where the same gene is matched to the same genome twice
     @classmethod
     def setUpClass(cls) -> None:
         cls.context_level_output_path = f'{TEST_FILES}/context_level_matches.csv'
-        cls.context_level_output_path_with_dups = f'{TEST_FILES}/context_level_matches_with_dups.csv'  # dups means that the same gene is matched to the same genome twice
+        cls.context_level_output_path_with_dups = f'{TEST_FILES}/context_level_matches_with_dups.csv'
         cls.context_level_output_path_with_plasmid_score = f'{TEST_FILES}/context_level_matches_with_plasmid_score.csv'
         cls.context_level_output_path_with_context_species_diversity = f'{TEST_FILES}/context_level_matches_context_species_diversity.csv'
         cls.context_level_output_path_with_context_species_confidence_score = f'{TEST_FILES}/context_level_matches_context_species_confidence_score.csv'
         cls.context_species_diversity_metadata_path = f'{TEST_FILES}/context_species_diversity_metadata.tsv'
-        cls.metadata_path = 'ginger/UHGG-metadata.tsv' # use this for running tests on github CI
-        # cls.metadata_path = '../ginger/UHGG-metadata.tsv' # use this for running the test locally
-        cls.species_level_output_path = 'test_species_level_matches.csv'
-        cls.species_level_output_path_with_dups = f'test_species_level_matches_with_dups.csv'  # dups means that the same gene is matched to the same genome twice
-        cls.species_level_output_path_with_plasmid_score = 'test_species_level_matches_with_plasmid_score.csv'
-        cls.species_level_output_path_with_context_species_diversity = 'test_species_level_matches_context_species_diversity.csv'
-        cls.species_level_output_path_with_context_species_confidence_score = 'test_species_level_matches_context_species_confidence_score.csv'
+        cls.metadata_path = helper.get_metadata_path()
+        # everything this class writes goes here, so that no output can be left behind in whatever
+        # directory the tests were run from
+        cls.out_dir = tempfile.mkdtemp()
+        cls.species_level_output_path = f'{cls.out_dir}/species_level_matches.csv'
+        cls.species_level_output_path_with_dups = f'{cls.out_dir}/species_level_matches_with_dups.csv'
+        cls.species_level_output_path_with_plasmid_score = f'{cls.out_dir}/species_level_matches_with_plasmid_score.csv'
+        cls.species_level_output_path_with_context_species_diversity = f'{cls.out_dir}/species_level_matches_context_species_diversity.csv'
+        cls.species_level_output_path_with_context_species_confidence_score = f'{cls.out_dir}/species_level_matches_context_species_confidence_score.csv'
         # GT files
         cls.species_level_output_path_gt = f'{TEST_FILES}/species_level_matches.csv'
         cls.species_level_output_path_with_dups_gt = f'{TEST_FILES}/species_level_matches_with_dups.csv'
 
     @classmethod
     def tearDownClass(cls) -> None:
-        if os.path.exists(cls.species_level_output_path):
-            os.remove(cls.species_level_output_path)
-        if os.path.exists(cls.species_level_output_path_with_plasmid_score):
-            os.remove(cls.species_level_output_path_with_plasmid_score)
-        if os.path.exists(cls.species_level_output_path_with_context_species_diversity):
-            os.remove(cls.species_level_output_path_with_context_species_diversity)
-        if os.path.exists(cls.species_level_output_path_with_context_species_confidence_score):
-            os.remove(cls.species_level_output_path_with_context_species_confidence_score)
+        shutil.rmtree(cls.out_dir, ignore_errors=True)
 
     def test_aggregate_context_level_output_to_species_level_output_and_write_csv(self):
         pu.aggregate_context_level_output_to_species_level_output_and_write_csv(self.context_level_output_path,
@@ -202,28 +190,24 @@ class PipelineUtilsTest(unittest.TestCase):
             ('g1', 'G3_1'): [make_match('g1', 'g1_in2', 'g1_out2')],
         }
 
-        csv_path = 'test_context_level_matches_context_species_diversity_out.csv'
-        try:
-            # species_A has 3 genomes in the metadata, capped to 2 by max_species_representatives
-            pu.write_context_level_output_to_csv(output, csv_path, self.context_species_diversity_metadata_path, 2)
+        csv_path = f'{self.out_dir}/context_level_matches_context_species_diversity_out.csv'
+        # species_A has 3 genomes in the metadata, capped to 2 by max_species_representatives
+        pu.write_context_level_output_to_csv(output, csv_path, self.context_species_diversity_metadata_path, 2)
 
-            results_df = pd.read_csv(csv_path)
-            diversity_by_contig = results_df.set_index('reference_contig')['context_species_diversity']
-            confidence_by_contig = results_df.set_index('reference_contig')['context_species_confidence_score']
+        results_df = pd.read_csv(csv_path)
+        diversity_by_contig = results_df.set_index('reference_contig')['context_species_diversity']
+        confidence_by_contig = results_df.set_index('reference_contig')['context_species_confidence_score']
 
-            for contig in ['G1_1', 'G2_1', 'G4_1']:
-                self.assertAlmostEqual(diversity_by_contig[contig], math.log(2))
-            self.assertAlmostEqual(diversity_by_contig['G3_1'], 0.0)
+        for contig in ['G1_1', 'G2_1', 'G4_1']:
+            self.assertAlmostEqual(diversity_by_contig[contig], math.log(2))
+        self.assertAlmostEqual(diversity_by_contig['G3_1'], 0.0)
 
-            # trio (g1_in1, g1_out1): species_A corrected count 2/2=1.0, species_B 1/1=1.0,
-            # sum=2.0 -> confidence 0.5 for both species
-            for contig in ['G1_1', 'G2_1', 'G4_1']:
-                self.assertAlmostEqual(confidence_by_contig[contig], 0.5)
-            # trio (g1_in2, g1_out2): species_A only -> confidence 1.0
-            self.assertAlmostEqual(confidence_by_contig['G3_1'], 1.0)
-        finally:
-            if os.path.exists(csv_path):
-                os.remove(csv_path)
+        # trio (g1_in1, g1_out1): species_A corrected count 2/2=1.0, species_B 1/1=1.0,
+        # sum=2.0 -> confidence 0.5 for both species
+        for contig in ['G1_1', 'G2_1', 'G4_1']:
+            self.assertAlmostEqual(confidence_by_contig[contig], 0.5)
+        # trio (g1_in2, g1_out2): species_A only -> confidence 1.0
+        self.assertAlmostEqual(confidence_by_contig['G3_1'], 1.0)
 
     def test_parse_paths_file(self):
         paths_file = f'{TEST_FILES}/SPAdes/contigs.paths'
@@ -256,24 +240,11 @@ class PipelineUtilsTest(unittest.TestCase):
         self.assertEqual(parsed_paths["NODE_10_length_36078_cov_6.312495'"], [['76999-']])
 
 
-class WriteInGeneOutContextsFastaTest(unittest.TestCase):
-    def setUp(self):
-        self.tmp_dir = tempfile.mkdtemp()
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp_dir)
-
-    def _write_fasta(self, name, records):
-        path = os.path.join(self.tmp_dir, name)
-        with open(path, 'w') as f:
-            for header, seq in records.items():
-                f.write(f'>{header}\n{seq}\n')
-        return path
-
+class WriteInGeneOutContextsFastaTest(helper.TempDirTestCase):
     def test_writes_context_trios_and_unmatched_contigs(self):
-        in_paths_fasta = self._write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII'})
-        out_paths_fasta = self._write_fasta('out.fasta', {'out_ctx1': 'OOOOOOOO'})
-        contigs_fasta = self._write_fasta('contigs.fasta', {
+        in_paths_fasta = self.write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII'})
+        out_paths_fasta = self.write_fasta('out.fasta', {'out_ctx1': 'OOOOOOOO'})
+        contigs_fasta = self.write_fasta('contigs.fasta', {
             'contig1': 'ACGTACGTAC',
             'contig2': 'GGGGCCCCAA',
         })
@@ -306,9 +277,9 @@ class WriteInGeneOutContextsFastaTest(unittest.TestCase):
     def test_gene_offsets_cut_the_gene_back_out_of_the_record(self):
         # the offsets are what a user slices the record with to highlight the gene, so they have to
         # land on the gene and not on either flank
-        in_paths_fasta = self._write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII'})
-        out_paths_fasta = self._write_fasta('out.fasta', {'out_ctx1': 'OOOO'})
-        contigs_fasta = self._write_fasta('contigs.fasta', {'contig1': 'ACGTACGTAC'})
+        in_paths_fasta = self.write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII'})
+        out_paths_fasta = self.write_fasta('out.fasta', {'out_ctx1': 'OOOO'})
+        contigs_fasta = self.write_fasta('contigs.fasta', {'contig1': 'ACGTACGTAC'})
         context_level_results = {
             ('geneA', 'ref_genome1'): [helper.FakeInOutMatch('geneA', 'in_ctx1', 'out_ctx1',
                                                              GeneLocus('contig1', 2, 6))],
@@ -328,9 +299,9 @@ class WriteInGeneOutContextsFastaTest(unittest.TestCase):
     def test_gene_segment_is_taken_forward_out_of_the_contig(self):
         # in/out path sequences are always extracted in the contig's forward orientation, so the
         # spliced gene segment stays forward too, however the gene itself is oriented
-        in_paths_fasta = self._write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII'})
-        out_paths_fasta = self._write_fasta('out.fasta', {'out_ctx1': 'OOOOOOOO'})
-        contigs_fasta = self._write_fasta('contigs.fasta', {'contig1': 'AAAAACCCCC'})
+        in_paths_fasta = self.write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII'})
+        out_paths_fasta = self.write_fasta('out.fasta', {'out_ctx1': 'OOOOOOOO'})
+        contigs_fasta = self.write_fasta('contigs.fasta', {'contig1': 'AAAAACCCCC'})
 
         genes_with_location_in_graph = [helper.FakeGeneMatch('geneA', 'contig1', 1.0)]
         context_level_results = {
@@ -351,9 +322,9 @@ class WriteInGeneOutContextsFastaTest(unittest.TestCase):
     def test_the_gene_segment_comes_from_the_copy_the_contexts_flank(self):
         # geneA is on two contigs. the trio's contexts were cut from the copy on contig2, so that is
         # the copy whose sequence goes between them - not the copy that happens to match best
-        in_paths_fasta = self._write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII'})
-        out_paths_fasta = self._write_fasta('out.fasta', {'out_ctx1': 'OOOOOOOO'})
-        contigs_fasta = self._write_fasta('contigs.fasta', {'contig1': 'AAAAAAAAAA',
+        in_paths_fasta = self.write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII'})
+        out_paths_fasta = self.write_fasta('out.fasta', {'out_ctx1': 'OOOOOOOO'})
+        contigs_fasta = self.write_fasta('contigs.fasta', {'contig1': 'AAAAAAAAAA',
                                                             'contig2': 'CCCCGGGGTT'})
 
         genes_with_location_in_graph = [
@@ -376,9 +347,9 @@ class WriteInGeneOutContextsFastaTest(unittest.TestCase):
         self.assertEqual(records['ctx0000000'], 'IIIIIIIIGGGGOOOOOOOO')
 
     def test_returns_none_and_removes_file_when_nothing_to_write(self):
-        in_paths_fasta = self._write_fasta('in.fasta', {})
-        out_paths_fasta = self._write_fasta('out.fasta', {})
-        contigs_fasta = self._write_fasta('contigs.fasta', {'contig1': 'ACGTACGTAC'})
+        in_paths_fasta = self.write_fasta('in.fasta', {})
+        out_paths_fasta = self.write_fasta('out.fasta', {})
+        contigs_fasta = self.write_fasta('contigs.fasta', {'contig1': 'ACGTACGTAC'})
 
         genes_with_location_in_graph = [helper.FakeGeneMatch('geneA', 'contig1', 1.0)]
         matched_genes = {'geneA'}  # geneA is matched, so its contig is not included
@@ -395,9 +366,9 @@ class WriteInGeneOutContextsFastaTest(unittest.TestCase):
     def test_sequences_are_numbered_the_same_way_on_a_rerun(self):
         # ids are not stable across samples - they follow the sorted trios - but the same input has
         # to number them the same way twice, or a rerun's fasta and csv would not agree
-        in_paths_fasta = self._write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII', 'in_ctx2': 'IIII'})
-        out_paths_fasta = self._write_fasta('out.fasta', {'out_ctx1': 'OOOOOOOO', 'out_ctx2': 'OOOO'})
-        contigs_fasta = self._write_fasta('contigs.fasta', {'contig1': 'ACGTACGTAC'})
+        in_paths_fasta = self.write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII', 'in_ctx2': 'IIII'})
+        out_paths_fasta = self.write_fasta('out.fasta', {'out_ctx1': 'OOOOOOOO', 'out_ctx2': 'OOOO'})
+        contigs_fasta = self.write_fasta('contigs.fasta', {'contig1': 'ACGTACGTAC'})
         locus = GeneLocus('contig1', 2, 6)
         context_level_results = {
             ('geneA', 'ref_genome1'): [helper.FakeInOutMatch('geneA', 'in_ctx1', 'out_ctx1', locus),
@@ -415,7 +386,7 @@ class WriteInGeneOutContextsFastaTest(unittest.TestCase):
         self.assertEqual(sorted(numbering[0]), ['ctx0000000', 'ctx0000001'])
 
 
-class StitchedContextGeneContextTest(unittest.TestCase):
+class StitchedContextGeneContextTest(helper.TempDirTestCase):
     """The invariant the whole context-gene-context fasta rests on: the two contexts abut the gene
     with no overlap and no gap.
 
@@ -433,12 +404,9 @@ class StitchedContextGeneContextTest(unittest.TestCase):
     CONTIG_NAME = 'NODE_1_length_1000_cov_140.620106'
 
     def setUp(self):
-        self.tmp_dir = tempfile.mkdtemp()
-        self.in_paths_fasta = os.path.join(self.tmp_dir, 'in.fasta')
-        self.out_paths_fasta = os.path.join(self.tmp_dir, 'out.fasta')
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp_dir)
+        super().setUp()
+        self.in_paths_fasta = self.tmp_path('in.fasta')
+        self.out_paths_fasta = self.tmp_path('out.fasta')
 
     def _stitch(self):
         contigs_path = f'{TEST_FILES}/SPAdes/contigs.fasta'
@@ -503,15 +471,12 @@ class StitchedContextGeneContextTest(unittest.TestCase):
                          'the gene does not sit where mmseqs2 aligned it (1-based 337-615)')
 
 
-class AddContextSeqIdsToContextLevelCsvTest(unittest.TestCase):
+class AddContextSeqIdsToContextLevelCsvTest(helper.TempDirTestCase):
     """The join from a context level row to the sequence it was concluded from."""
 
     def setUp(self):
-        self.tmp_dir = tempfile.mkdtemp()
-        self.csv_path = os.path.join(self.tmp_dir, 'context_level_matches.csv')
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp_dir)
+        super().setUp()
+        self.csv_path = self.tmp_path('context_level_matches.csv')
 
     def _write_csv(self, rows):
         pd.DataFrame(rows).to_csv(self.csv_path, index=False)

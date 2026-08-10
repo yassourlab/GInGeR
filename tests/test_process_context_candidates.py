@@ -1,4 +1,3 @@
-from Bio import SeqIO
 import unittest
 import pickle
 
@@ -16,8 +15,7 @@ FIXTURE_LOCUS = mc.GeneLocus('NODE_1_length_1000_cov_140.620106', 336, 615)
 class ProcessContextCandidatesTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.metadata_path = 'ginger/UHGG-metadata.tsv'  # for running on github CI
-        # cls.metadata_path = '../ginger/UHGG-metadata.tsv'  # for running locally
+        cls.metadata_path = helper.get_metadata_path()
 
     def test_process_in_and_out_paths_to_results(self):
         in_path_mapping_to_bugs = f'{TEST_FILES}/in_paths_to_reference.paf'

@@ -1,3 +1,7 @@
+import os
+import shutil
+import tempfile
+import unittest
 from pathlib import Path
 
 import pyfastg
@@ -8,9 +12,42 @@ from ginger import matches_classes as mc
 from ginger import pipeline_utils as pu
 
 
+class TempDirTestCase(unittest.TestCase):
+    """A test case with a temp dir of its own in self.tmp_dir, removed when the test ends.
+
+    Everything a test writes belongs in there - a test that writes a relative path instead leaves its
+    output in whatever directory the suite was started from, and one of them used to do exactly that.
+    """
+
+    def setUp(self):
+        self.tmp_dir = tempfile.mkdtemp()
+        # addCleanup rather than tearDown, so it still runs when a subclass's own setUp raises
+        self.addCleanup(shutil.rmtree, self.tmp_dir, ignore_errors=True)
+
+    def tmp_path(self, name) -> str:
+        return os.path.join(self.tmp_dir, name)
+
+    def write_fasta(self, name, records) -> str:
+        """A fasta of {header: sequence} written into the temp dir, returning its path."""
+        path = self.tmp_path(name)
+        with open(path, 'w') as f:
+            for header, seq in records.items():
+                f.write(f'>{header}\n{seq}\n')
+        return path
+
+
 def get_filedir() -> str:
     currentdir = Path(__file__).resolve().parent
     return f"{currentdir}/test_files"
+
+
+def get_metadata_path() -> str:
+    """The UHGG metadata table that ships inside the package.
+
+    Resolved from where ginger is installed rather than from the working directory, so that the tests
+    that need it pass whether they are run from the repo root the way CI does or from anywhere else.
+    """
+    return str(Path(pu.__file__).resolve().parent / 'UHGG-metadata.tsv')
 
 
 class FakeGeneMatch:

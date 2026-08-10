@@ -1,6 +1,4 @@
 import os
-import tempfile
-import shutil
 import unittest
 from unittest.mock import patch
 
@@ -11,14 +9,12 @@ from ginger import pipeline_utils as pu
 from ginger import plasmid_detection_utils as pdu
 from tests import helper
 
+# the two frames read_plasmid_scores splits GeNomad's summary into
+CONTEXT_SCORE_COLUMNS = ['gene', 'in_context', 'out_context', 'plasmid_score']
+CONTIG_SCORE_COLUMNS = ['contig', 'plasmid_score']
 
-class ReadPlasmidScoresTest(unittest.TestCase):
-    def setUp(self):
-        self.tmp_dir = tempfile.mkdtemp()
 
-    def tearDown(self):
-        shutil.rmtree(self.tmp_dir)
-
+class ReadPlasmidScoresTest(helper.TempDirTestCase):
     def test_no_context_rows_returns_empty_context_df(self):
         """GeNomad output with only contig rows must not crash."""
         summary_path = os.path.join(self.tmp_dir, 'plasmid_summary.tsv')
@@ -30,9 +26,9 @@ class ReadPlasmidScoresTest(unittest.TestCase):
 
         context_plasmid_scores, contig_plasmid_scores = pdu.read_plasmid_scores(summary_path, {})
 
-        self.assertListEqual(list(context_plasmid_scores.columns), ['gene', 'in_context', 'out_context', 'plasmid_score'])
+        self.assertListEqual(list(context_plasmid_scores.columns), CONTEXT_SCORE_COLUMNS)
         self.assertEqual(len(context_plasmid_scores), 0)
-        self.assertListEqual(list(contig_plasmid_scores.columns), ['contig', 'plasmid_score'])
+        self.assertListEqual(list(contig_plasmid_scores.columns), CONTIG_SCORE_COLUMNS)
         self.assertEqual(len(contig_plasmid_scores), 2)
 
     def test_no_contig_rows_returns_empty_contig_df(self):
@@ -48,9 +44,9 @@ class ReadPlasmidScoresTest(unittest.TestCase):
             summary_path, {'ctx0000000': pu.ContextSeqRecord('ctx0000000', 'geneA', 'in_ctx1', 'out_ctx1', 8, 12),
                            'ctx0000001': pu.ContextSeqRecord('ctx0000001', 'geneB', 'in_ctx2', 'out_ctx2', 8, 12)})
 
-        self.assertListEqual(list(context_plasmid_scores.columns), ['gene', 'in_context', 'out_context', 'plasmid_score'])
+        self.assertListEqual(list(context_plasmid_scores.columns), CONTEXT_SCORE_COLUMNS)
         self.assertEqual(len(context_plasmid_scores), 2)
-        self.assertListEqual(list(contig_plasmid_scores.columns), ['contig', 'plasmid_score'])
+        self.assertListEqual(list(contig_plasmid_scores.columns), CONTIG_SCORE_COLUMNS)
         self.assertEqual(len(contig_plasmid_scores), 0)
 
     def test_splits_context_and_contig_rows(self):
@@ -65,7 +61,7 @@ class ReadPlasmidScoresTest(unittest.TestCase):
         context_plasmid_scores, contig_plasmid_scores = pdu.read_plasmid_scores(
             summary_path, {'ctx0000000': pu.ContextSeqRecord('ctx0000000', 'geneA', 'in_ctx1', 'out_ctx1', 8, 12)})
 
-        self.assertListEqual(list(context_plasmid_scores.columns), ['gene', 'in_context', 'out_context', 'plasmid_score'])
+        self.assertListEqual(list(context_plasmid_scores.columns), CONTEXT_SCORE_COLUMNS)
         self.assertEqual(len(context_plasmid_scores), 1)
         row = context_plasmid_scores.iloc[0]
         self.assertEqual(row['gene'], 'geneA')
@@ -73,14 +69,14 @@ class ReadPlasmidScoresTest(unittest.TestCase):
         self.assertEqual(row['out_context'], 'out_ctx1')
         self.assertEqual(row['plasmid_score'], 0.9)
 
-        self.assertListEqual(list(contig_plasmid_scores.columns), ['contig', 'plasmid_score'])
+        self.assertListEqual(list(contig_plasmid_scores.columns), CONTIG_SCORE_COLUMNS)
         self.assertEqual(len(contig_plasmid_scores), 1)
         row = contig_plasmid_scores.iloc[0]
         self.assertEqual(row['contig'], 'contig2')
         self.assertEqual(row['plasmid_score'], 0.1)
 
 
-class GeneNamesWithSeparatorsTest(unittest.TestCase):
+class GeneNamesWithSeparatorsTest(helper.TempDirTestCase):
     """Gene names come from a fasta the caller supplies, so no character is safe to build a
     composite sequence name out of. SARG's are pipe delimited and CARD's contain both '|' and ':'.
 
@@ -90,23 +86,10 @@ class GeneNamesWithSeparatorsTest(unittest.TestCase):
 
     SARG_GENE = 'SARG|multidrug@MFS|emrB|WP_145513356.1'
 
-    def setUp(self):
-        self.tmp_dir = tempfile.mkdtemp()
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp_dir)
-
-    def _write_fasta(self, name, records):
-        path = os.path.join(self.tmp_dir, name)
-        with open(path, 'w') as f:
-            for header, seq in records.items():
-                f.write(f'>{header}\n{seq}\n')
-        return path
-
     def test_a_gene_name_full_of_separators_survives_the_round_trip(self):
-        in_paths_fasta = self._write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII'})
-        out_paths_fasta = self._write_fasta('out.fasta', {'out_ctx1': 'OOOOOOOO'})
-        contigs_fasta = self._write_fasta('contigs.fasta', {'contig1': 'ACGTACGTAC'})
+        in_paths_fasta = self.write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII'})
+        out_paths_fasta = self.write_fasta('out.fasta', {'out_ctx1': 'OOOOOOOO'})
+        contigs_fasta = self.write_fasta('contigs.fasta', {'contig1': 'ACGTACGTAC'})
         context_level_results = {
             (self.SARG_GENE, 'ref_genome1'): [helper.FakeInOutMatch(self.SARG_GENE, 'in_ctx1', 'out_ctx1',
                                                                     mc.GeneLocus('contig1', 2, 6))],
@@ -135,13 +118,7 @@ class GeneNamesWithSeparatorsTest(unittest.TestCase):
         self.assertEqual(row['plasmid_score'], 0.7)
 
 
-class ReadPlasmidScoresGuardTest(unittest.TestCase):
-    def setUp(self):
-        self.tmp_dir = tempfile.mkdtemp()
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp_dir)
-
+class ReadPlasmidScoresGuardTest(helper.TempDirTestCase):
     def test_raises_when_none_of_genomads_sequences_are_known_contexts(self):
         # a summary from another run would classify every context as a contig, and every context
         # level row would quietly end up with a plasmid score of 0
@@ -155,9 +132,9 @@ class ReadPlasmidScoresGuardTest(unittest.TestCase):
                 {'ctx0000042': pu.ContextSeqRecord('ctx0000042', 'geneA', 'in_ctx1', 'out_ctx1', 8, 12)})
 
 
-class KeepOnlyPlasmidSummaryTest(unittest.TestCase):
+class KeepOnlyPlasmidSummaryTest(helper.TempDirTestCase):
     def setUp(self):
-        self.tmp_dir = tempfile.mkdtemp()
+        super().setUp()
         self.genomad_out_dir = os.path.join(self.tmp_dir, 'genomad_output')
         self.summary_path = os.path.join(self.genomad_out_dir, 'input_summary', 'input_plasmid_summary.tsv')
         os.makedirs(os.path.dirname(self.summary_path))
@@ -167,9 +144,6 @@ class KeepOnlyPlasmidSummaryTest(unittest.TestCase):
         os.makedirs(os.path.join(self.genomad_out_dir, 'input_annotate'))
         with open(os.path.join(self.genomad_out_dir, 'input_annotate', 'input_proteins.faa'), 'w') as f:
             f.write('>ctx0000000_1\nMKV\n')
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp_dir)
 
     def test_keeps_the_summary_and_removes_the_tree(self):
         kept_path = os.path.join(self.tmp_dir, 'plasmid_summary.tsv')
@@ -189,13 +163,7 @@ class KeepOnlyPlasmidSummaryTest(unittest.TestCase):
         self.assertTrue(os.path.exists(self.summary_path))
 
 
-class AddPlasmidScoresToCsvTest(unittest.TestCase):
-    def setUp(self):
-        self.tmp_dir = tempfile.mkdtemp()
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp_dir)
-
+class AddPlasmidScoresToCsvTest(helper.TempDirTestCase):
     def test_add_plasmid_scores_to_context_level_csv(self):
         csv_path = os.path.join(self.tmp_dir, 'context_level_matches.csv')
         pd.DataFrame({
@@ -239,13 +207,7 @@ class AddPlasmidScoresToCsvTest(unittest.TestCase):
         self.assertEqual(result.loc[result['gene'] == 'geneB', 'plasmid_score'].iloc[0], 0.0)
 
 
-class RunGenomadTest(unittest.TestCase):
-    def setUp(self):
-        self.tmp_dir = tempfile.mkdtemp()
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp_dir)
-
+class RunGenomadTest(helper.TempDirTestCase):
     class Dummy:
         def __init__(self, stdout='', stderr='', returncode=0):
             self.stdout = stdout
