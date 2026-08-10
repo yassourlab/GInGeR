@@ -3,7 +3,8 @@ import logging
 import numpy as np
 import pandas as pd
 import timeit
-from collections import defaultdict
+from collections import defaultdict, namedtuple
+from Bio import SeqIO
 from pafpy import PafFile
 
 RUNTIME_PRINTS_PATTERN = '$$$$$$$$$$'
@@ -347,6 +348,127 @@ def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str,
         results_df = compute_context_species_confidence_score(results_df, species_reference_counts)
 
     results_df.to_csv(csv_path, index=False)
+
+
+def _fasta_to_dict(fasta_path: str) -> dict:
+    with open(fasta_path) as f:
+        return {rec.id: str(rec.seq) for rec in SeqIO.parse(f, 'fasta')}
+
+
+def _get_gene_sequence(contig_seq: str, locus) -> str:
+    """The gene segment to splice between a pair of contexts, in the contig's forward orientation.
+
+    Every route that produces a context produces it in that orientation: the ones that read
+    contigs.paths get their nodes in contig order, and the contig fallback slices the contig itself.
+    So the segment stays forward - reverse complementing it would splice a flipped middle into
+    forward-oriented flanks. A locus carries no strand, so there is nothing here to be tempted by.
+
+    Its coordinates are 0-based half-open (see matches_classes.GeneLocus), so this slice is exactly
+    the aligned part of the gene.
+    """
+    return contig_seq[locus.start:locus.end]
+
+
+CONTEXT_SEQ_ID_PREFIX = 'ctx'
+CONTEXT_SEQ_ID_COLUMN = 'context_seq_id'
+GENE_OFFSET_COLUMNS = ['gene_start_in_context_seq', 'gene_end_in_context_seq']
+
+# One in-gene-out record of the contexts fasta. seq_id is the record's name; gene, in_context and
+# out_context are the context_level_matches.csv columns it joins back to; gene_start and gene_end are
+# where the gene sits inside the record, 0-based half-open, so that record[gene_start:gene_end] is
+# the aligned part of the gene and the two flanks are what surrounds it.
+ContextSeqRecord = namedtuple('ContextSeqRecord',
+                              ['seq_id', 'gene', 'in_context', 'out_context', 'gene_start', 'gene_end'])
+
+
+@step_timing
+def write_in_gene_out_contexts_fasta(context_level_results, genes_with_location_in_graph, matched_genes,
+                                     in_paths_fasta, out_paths_fasta, contigs_fasta, output_fasta_path):
+    """Writes the sequence behind every conclusion GInGeR draws - what a user takes to a genome
+    browser, and GeNomad's input on the way. It contains:
+    - for every unique (gene, in_context, out_context) trio in context_level_results, the
+      concatenation of the in-path, gene and out-path sequences, named "ctx0000000" and up
+    - for every gene in genes_with_location_in_graph that is not in matched_genes, the full
+      sequence of the contig it was found on, named after the contig
+
+    The gene sequence comes from the copy of the gene the trio's two contexts were cut from, which
+    the match carries: they are only ever paired within one copy, so splicing that copy's sequence
+    between them reproduces a stretch of the contig exactly.
+
+    Record names are short and opaque on purpose. A name built out of the trio's own fields would be
+    a few hundred '|'-separated characters, and this fasta is read by GeNomad - which uses '|' in its
+    own output namespace, naming proviruses "{seq_name}|provirus_{start}_{end}" - and by viewers that
+    display a record's name. What a name stands for is a column of context_level_matches.csv instead
+    (see add_context_seq_ids_to_context_level_csv), so a row's sequence is one `seqkit grep -p` away.
+    A name is only meaningful within its own run: the numbering follows the sorted trios, so a run
+    that finds one more context renumbers every record after it.
+
+    Returns the path to the written fasta and a dict of seq_id -> ContextSeqRecord, or (None, {}) if
+    there was nothing to write.
+    """
+    contig_seq_by_id = _fasta_to_dict(contigs_fasta)
+    records_by_seq_id = {}
+
+    wrote_any = False
+    with open(output_fasta_path, 'w') as f:
+        if context_level_results:
+            in_seq_by_id = _fasta_to_dict(in_paths_fasta)
+            out_seq_by_id = _fasta_to_dict(out_paths_fasta)
+
+            trios = set()
+            for matches_list in context_level_results.values():
+                for match in matches_list:
+                    trios.add((match.gene, match.in_path.query_name, match.out_path.query_name, match.locus))
+
+            # sorted, so that a rerun on the same input numbers the sequences the same way - and so
+            # that GeNomad's own per-sequence gene numbering stays comparable between runs
+            for n, (gene, in_context, out_context, locus) in enumerate(sorted(trios)):
+                in_seq = in_seq_by_id[in_context]
+                gene_seq = _get_gene_sequence(contig_seq_by_id[locus.contig], locus)
+                full_seq = in_seq + gene_seq + out_seq_by_id[out_context]
+                seq_id = f'{CONTEXT_SEQ_ID_PREFIX}{n:07d}'
+                # the gene's offsets are measured off the sequences that were just spliced rather
+                # than assumed to be --context-len. A context is only ever written when it is exactly
+                # that long, but nothing here has to know that for the offsets to be right
+                records_by_seq_id[seq_id] = ContextSeqRecord(seq_id, gene, in_context, out_context,
+                                                             len(in_seq), len(in_seq) + len(gene_seq))
+                f.write(f'>{seq_id}\n{full_seq}\n')
+                wrote_any = True
+
+        written_contigs = set()
+        for gene_match in genes_with_location_in_graph:
+            if gene_match.gene not in matched_genes and gene_match.contig not in written_contigs:
+                f.write(f'>{gene_match.contig}\n{contig_seq_by_id[gene_match.contig]}\n')
+                written_contigs.add(gene_match.contig)
+                wrote_any = True
+
+    if not wrote_any:
+        os.remove(output_fasta_path)
+        return None, {}
+    return output_fasta_path, records_by_seq_id
+
+
+def add_context_seq_ids_to_context_level_csv(context_level_csv_path, records_by_seq_id):
+    """Adds the columns that tie a context level row to its sequence in the contexts fasta: the
+    record's name, and where the gene sits inside that record.
+
+    Built from the records the fasta was written from rather than from GeNomad's output, so a row
+    gets its sequence id whether or not GeNomad ran or scored that sequence.
+
+    (gene, in_context, out_context) identifies one record: a context's name carries the contig and
+    the offsets of the gene copy it was cut from, so two records cannot share all three.
+    """
+    context_level_df = pd.read_csv(context_level_csv_path)
+    ids_df = pd.DataFrame([(r.gene, r.in_context, r.out_context, r.seq_id, r.gene_start, r.gene_end)
+                           for r in records_by_seq_id.values()],
+                          columns=['gene', 'in_context', 'out_context', CONTEXT_SEQ_ID_COLUMN] + GENE_OFFSET_COLUMNS)
+    context_level_df = context_level_df.merge(ids_df, on=['gene', 'in_context', 'out_context'], how='left')
+    # nullable ints, so that a row the fasta has no record for stays empty instead of turning the
+    # whole column into floats and writing every offset as "300.0", which is not a slice index.
+    # to_numeric first because an empty records_by_seq_id leaves these columns object-dtyped
+    for column in GENE_OFFSET_COLUMNS:
+        context_level_df[column] = pd.to_numeric(context_level_df[column]).astype('Int64')
+    context_level_df.to_csv(context_level_csv_path, index=False)
 
 
 @step_timing

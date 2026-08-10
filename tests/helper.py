@@ -13,6 +13,30 @@ def get_filedir() -> str:
     return f"{currentdir}/test_files"
 
 
+class FakeGeneMatch:
+    """A gene located on a contig. Only the gene and the contig matter to the contexts fasta - a trio
+    takes its sequence from the locus its match carries, so this is left for the unmatched contig
+    listing."""
+
+    def __init__(self, gene, contig, score):
+        self.gene = gene
+        self.contig = contig
+        self.score = score
+
+
+class FakePathMatch:
+    def __init__(self, query_name):
+        self.query_name = query_name
+
+
+class FakeInOutMatch:
+    def __init__(self, gene, in_context, out_context, locus=None):
+        self.gene = gene
+        self.in_path = FakePathMatch(in_context)
+        self.out_path = FakePathMatch(out_context)
+        self.locus = locus
+
+
 def get_contig_seq(contig_name, contigs_path=None):
     """The sequence of a single contig, read without leaving the fasta handle open the way
     SeqIO.index does."""

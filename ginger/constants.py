@@ -11,8 +11,10 @@ CONTEXT_LEVEL_OUTPUT_TEMPLATE = '{out_dir}/context_level_matches.csv'
 SPECIES_LEVEL_OUTPUT_TEMPLATE = '{out_dir}/species_level_matches.csv'
 SUBSPECIES_LEVEL_OUTPUT_TEMPLATE = '{out_dir}/subspecies_level_matches.csv'
 GENES_DETECTED_IN_GRAPH_WITH_NO_SPECIES_MATCH_OUTPUT_TEMPLATE = '{out_dir}/genes_detected_in_graph_with_no_species_match.csv'
-PLASMID_DETECTION_INPUT_FASTA_TEMPLATE = '{temp_folder}/plasmid_detection_input.fasta'
-PLASMID_DETECTION_TRIOS_TEMPLATE = '{temp_folder}/plasmid_detection_input_trios.tsv'
+# a result rather than an intermediate - the sequence behind every context level row, for the user to
+# take to a genome browser, and GeNomad's input on the way
+IN_GENE_OUT_CONTEXTS_FASTA_TEMPLATE = '{out_dir}/in_gene_out_contexts.fasta'
+PLASMID_SUMMARY_TEMPLATE = '{out_dir}/plasmid_summary.tsv'
 GENOMAD_OUTPUT_DIR_TEMPLATE = '{out_dir}/genomad_output'
 SPECIES_INCLUDED_IN_ANALYSIS_TEMPLATE = '{out_dir}/species_included_in_analysis.csv'
 
