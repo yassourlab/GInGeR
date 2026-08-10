@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import timeit
 from collections import defaultdict
-from pafpy import PafRecord, PafFile
+from pafpy import PafFile
 
 RUNTIME_PRINTS_PATTERN = '$$$$$$$$$$'
 log = logging.getLogger(__name__)
@@ -33,28 +33,7 @@ def check_and_make_dir_no_file_name(path):
         os.makedirs(path)
 
 
-def generate_str_from_list_of_nodes(records_dict, nodes_in_path, node_to_find=None):
-    node_start, node_end = None, None
-    prev_seq = str(records_dict[nodes_in_path[0]].seq)
-    prev_node = nodes_in_path[0]
-    seq = prev_seq[:]
-    for node in nodes_in_path[1:]:
-        cur_seq = str(records_dict[node].seq)
-        try:
-            k = get_sequence_overlap(prev_seq, cur_seq)
-        except Exception as e:
-            logging.error(f'{str(e)} {prev_node} {node} ')
-            raise Exception
-        if node == node_to_find:  # assuming that the node appears only once. will take the last location of the node
-            node_start = len(seq) - k
-
-        seq += cur_seq[k:]
-        prev_node = node
-        prev_seq = cur_seq
-    return seq, node_start
-
-
-def parse_list_of_nodes(as_str, original_graph_nodes):
+def parse_list_of_nodes(as_str):
     splt = as_str.split(',')
     return [node.replace(';', '') for node in splt]
 
@@ -64,9 +43,13 @@ def is_contig_name_func(line):
 
 
 def paf_record_to_dict(paf_record):
-    return dict(qname=paf_record.qname, qlen=paf_record.qlen, strand=str(paf_record.strand),
+    # qstart matters: minimap2 clips the ends of an alignment, so the query does not necessarily
+    # start where the alignment does, and anything placing the query in target coordinates has to
+    # subtract it
+    return dict(qname=paf_record.qname, qlen=paf_record.qlen, qstart=paf_record.qstart, qend=paf_record.qend,
+                strand=str(paf_record.strand),
                 tname=paf_record.tname, tlen=paf_record.tlen, tstart=paf_record.tstart, tend=paf_record.tend,
-                mlen=paf_record.mlen)  # blen=paf_record.blen, qstart=paf_record.qstart, qend=paf_record.qend,
+                mlen=paf_record.mlen)
 
 
 def minimap_results_from_path(path, head_size=None):
@@ -80,7 +63,7 @@ def minimap_results_from_path(path, head_size=None):
     return minimap_results
 
 
-def parse_path_segments(path_lines, assembly_graph_nodes):
+def parse_path_segments(path_lines):
     """Splits the path lines of a single contig into segments, each a list of oriented graph nodes.
     SPAdes writes one line per segment, ending with ';' when another segment follows, but a segment
     may also be wrapped over several lines.
@@ -93,13 +76,13 @@ def parse_path_segments(path_lines, assembly_graph_nodes):
                 segments.append(current_segment)
                 current_segment = []
             if part.strip():
-                current_segment += parse_list_of_nodes(part.strip(), assembly_graph_nodes)
+                current_segment += parse_list_of_nodes(part.strip())
     if current_segment:
         segments.append(current_segment)
     return segments
 
 
-def parse_paths_file(paths_path, assembly_graph_nodes, path_is_contig_name_func=is_contig_name_func):
+def parse_paths_file(paths_path, path_is_contig_name_func=is_contig_name_func):
     """Parses SPAdes' contigs.paths into {contig name: ordered list of path segments}.
 
     A contig assembled from a single graph path has a single segment. SPAdes splits a path with ';'
@@ -118,7 +101,7 @@ def parse_paths_file(paths_path, assembly_graph_nodes, path_is_contig_name_func=
             else:
                 contigs_to_path_lines[contig_name].append(stripped_line)
 
-    parsed_paths = {contig_name: parse_path_segments(path_lines, assembly_graph_nodes) for contig_name, path_lines in
+    parsed_paths = {contig_name: parse_path_segments(path_lines) for contig_name, path_lines in
                     contigs_to_path_lines.items()}
     contigs_with_gaps = {contig_name for contig_name, segments in parsed_paths.items() if len(segments) > 1}
     return parsed_paths, contigs_with_gaps
@@ -138,8 +121,84 @@ def get_sequence_overlap(seq_a, seq_b):
         f'No overlap was found with ks {ks}. possible k between 1 to {min([len(seq_a), len(seq_b), 200])} - k={possible_k}. {seq_a}\n {seq_b}')
 
 
-def intervals_overlap(start_a, end_a, start_b, end_b):
-    return start_a <= end_b and start_b <= end_a
+class PathGeometry:
+    """Where each node of a graph path sits in the sequence that path spells out.
+
+    Consecutive nodes of a path share a k-mer, so the path's sequence is its nodes concatenated with
+    that overlap collapsed once per join. Everything that has to place something on a path is asking
+    about the same offsets - where a gene starts, how long a contigs.paths segment is, how much of a
+    context candidate the gene already covers - so they are computed once here.
+
+    The overlaps are memoized because finding one is a search (get_sequence_overlap tries four
+    likely k's and then scans), and the same path is walked again for every gene on the contig and
+    for every context candidate enumerated off it.
+    """
+
+    def __init__(self, node_sequences):
+        self._node_sequences = node_sequences
+        self._overlaps = {}
+        self._offsets = {}
+
+    def _seq(self, node):
+        return str(self._node_sequences[node].seq)
+
+    def overlap(self, prev_node, node):
+        if (prev_node, node) not in self._overlaps:
+            try:
+                self._overlaps[(prev_node, node)] = get_sequence_overlap(self._seq(prev_node), self._seq(node))
+            except Exception as e:
+                raise ValueError(f'no overlap between consecutive nodes {prev_node} and {node}: {e}') from e
+        return self._overlaps[(prev_node, node)]
+
+    def offsets(self, nodes):
+        """Where each node starts in the path's sequence. The first is always 0."""
+        if tuple(nodes) not in self._offsets:
+            offsets = [0]
+            for prev_node, node in zip(nodes, nodes[1:]):
+                offsets.append(offsets[-1] + len(self._seq(prev_node)) - self.overlap(prev_node, node))
+            self._offsets[tuple(nodes)] = offsets
+        return self._offsets[tuple(nodes)]
+
+    def length(self, nodes):
+        return self.offsets(nodes)[-1] + len(self._seq(nodes[-1]))
+
+    def sequence(self, nodes):
+        seq = self._seq(nodes[0])
+        for prev_node, node in zip(nodes, nodes[1:]):
+            seq += self._seq(node)[self.overlap(prev_node, node):]
+        return seq
+
+    def nodes_covering(self, nodes, start, end):
+        """The nodes of the path that [start, end) covers, and where start falls inside the first of
+        them. Coordinates are the path's own.
+
+        start_in_first_node is None when start lies outside the path, which leaves the gene
+        unplaceable: an offset into the first node is what both context sides are measured from.
+        """
+        covering = []
+        start_in_first_node = None
+        for node, node_start in zip(nodes, self.offsets(nodes)):
+            node_end = node_start + len(self._seq(node))
+            if node_start < end and start < node_end:  # half-open, so a node the gene only abuts is not covered
+                if start_in_first_node is None and node_start <= start:
+                    start_in_first_node = start - node_start
+                covering.append(node)
+            elif covering:
+                break
+        return covering, start_in_first_node
+
+    def holds_gene(self, nodes, start_in_first_node, aligned_length):
+        """Whether a gene of aligned_length really sits at start_in_first_node on this path.
+
+        The context extraction trims each side using these two numbers; when they don't hold it
+        takes the wrong bases instead of failing, so they are checked before they are used.
+        """
+        if not nodes or start_in_first_node is None:
+            return False
+        gene_end = start_in_first_node + aligned_length
+        return (0 <= start_in_first_node < len(self._seq(nodes[0]))  # the in side is measured inside the first node
+                and gene_end <= self.length(nodes)  # the gene ends on the path, not past it
+                and gene_end > self.offsets(nodes)[-1])  # and reaches the last node, which the out side is measured in
 
 
 def write_genes_detected_in_graph_with_no_species_match(genes_with_location_in_graph, matched_genes, csv_path: str) -> bool:

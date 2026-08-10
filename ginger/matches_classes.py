@@ -8,24 +8,35 @@ import re
 # something _get_gene_sequence can be handed directly.
 GeneLocus = namedtuple('GeneLocus', ['contig', 'start', 'end'])
 
+# Where a graph node aligned to a gap-containing contig. node is the oriented short name of the node
+# that runs in the contig's direction ('7285+'), and origin is where that node starts in contig
+# coordinates - which is before the alignment starts, since minimap2 clips an alignment's ends.
+NodePlacement = namedtuple('NodePlacement', ['node', 'origin', 'score'])
+
+CONTEXT_NAME_FIELDS = ['gene', 'contig', 'start', 'end', 'match_score', 'nodes', 'path', 'side']
+
+
 class PathRefGenomeMatch:
     def __init__(self, paf_line: PafRecord, contigs_to_species: dict):
-        query_name_splt = paf_line.qname.split('_path_')
-        gene_nodes_match = query_name_splt[0].split('_nodes_')
+        # extract_contexts_candidates.context_name builds this, '|'-separated with the gene first.
+        # Splitting from the right leaves the gene whatever '|' it contains - SARG's and CARD's gene
+        # names have several - and no other field can contain one.
+        fields = paf_line.qname.rsplit('|', len(CONTEXT_NAME_FIELDS) - 1)
+        if len(fields) != len(CONTEXT_NAME_FIELDS):
+            raise ValueError(f'context name {paf_line.qname!r} does not have the '
+                             f'{"|".join(CONTEXT_NAME_FIELDS)} fields it is written with')
+        gene, contig, start, end, match_score, nodes, path, side = fields
+
         self.query_name = paf_line.qname
-        self.path = query_name_splt[1] if len(query_name_splt) > 1 else None
-        self.gene = gene_nodes_match[0]
-        
-        # Parse nodes_list and match_score from gene_nodes_match[1]
-        # Format: {nodes}_match_{score} or just {nodes}
-        if len(gene_nodes_match) > 1:
-            nodes_and_match = gene_nodes_match[1].split('_match_')
-            self.nodes_list = nodes_and_match[0]
-            self.gene_match_score = float(nodes_and_match[1]) if len(nodes_and_match) > 1 else None
-        else:
-            self.nodes_list = None
-            self.gene_match_score = None
-        
+        self.gene = gene
+        # the copy of the gene this context was cut from. Contexts are only ever paired within one,
+        # so that a pair describes a stretch of sequence that is really in the assembly
+        self.locus = GeneLocus(contig, int(start), int(end))
+        self.gene_match_score = float(match_score)
+        self.nodes_list = nodes
+        self.path = path
+        self.side = side
+
         self.path_length = paf_line.qlen
         self.path_start = paf_line.qstart
         self.path_end = paf_line.qend
@@ -112,12 +123,3 @@ class InOutPathsMatch:
         self.gene_match_score = gene_match_score
         self.in_context_score = in_context_score
         self.out_context_score = out_context_score
-
-    def to_dict(self):
-        out_dict = dict(gene=self.gene, ref_genome=self.ref_genome, start=self.start, end=self.end, score=self.score,
-                       gene_match_score=self.gene_match_score, in_context_score=self.in_context_score, out_context_score=self.out_context_score)
-        if self.in_path:
-            out_dict.update(dict(in_path_name=self.in_path.query_name, out_path_name=self.out_path.query_name,
-                                 in_path_score=self.in_path.score, out_path_score=self.out_path.score))
-
-        return out_dict

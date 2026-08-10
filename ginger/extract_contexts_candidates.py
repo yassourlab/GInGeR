@@ -1,76 +1,58 @@
 import networkx as nx
 from ginger import pipeline_utils as pu
-from ginger import matches_classes as mc
 import logging
-import datetime as dt
-from collections import namedtuple
-from typing import Dict, Set
+from typing import Set
 from Bio import SeqIO
 
 log = logging.getLogger(__name__)
 
-CONTEXTS_TO_LOCI_COLUMNS = ['context_name', 'side', 'contig', 'gene_start', 'gene_end', 'nodes_list',
-                            'match_score', 'source']
-ContextLocusRow = namedtuple('ContextLocusRow', CONTEXTS_TO_LOCI_COLUMNS)
+CONTIG_FALLBACK_PATH_NAME = 'contigfallback'
 
 
-def context_locus_rows(written_contexts, gene_contigs_match, source):
-    """One row per written context, recording the gene copy it was cut from.
+def context_name(gene_contigs_match, path_name, side):
+    """The name a context is written under, which is also everything downstream knows about it.
 
-    A context's name says which gene and which graph nodes it came from, but that is not enough to
-    identify the copy: a gene that could not be located in the graph has no nodes in its name at
-    all, and two copies can sit on the same nodes. Only the contig interval identifies it, and only
-    here is it still known - so it is written down rather than parsed back out of the name later.
+    A context has to carry the copy of the gene it was cut from, not just which gene and which nodes:
+    a gene that could not be located in the graph has no nodes, and two copies of a gene can sit on
+    the same ones. The alternative - a side table keyed by name - is a second channel that has to
+    stay in step with fasta files that get written, deleted and regenerated, and the name has to be
+    unique per copy either way.
+
+    Fields are '|'-separated with the gene first, so the name can be taken apart again from the
+    right by PathRefGenomeMatch however many '|' the gene's own name contains - SARG's and CARD's
+    have several. Nothing else here may contain a '|', and nodes are joined with '_' rather than the
+    ',' contigs.paths uses so that a name needs no quoting in the output csvs.
     """
-    return [ContextLocusRow(context_name, side, gene_contigs_match.contig, gene_contigs_match.start,
-                            gene_contigs_match.end, '_'.join(gene_contigs_match.nodes_list or []),
-                            gene_contigs_match.score, source)
-            for side, context_name in written_contexts]
+    match = gene_contigs_match
+    return '|'.join([match.gene, match.contig, str(match.start), str(match.end), f'{match.score:.4f}',
+                     '_'.join(match.nodes_list or []), path_name, side])
 
 
-def write_contexts_to_loci_table(rows, contexts_to_loci_path):
-    with open(contexts_to_loci_path, 'w') as f:
-        f.write('\t'.join(CONTEXTS_TO_LOCI_COLUMNS) + '\n')
-        for row in rows:
-            f.write('\t'.join(str(field) for field in row) + '\n')
-
-
-def save_paths_to_fasta_io_paths_approach(paths, paths_fasta_name, records_dict, context_len, node_to_find=None,
-                                          in_or_out=None, covered_by_gene=0, gene_and_node='', match_score=None):
+def save_paths_to_fasta_io_paths_approach(paths, paths_fasta_name, geometry, context_len,
+                                          in_or_out, covered_by_gene, gene_contigs_match):
     """Writes the context_len bases of every path that flank the gene. Contexts are always exactly
     context_len long - a path that has less than that left once the gene-covered part is trimmed off
     is dropped.
 
-    The lengths are keyed by the name the context was written under, so that a caller can record
-    what it wrote without having to rebuild those names itself."""
-    written_context_lengths = {}
-    node_locations = {}
+    Returns the names written, which is fewer than the paths given whenever some were too short."""
+    written_context_names = []
 
     with open(paths_fasta_name, 'a') as f:  # there is an 'a' here because I call this function once per gene location in the graph
         for path in paths:
-            seq, node_start = pu.generate_str_from_list_of_nodes(records_dict, path, node_to_find)
+            seq = geometry.sequence(path)
             covered_by_gene_int = int(covered_by_gene)
             # trim off the gene-covered portion, then take context_len bases off the end that flanks
             # the gene, so that the length check reflects the actual context that gets written
             if in_or_out == 'in':
                 seq = seq[:len(seq) - covered_by_gene_int][-context_len:]
-            if in_or_out == 'out':
+            else:
                 seq = seq[covered_by_gene_int:][:context_len]
             if len(seq) == context_len:
-                path_name = '_'.join(path)
-                match_score_str = f"_match_{match_score:.4f}" if match_score is not None else ""
-                context_name = f'{gene_and_node}{match_score_str}_path_{path_name}' if gene_and_node else path_name
-                node_locations[path_name] = node_start
-                written_context_lengths[context_name] = len(seq)
-                f.write(f'>{context_name}\n{seq}\n')
+                name = context_name(gene_contigs_match, '_'.join(path), in_or_out)
+                written_context_names.append(name)
+                f.write(f'>{name}\n{seq}\n')
 
-    return written_context_lengths, node_locations
-
-
-def gene_and_nodes_name(gene_contigs_match):
-    """The '{gene}_nodes_{nodes}' prefix of a context's name in the output fasta. A gene that could
-    not be located in the assembly graph has no nodes, and gets an empty nodes part."""
-    return f"{gene_contigs_match.gene}_nodes_{'_'.join(gene_contigs_match.nodes_list or [])}"
+    return written_context_names
 
 
 def write_contexts_from_contig(contigs_index, gene_contigs_match, in_paths_fasta, out_paths_fasta, context_len):
@@ -84,13 +66,10 @@ def write_contexts_from_contig(contigs_index, gene_contigs_match, in_paths_fasta
     which is weaker evidence than pure graph sequence - hence the identifiable 'contigfallback' path
     name it gets in the output.
 
-    Returns the (side, context name) pairs written - 0, 1 or 2 of them, since a side that has less
-    than context_len of flanking sequence left in the contig is skipped. Both sides are written
-    under the same name, as they come from the same place.
+    Returns the names written - 0, 1 or 2 of them, since a side that has less than context_len of
+    flanking sequence left in the contig is skipped.
     """
     contig_seq = str(contigs_index[gene_contigs_match.contig].seq)
-    name = (f'{gene_and_nodes_name(gene_contigs_match)}_match_{gene_contigs_match.score:.4f}_path_'
-            f'contigfallback_{gene_contigs_match.contig}_{gene_contigs_match.start}_{gene_contigs_match.end}')
     sides = [('in', in_paths_fasta,
               contig_seq[max(0, gene_contigs_match.start - context_len):gene_contigs_match.start]),
              ('out', out_paths_fasta,
@@ -99,9 +78,10 @@ def write_contexts_from_contig(contigs_index, gene_contigs_match, in_paths_fasta
     written = []
     for side, paths_fasta, seq in sides:
         if len(seq) == context_len:
+            name = context_name(gene_contigs_match, CONTIG_FALLBACK_PATH_NAME, side)
             with open(paths_fasta, 'a') as f:
                 f.write(f'>{name}\n{seq}\n')
-            written.append((side, name))
+            written.append(name)
     return written
 
 
@@ -123,12 +103,10 @@ def paths_enumerator(graph, stack, max_depth, max_length, neighbors_func, revers
 
 
 @pu.step_timing
-def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
-                                                      nodes_with_edges_and_sequences: Dict[str, SeqIO.SeqRecord],
+def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph, geometry: pu.PathGeometry,
                                                       genes_to_contigs, depth_limit, context_len,
                                                       in_paths_fasta, out_paths_fasta, contigs_path,
-                                                      contigs_with_gaps: Set[str] = frozenset(),
-                                                      contexts_to_loci_path=None):
+                                                      contigs_with_gaps: Set[str] = frozenset()):
     """Writes a context candidate fasta for the incoming and for the outgoing side of every gene.
 
     Every context is exactly context_len long, and a side that cannot supply that much sequence gets
@@ -137,13 +115,15 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
     describe its context (see write_contexts_from_contig). Pass an empty contigs_with_gaps to turn
     that off.
 
-    Returns the length of every gene, and the locus every context was cut from - written to
-    contexts_to_loci_path as well, when one is given.
+    Every copy of a gene is handled on its own, even when two copies were located on the same nodes:
+    their contexts are the same sequence but belong to different places in the assembly, and pairing
+    an incoming context of one with the outgoing context of the other would describe a stretch that
+    exists in no contig.
+
+    Returns the length of every gene.
     """
-    gene_and_nodes_path_set = set()
     gene_lengths = {}
-    locus_rows = []
-    n_contig_contexts = 0
+    n_contig_contexts = n_graph_contexts = 0
     contigs_index = SeqIO.index(contigs_path, 'fasta') if contigs_with_gaps else None
     # start from empty fastas - everything below appends to them
     for fasta_file in [in_paths_fasta, out_paths_fasta]:
@@ -152,39 +132,25 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
         for gene_contigs_match in genes_to_contigs:
             gene_lengths[gene_contigs_match.gene] = gene_contigs_match.gene_length
             if gene_contigs_match.contig in contigs_with_gaps:
-                written = write_contexts_from_contig(contigs_index, gene_contigs_match, in_paths_fasta,
-                                                     out_paths_fasta, context_len)
-                locus_rows.extend(context_locus_rows(written, gene_contigs_match, 'contigfallback'))
-                n_contig_contexts += len(written)
+                n_contig_contexts += len(write_contexts_from_contig(contigs_index, gene_contigs_match,
+                                                                    in_paths_fasta, out_paths_fasta, context_len))
 
-            gene_and_nodes_path_str = gene_and_nodes_name(gene_contigs_match)
             if gene_contigs_match.start_in_first_node is None:  # the gene was not located in the graph
-                log.info(f'{dt.datetime.now()} did not extract contexts from the graph for '
-                         f'{gene_and_nodes_path_str} because start_in_first_node is None')
                 continue
-            if gene_and_nodes_path_str in gene_and_nodes_path_set:  # already ran the pipeline for this gene location
-                continue
-            gene_and_nodes_path_set.add(gene_and_nodes_path_str)
 
             # unpacking variables
             first_node = gene_contigs_match.nodes_list[0]
             last_node = gene_contigs_match.nodes_list[-1]
-            nodes_list_for_gene = gene_contigs_match.nodes_list
             start_in_first_node = gene_contigs_match.start_in_first_node
-            gene_nodes_length = len(
-                pu.generate_str_from_list_of_nodes(nodes_with_edges_and_sequences, nodes_list_for_gene, None)[0])
+            gene_nodes_length = geometry.length(gene_contigs_match.nodes_list)
 
             # in paths
             in_covered_by_gene = assembly_graph.nodes[first_node]['length'] - start_in_first_node
             in_paths_initial_stack = [(first_node, [(first_node, assembly_graph.nodes[first_node]['length'])])]
             in_paths = paths_enumerator(assembly_graph, in_paths_initial_stack, depth_limit, context_len,
                                         nx.DiGraph.predecessors, reverse=True, covered_by_gene=in_covered_by_gene)
-            written_in_contexts, _ = save_paths_to_fasta_io_paths_approach(
-                in_paths, in_paths_fasta, nodes_with_edges_and_sequences, context_len,
-                in_or_out='in', covered_by_gene=in_covered_by_gene,
-                gene_and_node=gene_and_nodes_path_str, match_score=gene_contigs_match.score)
-            locus_rows.extend(context_locus_rows([('in', name) for name in written_in_contexts],
-                                                 gene_contigs_match, 'graph'))
+            n_graph_contexts += len(save_paths_to_fasta_io_paths_approach(
+                in_paths, in_paths_fasta, geometry, context_len, 'in', in_covered_by_gene, gene_contigs_match))
 
             # out paths
             out_paths_initial_stack = [(last_node, [(last_node, assembly_graph.nodes[last_node]['length'])])]
@@ -193,22 +159,15 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
             # the reference protein and can be a good deal longer than the aligned span, which would
             # start the context that many bases past the end of the gene and drop them from the
             # sequence altogether.
+            # PathGeometry.holds_gene checked when the gene was located that it ends on these nodes
+            # and reaches the last of them, so this is between 0 and that node's length
             bases_after_gene_in_path = gene_nodes_length - (start_in_first_node +
                                                             gene_contigs_match.aligned_length)
-            if bases_after_gene_in_path < 0:
-                log.info(f'{dt.datetime.now()} did not extract an outgoing context from the graph for '
-                         f'{gene_and_nodes_path_str} because the gene alignment ends past the nodes it '
-                         f'was located on')
-                continue
             out_covered_by_gene = assembly_graph.nodes[last_node]['length'] - bases_after_gene_in_path
             out_paths = paths_enumerator(assembly_graph, out_paths_initial_stack, depth_limit, context_len,
                                          nx.DiGraph.successors, covered_by_gene=out_covered_by_gene)
-            written_out_contexts, _ = save_paths_to_fasta_io_paths_approach(
-                out_paths, out_paths_fasta, nodes_with_edges_and_sequences, context_len,
-                in_or_out='out', covered_by_gene=out_covered_by_gene,
-                gene_and_node=gene_and_nodes_path_str, match_score=gene_contigs_match.score)
-            locus_rows.extend(context_locus_rows([('out', name) for name in written_out_contexts],
-                                                 gene_contigs_match, 'graph'))
+            n_graph_contexts += len(save_paths_to_fasta_io_paths_approach(
+                out_paths, out_paths_fasta, geometry, context_len, 'out', out_covered_by_gene, gene_contigs_match))
 
             if len(in_paths) == 0 or len(out_paths) == 0:
                 log.info(f'{gene_contigs_match} in {len(in_paths)} out {len(out_paths)}')
@@ -216,9 +175,6 @@ def extract_all_in_out_paths_and_write_them_to_fastas(assembly_graph,
         if contigs_index is not None:
             contigs_index.close()
 
-    log.info(f'took {n_contig_contexts} contexts from the sequence of gap-containing contigs')
-    if contexts_to_loci_path is not None:
-        write_contexts_to_loci_table(locus_rows, contexts_to_loci_path)
-    contexts_to_loci = {row.context_name: mc.GeneLocus(row.contig, row.gene_start, row.gene_end)
-                        for row in locus_rows}
-    return gene_lengths, contexts_to_loci
+    log.info(f'read {n_graph_contexts} contexts off the assembly graph and took {n_contig_contexts} more from the '
+             f'sequence of gap-containing contigs')
+    return gene_lengths

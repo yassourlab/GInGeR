@@ -176,8 +176,7 @@ class StitchedContextGeneContextTest(unittest.TestCase):
 
     def _stitch(self):
         genes_with_location_in_graph = helper.get_genes_with_location_in_graph()
-        ecc.extract_all_in_out_paths_and_write_them_to_fastas(helper.get_assembly_graph(),
-                                                              helper.get_assembly_graph_nodes(),
+        ecc.extract_all_in_out_paths_and_write_them_to_fastas(helper.get_assembly_graph(), helper.get_geometry(),
                                                               genes_with_location_in_graph, 12, self.CONTEXT_LEN,
                                                               self.in_paths_fasta, self.out_paths_fasta,
                                                               CONTIGS_PATH)

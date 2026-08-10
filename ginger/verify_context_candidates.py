@@ -22,8 +22,8 @@ def extract_start_and_end(in_match: mc.PathRefGenomeMatch, out_match: mc.PathRef
     return start, end
 
 
-def get_in_out_match(i, o, gene_length, minimal_gap_ratio, maximal_gap_ratio, locus=None):
-    for field in ['gene', 'ref_genome', 'strand']:
+def get_in_out_match(i, o, gene_length, minimal_gap_ratio, maximal_gap_ratio):
+    for field in ['gene', 'ref_genome', 'strand', 'locus']:
         if getattr(i, field) != getattr(o, field):
             return None
     start, end = extract_start_and_end(i, o)
@@ -31,12 +31,12 @@ def get_in_out_match(i, o, gene_length, minimal_gap_ratio, maximal_gap_ratio, lo
     gap_ratio = start_end_diff / gene_length
     score = (i.score * i.path_length + o.score * o.path_length) / (i.path_length + o.path_length)
     if minimal_gap_ratio < gap_ratio < maximal_gap_ratio:
-        return mc.InOutPathsMatch(i, o, start, end, gap_ratio, score, gene_length, gene_match_score=i.gene_match_score, in_context_score=i.score, out_context_score=o.score, locus=locus)
+        return mc.InOutPathsMatch(i, o, start, end, gap_ratio, score, gene_length, gene_match_score=i.gene_match_score, in_context_score=i.score, out_context_score=o.score, locus=i.locus)
     return None
 
 
 def read_and_filter_path_matches_per_gene(match_object_constructor: callable, alignment_path, pident_filtering_th,
-                                          ref_species_dict, contexts_to_loci):
+                                          ref_species_dict):
     """Groups a context fasta's matches to the reference by the gene copy the context was cut from,
     as well as by the gene and the reference genome."""
     parsed_as_iterator = sau.read_and_filter_minimap_matches(match_object_constructor, alignment_path,
@@ -44,16 +44,8 @@ def read_and_filter_path_matches_per_gene(match_object_constructor: callable, al
     if parsed_as_iterator is None:
         return []
     genes_to_matches = defaultdict(list)
-    contexts_with_no_locus = set()
     for match in parsed_as_iterator:
-        locus = contexts_to_loci.get(match.query_name)
-        if locus is None:  # only possible if this paf and the contexts table are from different runs
-            contexts_with_no_locus.add(match.query_name)
-            continue
-        genes_to_matches[(match.gene.split('$')[0], locus, match.ref_genome)].append(match)
-    if contexts_with_no_locus:
-        log.warning(f'dropped matches for {len(contexts_with_no_locus)} contexts in {alignment_path} that are not in '
-                    f'the contexts to loci table')
+        genes_to_matches[(match.gene, match.locus, match.ref_genome)].append(match)
     log.info(
         f"found {sum(len(v) for v in genes_to_matches.values())} matches for {len(genes_to_matches)} gene, gene copy and ref genome triples")
     return genes_to_matches
@@ -74,7 +66,7 @@ def get_all_in_out_matches(in_paths_by_gene_locus_and_ref_genome, out_paths_by_g
         out_paths = out_paths_by_gene_locus_and_ref_genome.get((gene, locus, ref_genome), [])
         for i in in_paths:
             for o in out_paths:
-                in_out_match = get_in_out_match(i, o, genes_lengths[gene], minimal_gap_ratio, maximal_gap_ratio, locus)
+                in_out_match = get_in_out_match(i, o, genes_lengths[gene], minimal_gap_ratio, maximal_gap_ratio)
                 if in_out_match is not None:
                     matches_per_gene_and_ref_genome[(gene, ref_genome)].append(in_out_match)
     matches_per_gene_and_ref_genome = {gene_ref_genome: keep_best_matches(matches, iou_th=iou_th)
@@ -135,18 +127,18 @@ def get_ref_genome_species_dict_from_metadata_path(metadata_path):
 @pu.step_timing
 def process_in_and_out_paths_to_results(in_path_mapping_to_ref_genomes, out_path_mapping_to_ref_genomes, genes_lengths,
                                         paths_pident_filtering_th, minimal_gap_ratio,
-                                        maximal_gap_ratio, metadata_path, contexts_to_loci):
+                                        maximal_gap_ratio, metadata_path):
     # TODO get rid of pandas here (the tables have millions of entries and can potentially grow bigger)
     log.info(f'{dt.datetime.now()} parsing the mapping of in and out paths')
     ref_species_dict = get_ref_genome_species_dict_from_metadata_path(metadata_path)
     parsed_in_path_to_ref_genomes_by_gene_and_ref_genome = read_and_filter_path_matches_per_gene(mc.PathRefGenomeMatch,
                                                                                    in_path_mapping_to_ref_genomes,
                                                                                    paths_pident_filtering_th,
-                                                                                   ref_species_dict, contexts_to_loci)
+                                                                                   ref_species_dict)
     parsed_out_path_to_ref_genomes_by_gene_and_ref_genome = read_and_filter_path_matches_per_gene(mc.PathRefGenomeMatch,
                                                                                     out_path_mapping_to_ref_genomes,
                                                                                     paths_pident_filtering_th,
-                                                                                    ref_species_dict, contexts_to_loci)
+                                                                                    ref_species_dict)
     if len(parsed_in_path_to_ref_genomes_by_gene_and_ref_genome) == 0 or len(parsed_out_path_to_ref_genomes_by_gene_and_ref_genome) == 0:
         log.info(
             f'GInGeR found {len(parsed_in_path_to_ref_genomes_by_gene_and_ref_genome)=} matches for incoming paths and {len(parsed_out_path_to_ref_genomes_by_gene_and_ref_genome)=} matches for outgoing paths. No results will be produced')

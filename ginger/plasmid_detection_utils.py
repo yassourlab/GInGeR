@@ -20,12 +20,9 @@ def _get_gene_sequence(contig_seq: str, locus) -> str:
     """The gene segment to splice between a pair of contexts, in the contig's forward orientation.
 
     Every route that produces a context produces it in that orientation: the ones that read
-    contigs.paths get their nodes in contig order, the one that falls back to a single aligned node
-    takes whichever of its two orientations runs with the contig (see
-    locating_genes_in_graph.node_oriented_with_contig), and the contig fallback slices the contig
-    itself. So the segment stays forward - reverse complementing it would splice a flipped middle
-    into forward-oriented flanks. A locus carries no strand, so there is nothing here to be tempted
-    by.
+    contigs.paths get their nodes in contig order, and the contig fallback slices the contig itself.
+    So the segment stays forward - reverse complementing it would splice a flipped middle into
+    forward-oriented flanks. A locus carries no strand, so there is nothing here to be tempted by.
 
     Its coordinates are 0-based half-open (see matches_classes.GeneLocus), so this slice is exactly
     the aligned part of the gene.

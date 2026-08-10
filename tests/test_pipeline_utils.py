@@ -3,7 +3,6 @@ import unittest
 import os
 from types import SimpleNamespace
 import pandas as pd
-import pyfastg
 from ginger import pipeline_utils as pu
 from ginger.matches_classes import InOutPathsMatch
 
@@ -224,16 +223,14 @@ class PipelineUtilsTest(unittest.TestCase):
     def test_parse_paths_file(self):
         paths_file = f'{TEST_FILES}/SPAdes/contigs.paths'
         paths_w_gaps_file = f'{TEST_FILES}/SPAdes/contigs_w_added_gaps.paths'
-        assembly_graph =  pyfastg.parse_fastg(f'{TEST_FILES}/SPAdes/assembly_graph.fastg')
-
-        parsed_paths, contigs_with_gaps = pu.parse_paths_file(paths_file, assembly_graph.nodes)
+        parsed_paths, contigs_with_gaps = pu.parse_paths_file(paths_file)
         self.assertEqual(len(parsed_paths), 2)
         self.assertEqual(len(contigs_with_gaps), 0)
         # a contig assembled from a single graph path is a single segment
         self.assertEqual(parsed_paths['NODE_1_length_1000_cov_140.620106'], [['5+']])
         self.assertEqual(parsed_paths["NODE_1_length_1000_cov_140.620106'"], [['5-']])
 
-        parsed_paths, contigs_with_gaps = pu.parse_paths_file(paths_w_gaps_file, assembly_graph.nodes)
+        parsed_paths, contigs_with_gaps = pu.parse_paths_file(paths_w_gaps_file)
         self.assertEqual(len(parsed_paths), 2)
         self.assertEqual(contigs_with_gaps, {'NODE_1_length_1000_cov_140.620106'})
         # the path of a gap-containing contig is kept, split into one segment per part
@@ -241,9 +238,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
     def test_parse_paths_file_with_multiple_segments(self):
         paths_file = f'{TEST_FILES}/test_contigs.paths'
-        assembly_graph = pyfastg.parse_fastg(f'{TEST_FILES}/SPAdes/assembly_graph.fastg')
-
-        parsed_paths, contigs_with_gaps = pu.parse_paths_file(paths_file, assembly_graph.nodes)
+        parsed_paths, contigs_with_gaps = pu.parse_paths_file(paths_file)
         self.assertEqual(contigs_with_gaps, {'NODE_7_length_41181_cov_4.618952',
                                              "NODE_7_length_41181_cov_4.618952'",
                                              'NODE_9_length_39416_cov_5.216737',

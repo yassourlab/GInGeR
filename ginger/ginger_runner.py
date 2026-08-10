@@ -6,7 +6,6 @@ import os
 import pandas as pd
 import shutil
 from glob import glob
-import pickle
 
 from ginger import locating_genes_in_graph as lg
 from ginger import reference_database_utils as rdu
@@ -38,7 +37,7 @@ def cleanup_intermediate_files(out_dir, keep_options):
     cleanup_map = {
         'assembly': ['SPAdes'],
         'alignment': ['*.paf', '*.m8', 'mmseqs_tmp', 'nodes_to_contigs_w_gaps.paf'],
-        'sequences': ['all_in_paths.fasta', 'all_out_paths.fasta', 'contexts_to_loci.tsv'],
+        'sequences': ['all_in_paths.fasta', 'all_out_paths.fasta'],
         'kraken': ['kraken_*.tsv', 'bracken_*.tsv'],
         'reference': ['merged_filtered_ref_db.*', 'references_used.csv'],
         'plasmid': ['plasmid_detection_input.fasta', 'plasmid_detection_input_trios.tsv', 'genomad_output'],
@@ -198,7 +197,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
         au.run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, assembly_dir, threads)
     # run tool
 
-    assembly_graph, genes_to_analyze, assembly_graph_nodes, contigs_with_gaps = lg.locate_genes_in_graph(assembly_dir,
+    assembly_graph, genes_to_analyze, geometry, contigs_with_gaps = lg.locate_genes_in_graph(assembly_dir,
                                                                                                   gene_pident_filtering_th,
                                                                                                   genes_path,
                                                                                                   threads,
@@ -217,15 +216,13 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     # get in and out paths
     in_paths_fasta = c.IN_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
     out_paths_fasta = c.OUT_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
-    contexts_to_loci_path = c.CONTEXTS_TO_LOCI_TEMPLATE.format(temp_folder=out_dir)
-    gene_lengths, contexts_to_loci = ecc.extract_all_in_out_paths_and_write_them_to_fastas(
-                                                              assembly_graph, assembly_graph_nodes,
+    gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(
+                                                              assembly_graph, geometry,
                                                               genes_to_analyze, depth_limit,
                                                               context_len, in_paths_fasta,
                                                               out_paths_fasta,
                                                               c.CONTIGS_PATH_TEMPLATE.format(assembly_dir=assembly_dir),
-                                                              contigs_with_gaps if contig_context_fallback else frozenset(),
-                                                              contexts_to_loci_path)
+                                                              contigs_with_gaps if contig_context_fallback else frozenset())
 
     # map them to the reference
     in_contexts_to_ref_genomes = c.IN_MAPPING_TO_REF_GENOMES_PATH_TEMPLATE.format(temp_folder=out_dir)
@@ -238,8 +235,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     context_level_results = vcc.process_in_and_out_paths_to_results(in_contexts_to_ref_genomes,
                                                                     out_contexts_to_ref_genomes,
                                                                     gene_lengths, paths_pident_filtering_th, 0,
-                                                                    max_gap_ratio, reference_genomes_metadata,
-                                                                    contexts_to_loci)
+                                                                    max_gap_ratio, reference_genomes_metadata)
 
     # run GeNomad on the gene contexts and on the contigs of genes with no species-level match
     context_plasmid_scores, contig_plasmid_scores = None, None

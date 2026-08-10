@@ -1,7 +1,6 @@
 from pafpy import PafFile
 from ginger import pipeline_utils as pu
 import os
-import datetime as dt
 import logging
 from tqdm import tqdm
 from subprocess import run, Popen, PIPE
@@ -15,64 +14,14 @@ JUST_PRINT_DEFAULT = False
 # MMSEQS:
 MMSEQ2_OUTPUT_FORMAT = "'target,query,tstart,tend,nident,qlen'"
 MMSEQ2_COMMAND = f"mmseqs easy-search {{query}} {{target}} {{out_file}} {{temp_dir}} --search-type 2 -a --format-mode 4 --format-output {MMSEQ2_OUTPUT_FORMAT} -c 0.8 --cov-mode 2 --threads {{nthreads}} --mask 0"
-MMSEQS_GENES_TO_CONTIGS_HEADER_CONVERSION = {'target': 'contig',
-                                             'query': 'gene',
-                                             'tstart': 'contig_start',
-                                             'tend': 'contig_end',
-                                             'nident': 'residue_matches',
-                                             'qlen': 'gene_length'}
 
 # TODO do I need to constantly log minimap's output (see assembly_utils) or is it enough to just log it in the end
 # minimap:
 MINIMAP2_INDEXING_COMMAND = 'minimap2 -x {preset} -d {index_file} {fasta_file}'
 MINIMAP2_COMMAND = 'minimap2 -cx {preset} -t {nthreads} {target} {query} > {out_file} -P'
 CONTIGS_TO_REF_GENOMES_PRESET = 'asm20'
-GENES_TO_CONTIGS_PRESET = 'asm20'
-ARGS_TO_REFERENCE_CONTIGS = 'asm20'
 INDEXING_PRESET = 'asm20'
 N_THREADS_DEFAULT = 4
-
-MINIMAP_GENES_TO_CONTIGS_HEADER_CONVERSION = {'query_name': 'gene',
-                                              'query_length': 'gene_length',
-                                              'query_start': 'gene_start',
-                                              'query_end': 'gene_end',
-                                              'strand': 'strand',
-                                              'target_name': 'contig',
-                                              'target_length': 'contig_length',
-                                              'target_start': 'contig_start',
-                                              'target_end': 'contig_end',
-                                              'residue_matches': 'residue_matches',
-                                              'alignment_block_length': 'alignment_block_length',
-                                              'mapping_quality': 'mapping_quality',
-                                              'cg': 'cigar'}
-
-MINIMAP_CONTIGS_TO_REFERENCE_HEADER_CONVERSION = {'query_name': 'contig',
-                                                  'query_length': 'contig_length',
-                                                  'query_start': 'contig_start',
-                                                  'query_end': 'contig_end',
-                                                  'strand': 'strand',
-                                                  'target_name': 'ref_genome',
-                                                  'target_length': 'ref_genome_length',
-                                                  'target_start': 'ref_genome_start',
-                                                  'target_end': 'ref_genome_end',
-                                                  'residue_matches': 'residue_matches',
-                                                  'alignment_block_length': 'alignment_block_length',
-                                                  'mapping_quality': 'mapping_quality',
-                                                  'cg': 'cigar'}
-
-MINIMAP_GT_ARGS_TO_BUGS_HEADER_CONVERSION = {'query_name': 'gene',
-                                             'query_length': 'gene_length',
-                                             'query_start': 'gene_start',
-                                             'query_end': 'gene_end',
-                                             'strand': 'strand',
-                                             'target_name': 'ref_genome',
-                                             'target_length': 'ref_genome_length',
-                                             'target_start': 'ref_genome_start',
-                                             'target_end': 'ref_genome_end',
-                                             'residue_matches': 'residue_matches',
-                                             'alignment_block_length': 'alignment_block_length',
-                                             'mapping_quality': 'mapping_quality',
-                                             }
 
 
 @pu.step_timing
@@ -235,7 +184,6 @@ def read_and_filter_minimap_matches(match_object_constructor: callable, alignmen
         minimap_results = [match_object_constructor(gene_to_contig, *argv) for gene_to_contig in PafFile(f)]
 
     if log.level == logging.DEBUG:
-        minimap_results = minimap_results
         log.debug(
             f'Found {len(minimap_results)} alignments for {len(set([match.gene for match in minimap_results]))} genes in {alignment_path}')
     filtered_minimap_results = [paf_line for paf_line in minimap_results if paf_line.score > pident_filtering_th]
