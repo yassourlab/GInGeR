@@ -560,5 +560,27 @@ class AddContextSeqIdsToContextLevelCsvTest(unittest.TestCase):
         self.assertTrue(pd.isna(geneb['gene_start_in_context_seq']))
 
 
+class StreamToolTest(unittest.TestCase):
+    """Kraken2, Bracken and MetaSPAdes are run through stream_tool.
+
+    Its exit code check has to happen after the `with Popen(...)` block: returncode is still None
+    inside it, which is why the checks these three callers used to make never fired and a failing
+    Kraken2 was followed by the rest of the pipeline reading its missing output.
+    """
+
+    def test_returns_when_the_tool_succeeds(self):
+        pu.stream_tool('TrueTool', 'echo some output')  # does not raise
+
+    def test_raises_when_the_tool_exits_non_zero(self):
+        with self.assertRaises(Exception) as raised:
+            pu.stream_tool('FalseTool', 'sh -c false')
+        self.assertIn('FalseTool failed with exit code', str(raised.exception))
+
+    def test_consumes_more_stdout_than_a_pipe_buffer_holds(self):
+        # a tool whose output is not drained blocks forever once the pipe fills, so the loop that
+        # feeds tqdm is what lets SPAdes and Kraken2 run at all
+        pu.stream_tool('ChattyTool', 'seq 1 200000')
+
+
 if __name__ == '__main__':
     unittest.main()

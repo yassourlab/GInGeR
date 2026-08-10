@@ -1,3 +1,4 @@
+import io
 import unittest
 import tempfile
 import os
@@ -103,6 +104,54 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(set(filtered.loc[filtered['rank'] != 'S', 'taxid']), {0, 1, 100})
         # only the species row above the threshold survives
         self.assertEqual(set(filtered.loc[filtered['rank'] == 'S', 'taxid']), {1001})
+
+
+class DownloadRetryTest(unittest.TestCase):
+    """The reference download retries a failing FTP fetch N_ATTEMPTS times.
+
+    It used to call time.sleep without importing time, so the first failure raised NameError and no
+    retry ever happened - which on a multi-hour run threw away the whole reference database step over
+    one FTP hiccup.
+    """
+
+    def _download_with_failing_urlopen(self, n_failures, references_folder_content=()):
+        attempts = []
+
+        def failing_urlopen(url, timeout=None):
+            attempts.append(url)
+            if len(attempts) > n_failures:
+                return io.BytesIO(b'downloaded bytes')
+            raise OSError('ftp is down')
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(rdu, 'N_ATTEMPTS', 3), patch.object(rdu, 'SLEEP_SECS', 0), \
+                    patch.object(rdu, 'gffgz_to_fasta', lambda *args: None), \
+                    patch('urllib.request.urlopen', failing_urlopen):
+                error = None
+                try:
+                    rdu.download_and_write_content_to_file(tmpdir, list(references_folder_content),
+                                                           'ftp://example.invalid/MGYG000000001.gff.gz',
+                                                           io.StringIO())
+                except Exception as e:
+                    error = e
+        return attempts, error
+
+    def test_retries_until_the_download_succeeds(self):
+        attempts, error = self._download_with_failing_urlopen(n_failures=2)
+        self.assertIsNone(error)
+        self.assertEqual(len(attempts), 3)  # two failures, then the one that worked
+
+    def test_raises_the_download_error_after_the_last_attempt(self):
+        attempts, error = self._download_with_failing_urlopen(n_failures=99)
+        # the error the download actually failed with, not the NameError the retry used to raise
+        self.assertIsInstance(error, OSError)
+        self.assertEqual(len(attempts), 3)  # N_ATTEMPTS, patched down from 10
+
+    def test_does_not_download_a_reference_that_is_already_there(self):
+        attempts, error = self._download_with_failing_urlopen(
+            n_failures=99, references_folder_content=['MGYG000000001.gff.gz'])
+        self.assertIsNone(error)
+        self.assertEqual(attempts, [])
 
 
 if __name__ == '__main__':
