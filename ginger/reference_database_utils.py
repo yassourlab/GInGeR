@@ -1,17 +1,16 @@
 import urllib.request
-from subprocess import run, Popen, PIPE
+from subprocess import run
 
 import numpy as np
 import pandas as pd
 from glob import glob
-import urllib
 import gzip
 import logging
 import csv
 from ginger import pipeline_utils as pu
-from tqdm import tqdm
 import os
 import re
+import time
 
 log = logging.getLogger(__name__)
 KRAKEN_COMMAND = 'kraken2 --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {kraken_output} --report {kraken_report} --confidence 0.1 --use-names --report-minimizer-data'  # --report {report}
@@ -52,19 +51,13 @@ def get_paired_reads_seqkit_stats(reads_1: str, reads_2: str):
 
 
 def run_kraken(reads_1, reads_2, threads, output_path, report_path, kraken_db):
-    command = KRAKEN_COMMAND.format(kraken_db=kraken_db, reads_1=reads_1, reads_2=reads_2,
-                                    threads=threads, kraken_output=output_path, kraken_report=report_path)
     # if kraken db does not exist, raise an error
     if not os.path.exists(kraken_db):
         raise Exception(f'Kraken database does not exist in {kraken_db}')
 
-    log.info(f'Running Kraken2 - {command}')
-    # command_output = run(command, shell=True, capture_output=True)
-    with Popen(command.split(' '), stdout=PIPE) as kraken_process:
-        output_lines = [output_line for output_line in tqdm(iter(lambda: kraken_process.stdout.readline(), b""))]
-        if kraken_process.returncode:
-            log.error(kraken_process.stderr)
-            raise Exception('Kraken2 failed - GInGeR aborted')
+    pu.stream_tool('Kraken2', KRAKEN_COMMAND.format(kraken_db=kraken_db, reads_1=reads_1, reads_2=reads_2,
+                                                    threads=threads, kraken_output=output_path,
+                                                    kraken_report=report_path))
 
 
 def filter_kraken_report_by_distinct_kmer_count(kraken_report_path, filtered_kraken_report_path,
@@ -126,17 +119,10 @@ def run_bracken(kraken_report, bracken_output, bracken_report, kraken_db, min_re
     kmer_length_options = get_kmer_length_options(kraken_db)
     # get the kmer length that is closest to the read length
     read_len = min(kmer_length_options, key=lambda x: abs(int(x) - max_read_len))
-    command = BRACKEN_COMMAND.format(kraken_db=kraken_db, kraken_report=kraken_report, bracken_output=bracken_output,
-                                     bracken_report=bracken_report, read_len=read_len,
-                                     min_reads_for_bracken=min_reads_for_bracken)
-    log.info(f'Running Bracken - {command}')
-    # command_output = run(command, shell=True, capture_output=True)
-    with Popen(command.split(' '), stdout=PIPE) as bracken_process:
-        output_lines = [output_line for output_line in tqdm(iter(lambda: bracken_process.stdout.readline(), b""))]
-        if bracken_process.returncode:
-            log.error(bracken_process.stderr)
-            raise Exception('Bracken failed - GInGeR aborted')
-            log.info(bracken_process.stdout)
+    pu.stream_tool('Bracken', BRACKEN_COMMAND.format(kraken_db=kraken_db, kraken_report=kraken_report,
+                                                     bracken_output=bracken_output, bracken_report=bracken_report,
+                                                     read_len=read_len,
+                                                     min_reads_for_bracken=min_reads_for_bracken))
 
 
 def get_list_of_top_species_by_bracken(bracken_output_path, fraction_of_reads):
@@ -264,10 +250,12 @@ def download_and_write_content_to_file(references_folder, references_folder_cont
                     f.write(data)
                 break
             except Exception as e:
+                # the last attempt raises rather than sleeping through a retry it will not make
+                if attempt == N_ATTEMPTS - 1:
+                    log.error(f'Failed to download {ftp_download_str} in {N_ATTEMPTS} attempts: {e}')
+                    raise e
                 log.error(f'Failed to download {ftp_download_str}: {e}. Retrying in {SLEEP_SECS} seconds')
                 time.sleep(SLEEP_SECS)
-                if attempt == N_ATTEMPTS - 1:
-                    raise e
 
     # read tar.gt file and add it's content to the merged filtered fasta
     gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f)

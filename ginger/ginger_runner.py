@@ -1,7 +1,6 @@
 import sys
 import logging
 import click
-from Bio import SeqIO
 import os
 import pandas as pd
 import shutil
@@ -49,38 +48,21 @@ def cleanup_intermediate_files(out_dir, keep_options):
     
     # Remove categories not in keep_options
     # 'final' is not a real category, it just means "keep final CSV results"
-    categories_to_remove = [cat for cat in cleanup_map.keys() if cat not in keep_options]
-    
-    for category in categories_to_remove:
-        patterns = cleanup_map[category]
+    for category, patterns in cleanup_map.items():
+        if category in keep_options:
+            continue
         for pattern in patterns:
-            # Handle both files and directories
-            if '*' in pattern:
-                # Glob pattern
-                matches = glob(os.path.join(out_dir, pattern))
-                for match in matches:
-                    try:
-                        if os.path.isdir(match):
-                            shutil.rmtree(match)
-                            log.debug(f'Removed directory {match}')
-                        else:
-                            os.remove(match)
-                            log.debug(f'Removed file {match}')
-                    except Exception as e:
-                        log.warning(f'Failed to remove {match}: {e}')
-            else:
-                # Exact file/directory name
-                path = os.path.join(out_dir, pattern)
-                if os.path.exists(path):
-                    try:
-                        if os.path.isdir(path):
-                            shutil.rmtree(path)
-                            log.debug(f'Removed directory {path}')
-                        else:
-                            os.remove(path)
-                            log.debug(f'Removed file {path}')
-                    except Exception as e:
-                        log.warning(f'Failed to remove {path}: {e}')
+            # glob handles an exact name too - it yields the path when it exists and nothing when it does not
+            for path in glob(os.path.join(out_dir, pattern)):
+                try:
+                    if os.path.isdir(path):
+                        shutil.rmtree(path)
+                        log.debug(f'Removed directory {path}')
+                    else:
+                        os.remove(path)
+                        log.debug(f'Removed file {path}')
+                except Exception as e:
+                    log.warning(f'Failed to remove {path}: {e}')
 
 
 @click.command()
@@ -138,11 +120,7 @@ def cleanup_intermediate_files(out_dir, keep_options):
               help='For a gene found on a gap-containing contig (a contig SPAdes assembled from several graph paths joined using paired-end evidence), also take its context from the flanking sequence of the contig itself. The assembly graph describes such a gene\'s context poorly or not at all, but a context taken from the contig may cross one of those joins rather than a graph edge, so it is named "..._path_contigfallback_{contig}_{start}_{end}" in the output. Default: True')
 @click.option('--write-context-sequences/--no-write-context-sequences', default=False,
               help='Write in_gene_out_contexts.fasta - the in-gene-out sequence behind every context level row, and the full contig of every gene with no species-level match - along with the context_seq_id and gene offset columns that join a row to its sequence. Tens of MB for a typical sample, so it is off unless asked for. Implied by --add-plasmid-score, which needs this fasta as GeNomad\'s input. Default: False')
-def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                   kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
-                   max_gap_ratio, context_len, gene_pident_filtering_th,
-                   paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
-                   add_plasmid_score, genomad_db, contig_context_fallback, write_context_sequences):
+def run_ginger_e2e(**kwargs):
     """GInGeR - A tool for analyzing the genomic contexts of genes in metagenomic samples.
 
     \b
@@ -150,7 +128,7 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_d
 
     \b
     SHORT_READS_2 - R2 fastq or fastq.gzip file
-t
+
     \b
     GENES_PATH - A fasta file with the genes of interest
 
@@ -158,11 +136,8 @@ t
     OUT_DIR - A path specifying where to save GInGeR's output
 
     """
-    return ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                           kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path,
-                           depth_limit, max_gap_ratio, context_len, gene_pident_filtering_th,
-                           paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
-                           add_plasmid_score, genomad_db, contig_context_fallback, write_context_sequences)
+    # click passes every argument and option by keyword, under the same names ginger_e2e_func takes
+    return ginger_e2e_func(**kwargs)
 
 
 def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,

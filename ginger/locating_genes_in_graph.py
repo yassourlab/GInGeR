@@ -176,7 +176,7 @@ def get_nodes_dict_from_fastg_file(assembly_graph_path: str) -> Dict[str, SeqIO.
 def find_genes_in_contigs(genes_path: str, contigs_path: str, n_minimap_threads: int,
                           pident_filtering_th: float, genes_to_contigs_path: str,
                           return_all_gene_matches: bool = False, nms_iou_threshold: float = 0.8) -> Iterator[mc.GeneContigMatch]:
-    if not os.path.exists(genes_to_contigs_path) or not os.path.isfile(genes_to_contigs_path):
+    if not os.path.isfile(genes_to_contigs_path):
         log.info(f'running mmseqs2 to find genes in contigs')
         genes_to_contigs_path = sau.map_genes_to_contigs(genes_path, contigs_path, genes_to_contigs_path,
                                                          nthreads=n_minimap_threads)
@@ -238,9 +238,8 @@ def map_nodes_to_contigs_w_gaps(contigs_with_gaps, assembly_graph_path, contigs_
     SeqIO.write([contig for contig in SeqIO.parse(contigs_path, 'fasta') if contig.id in contigs_with_gaps],
                 contigs_w_gaps_path, 'fasta')
     # find nodes in contigs with gaps
-    nodes_to_contigs_path = sau.map_nodes_to_contigs(assembly_graph_path, contigs_w_gaps_path,
-                                                     nodes_to_contigs_w_gaps_path,
-                                                     nthreads=n_threads)
+    nodes_to_contigs_path = sau.run_minimap2_paf(assembly_graph_path, contigs_w_gaps_path,
+                                                 nodes_to_contigs_w_gaps_path, nthreads=n_threads)
     return placements_from_minimap_results(pu.minimap_results_from_path(nodes_to_contigs_path))
 
 

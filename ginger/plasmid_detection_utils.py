@@ -1,7 +1,6 @@
 import os
 import logging
 import shutil
-from subprocess import run
 import pandas as pd
 
 from ginger import pipeline_utils as pu
@@ -17,14 +16,8 @@ def run_genomad(fasta_path, output_dir, genomad_db, threads):
         raise Exception(f'GeNomad database does not exist in {genomad_db}')
 
     pu.check_and_make_dir_no_file_name(output_dir)
-    command = GENOMAD_COMMAND.format(threads=threads, fasta_path=fasta_path, output_dir=output_dir,
-                                     genomad_db=genomad_db)
-    log.info(f'Running GeNomad - {command}')
-    command_output = run(command, shell=True, capture_output=True)
-    if command_output.returncode:
-        log.error(f'GeNomad failed: {command_output.stderr}')
-        raise Exception('GeNomad failed - GInGeR aborted')
-    log.info('GeNomad completed successfully')
+    pu.run_tool('GeNomad', GENOMAD_COMMAND.format(threads=threads, fasta_path=fasta_path, output_dir=output_dir,
+                                                  genomad_db=genomad_db))
 
     fasta_stem = os.path.splitext(os.path.basename(fasta_path))[0]
     return os.path.join(output_dir, f'{fasta_stem}_summary', f'{fasta_stem}_plasmid_summary.tsv')

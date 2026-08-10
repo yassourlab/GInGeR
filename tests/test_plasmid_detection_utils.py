@@ -269,7 +269,7 @@ class RunGenomadTest(unittest.TestCase):
         os.makedirs(genomad_db)
         output_dir = os.path.join(self.tmp_dir, 'genomad_output')
 
-        with patch('ginger.plasmid_detection_utils.run', return_value=self.Dummy()) as mock_run:
+        with patch('ginger.pipeline_utils.run', return_value=self.Dummy()) as mock_run:
             summary_path = pdu.run_genomad(fasta_path, output_dir, genomad_db, threads=4)
 
         self.assertEqual(summary_path,
@@ -290,7 +290,7 @@ class RunGenomadTest(unittest.TestCase):
         os.makedirs(genomad_db)
         output_dir = os.path.join(self.tmp_dir, 'genomad_output')
 
-        with patch('ginger.plasmid_detection_utils.run', return_value=self.Dummy(stderr='boom', returncode=1)):
+        with patch('ginger.pipeline_utils.run', return_value=self.Dummy(stderr='boom', returncode=1)):
             with self.assertRaises(Exception):
                 pdu.run_genomad(fasta_path, output_dir, genomad_db, threads=1)
 

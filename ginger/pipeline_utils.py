@@ -4,14 +4,44 @@ import numpy as np
 import pandas as pd
 import timeit
 from collections import defaultdict, namedtuple
+from subprocess import run, Popen, PIPE
 from Bio import SeqIO
 from pafpy import PafFile
+from tqdm import tqdm
 
 RUNTIME_PRINTS_PATTERN = '$$$$$$$$$$'
 log = logging.getLogger(__name__)
 
 
-# TODO - write a function here that runs an external tool and present the output using tqdm (I coppied and pasted it multiple times already)
+def run_tool(tool_name, command):
+    """Runs an external tool through the shell, raising with its stderr if it failed."""
+    log.info(f'Running {tool_name} - {command}')
+    command_output = run(command, shell=True, capture_output=True)
+    if command_output.returncode:
+        log.error(f'{tool_name} failed: {command_output.stderr}')
+        raise Exception(f'{tool_name} failed - GInGeR aborted')
+    log.info(f'{tool_name} completed successfully')
+
+
+def stream_tool(tool_name, command, tqdm_mininterval=None):
+    """Runs an external tool with its stdout streamed through tqdm, so that a long run shows progress,
+    and raises if it failed.
+
+    stderr is deliberately left inherited rather than piped: it reaches the terminal and the log as
+    the tool writes it, and a pipe nothing reads while stdout is being consumed can fill and deadlock.
+    """
+    log.info(f'Running {tool_name} - {command}')
+    tqdm_kwargs = {} if tqdm_mininterval is None else {'mininterval': tqdm_mininterval}
+    with Popen(command.split(' '), stdout=PIPE) as process:
+        for _ in tqdm(iter(lambda: process.stdout.readline(), b''), **tqdm_kwargs):
+            pass
+    # only now: returncode stays None until the `with` block has waited for the process, which is why
+    # the checks the callers of this used to make - all of them inside the block - never fired
+    if process.returncode:
+        raise Exception(f'{tool_name} failed with exit code {process.returncode} - GInGeR aborted')
+    log.info(f'{tool_name} completed successfully')
+
+
 def step_timing(func):
     def wrapper_lot_and_time(*args, **kwargs):
         start = timeit.default_timer()
@@ -39,10 +69,6 @@ def parse_list_of_nodes(as_str):
     return [node.replace(';', '') for node in splt]
 
 
-def is_contig_name_func(line):
-    return line.startswith('NODE')
-
-
 def paf_record_to_dict(paf_record):
     # qstart matters: minimap2 clips the ends of an alignment, so the query does not necessarily
     # start where the alignment does, and anything placing the query in target coordinates has to
@@ -53,15 +79,9 @@ def paf_record_to_dict(paf_record):
                 mlen=paf_record.mlen)
 
 
-def minimap_results_from_path(path, head_size=None):
+def minimap_results_from_path(path):
     with open(path) as f:
-        paf_file = PafFile(f)
-        if head_size:
-            head = [next(paf_file) for _ in range(head_size)]  # paf_file
-        else:
-            head = paf_file
-        minimap_results = pd.DataFrame([paf_record_to_dict(paf_record) for paf_record in head])
-    return minimap_results
+        return pd.DataFrame([paf_record_to_dict(paf_record) for paf_record in PafFile(f)])
 
 
 def parse_path_segments(path_lines):
@@ -83,7 +103,7 @@ def parse_path_segments(path_lines):
     return segments
 
 
-def parse_paths_file(paths_path, path_is_contig_name_func=is_contig_name_func):
+def parse_paths_file(paths_path):
     """Parses SPAdes' contigs.paths into {contig name: ordered list of path segments}.
 
     A contig assembled from a single graph path has a single segment. SPAdes splits a path with ';'
@@ -96,7 +116,7 @@ def parse_paths_file(paths_path, path_is_contig_name_func=is_contig_name_func):
     with open(paths_path) as paths_file:
         for line in paths_file.readlines():
             stripped_line = line.strip()
-            if path_is_contig_name_func(stripped_line):
+            if stripped_line.startswith('NODE'):
                 contig_name = stripped_line
                 contigs_to_path_lines[contig_name] = []
             else:

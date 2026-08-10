@@ -1,7 +1,5 @@
-from subprocess import Popen, PIPE
 import logging
 import os
-from tqdm import tqdm
 from ginger import pipeline_utils as pu
 from ginger import constants as c
 
@@ -44,13 +42,9 @@ def run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, output_f
     long_reads_str = ''
     if long_reads:
         long_reads_str = OPTIONAL_LONG_READS_ADDITION.format(long_reads=long_reads)
-    command = META_SPADES_COMMAND.format(short_reads_1=short_reads_1, short_reads_2=short_reads_2,
-                                         optional_long_reads=long_reads_str, output_folder=output_folder,
-                                         threads=threads)
-    log.info(f'Running MetaSPAdes - {command}')
-    with Popen(command.split(' '), stdout=PIPE) as p:
-        tqdm_boject = tqdm(iter(lambda: p.stdout.readline(), b""), mininterval=TQDM_INTERVAL_MINS * SECS_TO_MIN)
-        output_lines = [output_line for output_line in tqdm_boject]
-    
+    pu.stream_tool('MetaSPAdes', META_SPADES_COMMAND.format(short_reads_1=short_reads_1, short_reads_2=short_reads_2,
+                                                            optional_long_reads=long_reads_str,
+                                                            output_folder=output_folder, threads=threads),
+                   tqdm_mininterval=TQDM_INTERVAL_MINS * SECS_TO_MIN)
     validate_spades_output(output_folder)
     return output_folder
