@@ -74,14 +74,15 @@ class WritePlasmidDetectionInputFastaTest(unittest.TestCase):
         matched_genes = {'geneA'}
 
         output_fasta_path = os.path.join(self.tmp_dir, 'plasmid_input.fasta')
-        result_path = pdu.write_plasmid_detection_input_fasta(
+        result_path, trios_by_seq_id = pdu.write_plasmid_detection_input_fasta(
             context_level_results, genes_with_location_in_graph, matched_genes,
             in_paths_fasta, out_paths_fasta, contigs_fasta, output_fasta_path)
 
         self.assertEqual(result_path, output_fasta_path)
         records = pdu._fasta_to_dict(output_fasta_path)
         # geneA's context: in-path + gene sequence (contig1[2:6] = "GTAC") + out-path
-        self.assertEqual(records['geneA|in_ctx1|out_ctx1'], 'IIIIIIIIGTACOOOOOOOO')
+        self.assertEqual(trios_by_seq_id, {'ctx0000000': ('geneA', 'in_ctx1', 'out_ctx1')})
+        self.assertEqual(records['ctx0000000'], 'IIIIIIIIGTACOOOOOOOO')
         # geneB has no context match, so its full (unmatched) contig is included as-is
         self.assertEqual(records['contig2'], 'GGGGCCCCAA')
         self.assertNotIn('contig1', records)
@@ -107,7 +108,7 @@ class WritePlasmidDetectionInputFastaTest(unittest.TestCase):
         records = pdu._fasta_to_dict(output_fasta_path)
         # contig1[2:6] = "AAAC", kept forward - NOT its reverse complement "GTTT", since
         # in/out paths are already extracted in the contig's forward orientation.
-        self.assertEqual(records['geneA|in_ctx1|out_ctx1'], 'IIIIIIIIAAACOOOOOOOO')
+        self.assertEqual(records['ctx0000000'], 'IIIIIIIIAAACOOOOOOOO')
 
     def test_the_gene_segment_comes_from_the_copy_the_contexts_flank(self):
         # geneA is on two contigs. the trio's contexts were cut from the copy on contig2, so that is
@@ -134,7 +135,7 @@ class WritePlasmidDetectionInputFastaTest(unittest.TestCase):
         records = pdu._fasta_to_dict(output_fasta_path)
         # contig2[4:8], not contig1[2:6] - splicing the other copy's sequence in would produce a
         # sequence that is on neither contig
-        self.assertEqual(records['geneA|in_ctx1|out_ctx1'], 'IIIIIIIIGGGGOOOOOOOO')
+        self.assertEqual(records['ctx0000000'], 'IIIIIIIIGGGGOOOOOOOO')
 
     def test_returns_none_and_removes_file_when_nothing_to_write(self):
         in_paths_fasta = self._write_fasta('in.fasta', {})
@@ -145,11 +146,12 @@ class WritePlasmidDetectionInputFastaTest(unittest.TestCase):
         matched_genes = {'geneA'}  # geneA is matched, so its contig is not included
 
         output_fasta_path = os.path.join(self.tmp_dir, 'plasmid_input.fasta')
-        result_path = pdu.write_plasmid_detection_input_fasta(
+        result_path, trios_by_seq_id = pdu.write_plasmid_detection_input_fasta(
             {}, genes_with_location_in_graph, matched_genes,
             in_paths_fasta, out_paths_fasta, contigs_fasta, output_fasta_path)
 
         self.assertIsNone(result_path)
+        self.assertEqual(trios_by_seq_id, {})
         self.assertFalse(os.path.exists(output_fasta_path))
 
 
@@ -193,7 +195,7 @@ class StitchedContextGeneContextTest(unittest.TestCase):
             genes_with_location_in_graph, {'test_gene'},
             self.in_paths_fasta, self.out_paths_fasta, CONTIGS_PATH, output_fasta_path)
 
-        stitched = pdu._fasta_to_dict(output_fasta_path)[f'test_gene|{in_context}|{out_context}']
+        stitched = pdu._fasta_to_dict(output_fasta_path)['ctx0000000']
         return stitched, in_contexts[in_context], out_contexts[out_context]
 
     def test_stitched_record_is_an_exact_substring_of_the_contig(self):
@@ -231,7 +233,7 @@ class ReadPlasmidScoresTest(unittest.TestCase):
         shutil.rmtree(self.tmp_dir)
 
     def test_no_context_rows_returns_empty_context_df(self):
-        """GeNomad output with only contig rows (no '|' in seq_name) must not crash."""
+        """GeNomad output with only contig rows must not crash."""
         summary_path = os.path.join(self.tmp_dir, 'plasmid_summary.tsv')
         pd.DataFrame({
             'seq_name': ['contig1', 'contig2'],
@@ -239,7 +241,7 @@ class ReadPlasmidScoresTest(unittest.TestCase):
             'plasmid_score': [0.9, 0.3],
         }).to_csv(summary_path, sep='\t', index=False)
 
-        context_plasmid_scores, contig_plasmid_scores = pdu.read_plasmid_scores(summary_path)
+        context_plasmid_scores, contig_plasmid_scores = pdu.read_plasmid_scores(summary_path, {})
 
         self.assertListEqual(list(context_plasmid_scores.columns), ['gene', 'in_context', 'out_context', 'plasmid_score'])
         self.assertEqual(len(context_plasmid_scores), 0)
@@ -250,12 +252,14 @@ class ReadPlasmidScoresTest(unittest.TestCase):
         """GeNomad output with only context rows must not crash."""
         summary_path = os.path.join(self.tmp_dir, 'plasmid_summary.tsv')
         pd.DataFrame({
-            'seq_name': ['geneA|in_ctx1|out_ctx1', 'geneB|in_ctx2|out_ctx2'],
+            'seq_name': ['ctx0000000', 'ctx0000001'],
             'length': [500, 600],
             'plasmid_score': [0.8, 0.5],
         }).to_csv(summary_path, sep='\t', index=False)
 
-        context_plasmid_scores, contig_plasmid_scores = pdu.read_plasmid_scores(summary_path)
+        context_plasmid_scores, contig_plasmid_scores = pdu.read_plasmid_scores(
+            summary_path, {'ctx0000000': ('geneA', 'in_ctx1', 'out_ctx1'),
+                           'ctx0000001': ('geneB', 'in_ctx2', 'out_ctx2')})
 
         self.assertListEqual(list(context_plasmid_scores.columns), ['gene', 'in_context', 'out_context', 'plasmid_score'])
         self.assertEqual(len(context_plasmid_scores), 2)
@@ -265,13 +269,14 @@ class ReadPlasmidScoresTest(unittest.TestCase):
     def test_splits_context_and_contig_rows(self):
         summary_path = os.path.join(self.tmp_dir, 'plasmid_summary.tsv')
         summary_df = pd.DataFrame({
-            'seq_name': ['geneA|in_ctx1|out_ctx1', 'contig2'],
+            'seq_name': ['ctx0000000', 'contig2'],
             'length': [1234, 5678],
             'plasmid_score': [0.9, 0.1],
         })
         summary_df.to_csv(summary_path, sep='\t', index=False)
 
-        context_plasmid_scores, contig_plasmid_scores = pdu.read_plasmid_scores(summary_path)
+        context_plasmid_scores, contig_plasmid_scores = pdu.read_plasmid_scores(
+            summary_path, {'ctx0000000': ('geneA', 'in_ctx1', 'out_ctx1')})
 
         self.assertListEqual(list(context_plasmid_scores.columns), ['gene', 'in_context', 'out_context', 'plasmid_score'])
         self.assertEqual(len(context_plasmid_scores), 1)
@@ -286,6 +291,99 @@ class ReadPlasmidScoresTest(unittest.TestCase):
         row = contig_plasmid_scores.iloc[0]
         self.assertEqual(row['contig'], 'contig2')
         self.assertEqual(row['plasmid_score'], 0.1)
+
+
+class GeneNamesWithSeparatorsTest(unittest.TestCase):
+    """Gene names come from a fasta the caller supplies, so no character is safe to build a
+    composite sequence name out of. SARG's are pipe delimited and CARD's contain both '|' and ':'.
+    """
+
+    SARG_GENE = 'SARG|multidrug@MFS|emrB|WP_145513356.1'
+
+    def setUp(self):
+        self.tmp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir)
+
+    def _write_fasta(self, name, records):
+        path = os.path.join(self.tmp_dir, name)
+        with open(path, 'w') as f:
+            for header, seq in records.items():
+                f.write(f'>{header}\n{seq}\n')
+        return path
+
+    def test_a_gene_name_full_of_separators_survives_the_round_trip(self):
+        in_paths_fasta = self._write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII'})
+        out_paths_fasta = self._write_fasta('out.fasta', {'out_ctx1': 'OOOOOOOO'})
+        contigs_fasta = self._write_fasta('contigs.fasta', {'contig1': 'ACGTACGTAC'})
+        context_level_results = {
+            (self.SARG_GENE, 'ref_genome1'): [FakeInOutMatch(self.SARG_GENE, 'in_ctx1', 'out_ctx1',
+                                                              mc.GeneLocus('contig1', 2, 6))],
+        }
+        trios_table_path = os.path.join(self.tmp_dir, 'trios.tsv')
+        output_fasta_path = os.path.join(self.tmp_dir, 'plasmid_input.fasta')
+
+        _, trios_by_seq_id = pdu.write_plasmid_detection_input_fasta(
+            context_level_results, [FakeGeneMatch(self.SARG_GENE, 'contig1', 1.0)], {self.SARG_GENE},
+            in_paths_fasta, out_paths_fasta, contigs_fasta, output_fasta_path, trios_table_path)
+
+        summary_path = os.path.join(self.tmp_dir, 'plasmid_summary.tsv')
+        pd.DataFrame({'seq_name': ['ctx0000000'], 'plasmid_score': [0.7]}).to_csv(summary_path, sep='\t',
+                                                                                  index=False)
+        context_plasmid_scores, _ = pdu.read_plasmid_scores(summary_path, trios_by_seq_id)
+
+        # the gene comes back whole. splitting a "{gene}|{in}|{out}" name on '|' would have made
+        # this gene 'SARG', its incoming context 'multidrug@MFS' and its outgoing one 'emrB', so
+        # the merge onto the context level csv would miss every row and leave the score at 0
+        row = context_plasmid_scores.iloc[0]
+        self.assertEqual(row['gene'], self.SARG_GENE)
+        self.assertEqual(row['in_context'], 'in_ctx1')
+        self.assertEqual(row['out_context'], 'out_ctx1')
+        self.assertEqual(row['plasmid_score'], 0.7)
+
+        with open(trios_table_path) as f:
+            self.assertEqual([line.rstrip('\n').split('\t') for line in f],
+                             [pdu.TRIOS_TABLE_COLUMNS,
+                              ['ctx0000000', self.SARG_GENE, 'in_ctx1', 'out_ctx1']])
+
+    def test_sequences_are_numbered_the_same_way_on_a_rerun(self):
+        in_paths_fasta = self._write_fasta('in.fasta', {'in_ctx1': 'IIIIIIII', 'in_ctx2': 'IIII'})
+        out_paths_fasta = self._write_fasta('out.fasta', {'out_ctx1': 'OOOOOOOO', 'out_ctx2': 'OOOO'})
+        contigs_fasta = self._write_fasta('contigs.fasta', {'contig1': 'ACGTACGTAC'})
+        locus = mc.GeneLocus('contig1', 2, 6)
+        context_level_results = {
+            ('geneA', 'ref_genome1'): [FakeInOutMatch('geneA', 'in_ctx1', 'out_ctx1', locus),
+                                       FakeInOutMatch('geneA', 'in_ctx2', 'out_ctx2', locus)],
+        }
+
+        numbering = []
+        for run in range(2):
+            _, trios_by_seq_id = pdu.write_plasmid_detection_input_fasta(
+                context_level_results, [], set(), in_paths_fasta, out_paths_fasta, contigs_fasta,
+                os.path.join(self.tmp_dir, f'plasmid_input_{run}.fasta'))
+            numbering.append(trios_by_seq_id)
+
+        self.assertEqual(numbering[0], numbering[1])
+        self.assertEqual(sorted(numbering[0]), ['ctx0000000', 'ctx0000001'])
+
+
+class ReadPlasmidScoresGuardTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir)
+
+    def test_raises_when_none_of_genomads_sequences_are_known_trios(self):
+        # a trios table from another run would classify every context as a contig, and every
+        # context level row would quietly end up with a plasmid score of 0
+        summary_path = os.path.join(self.tmp_dir, 'plasmid_summary.tsv')
+        pd.DataFrame({'seq_name': ['ctx0000000'], 'plasmid_score': [0.9]}).to_csv(summary_path, sep='\t',
+                                                                                  index=False)
+
+        with self.assertRaises(ValueError):
+            pdu.read_plasmid_scores(summary_path, {'ctx0000042': ('geneA', 'in_ctx1', 'out_ctx1')})
 
 
 class AddPlasmidScoresToCsvTest(unittest.TestCase):

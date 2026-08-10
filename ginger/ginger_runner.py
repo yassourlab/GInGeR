@@ -41,7 +41,7 @@ def cleanup_intermediate_files(out_dir, keep_options):
         'sequences': ['all_in_paths.fasta', 'all_out_paths.fasta', 'contexts_to_loci.tsv'],
         'kraken': ['kraken_*.tsv', 'bracken_*.tsv'],
         'reference': ['merged_filtered_ref_db.*', 'references_used.csv'],
-        'plasmid': ['plasmid_detection_input.fasta', 'genomad_output'],
+        'plasmid': ['plasmid_detection_input.fasta', 'plasmid_detection_input_trios.tsv', 'genomad_output'],
     }
     
     # Remove categories not in keep_options
@@ -246,14 +246,15 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     if add_plasmid_score:
         genes_with_context_matches = {gene for gene, _ in context_level_results.keys()} if context_level_results else set()
         plasmid_input_fasta = c.PLASMID_DETECTION_INPUT_FASTA_TEMPLATE.format(temp_folder=out_dir)
-        plasmid_fasta_path = pdu.write_plasmid_detection_input_fasta(
+        plasmid_fasta_path, trios_by_seq_id = pdu.write_plasmid_detection_input_fasta(
             context_level_results, genes_to_analyze, genes_with_context_matches,
             in_paths_fasta, out_paths_fasta, c.CONTIGS_PATH_TEMPLATE.format(assembly_dir=assembly_dir),
-            plasmid_input_fasta)
+            plasmid_input_fasta, c.PLASMID_DETECTION_TRIOS_TEMPLATE.format(temp_folder=out_dir))
         if plasmid_fasta_path:
             genomad_out_dir = c.GENOMAD_OUTPUT_DIR_TEMPLATE.format(out_dir=out_dir)
             plasmid_summary_path = pdu.run_genomad(plasmid_fasta_path, genomad_out_dir, genomad_db, threads)
-            context_plasmid_scores, contig_plasmid_scores = pdu.read_plasmid_scores(plasmid_summary_path)
+            context_plasmid_scores, contig_plasmid_scores = pdu.read_plasmid_scores(plasmid_summary_path,
+                                                                                     trios_by_seq_id)
 
     if not context_level_results:
         wrote_no_species_match_csv = pu.write_genes_detected_in_graph_with_no_species_match(

@@ -33,21 +33,40 @@ def _get_gene_sequence(contig_seq: str, locus) -> str:
     return contig_seq[locus.start:locus.end]
 
 
+TRIOS_TABLE_COLUMNS = ['seq_id', 'gene', 'in_context', 'out_context']
+CONTEXT_SEQ_ID_PREFIX = 'ctx'
+
+
+def _write_trios_table(trios_by_seq_id, trios_table_path):
+    with open(trios_table_path, 'w') as f:
+        f.write('\t'.join(TRIOS_TABLE_COLUMNS) + '\n')
+        for seq_id, trio in trios_by_seq_id.items():
+            f.write('\t'.join((seq_id,) + trio) + '\n')
+
+
 def write_plasmid_detection_input_fasta(context_level_results, genes_with_location_in_graph, matched_genes,
-                                        in_paths_fasta, out_paths_fasta, contigs_fasta, output_fasta_path):
+                                        in_paths_fasta, out_paths_fasta, contigs_fasta, output_fasta_path,
+                                        trios_table_path=None):
     """Writes a FASTA file to be used as GeNomad's input, containing:
     - for every unique (gene, in_context, out_context) trio in context_level_results, the
-      concatenation of the in-path, gene and out-path sequences, with header "{gene}|{in_context}|{out_context}"
+      concatenation of the in-path, gene and out-path sequences, named "ctx0000001" and up
     - for every gene in genes_with_location_in_graph that is not in matched_genes, the full
-      sequence of the contig it was found on, with header "{contig}"
+      sequence of the contig it was found on, named after the contig
 
     The gene sequence comes from the copy of the gene the trio's two contexts were cut from, which
     the match carries: they are only ever paired within one copy, so splicing that copy's sequence
     between them reproduces a stretch of the contig exactly.
 
-    Returns the path to the written fasta, or None if there was nothing to write.
+    A trio used to be named "{gene}|{in_context}|{out_context}", which cannot be taken apart again
+    when the gene's own name contains a '|' - as SARG's and CARD's do. Gene names come from a fasta
+    the caller supplies, so no separator is safe; the names here are opaque, and what they stand for
+    is returned as a mapping and written to trios_table_path when one is given.
+
+    Returns the path to the written fasta and that mapping, or (None, {}) if there was nothing to
+    write.
     """
     contig_seq_by_id = _fasta_to_dict(contigs_fasta)
+    trios_by_seq_id = {}
 
     wrote_any = False
     with open(output_fasta_path, 'w') as f:
@@ -60,10 +79,14 @@ def write_plasmid_detection_input_fasta(context_level_results, genes_with_locati
                 for match in matches_list:
                     trios.add((match.gene, match.in_path.query_name, match.out_path.query_name, match.locus))
 
-            for gene, in_context, out_context, locus in trios:
+            # sorted, so that a rerun on the same input numbers the sequences the same way - and so
+            # that GeNomad's own per-sequence gene numbering stays comparable between runs
+            for n, (gene, in_context, out_context, locus) in enumerate(sorted(trios)):
                 gene_seq = _get_gene_sequence(contig_seq_by_id[locus.contig], locus)
                 full_seq = in_seq_by_id[in_context] + gene_seq + out_seq_by_id[out_context]
-                f.write(f'>{gene}|{in_context}|{out_context}\n{full_seq}\n')
+                seq_id = f'{CONTEXT_SEQ_ID_PREFIX}{n:07d}'
+                trios_by_seq_id[seq_id] = (gene, in_context, out_context)
+                f.write(f'>{seq_id}\n{full_seq}\n')
                 wrote_any = True
 
         written_contigs = set()
@@ -75,8 +98,10 @@ def write_plasmid_detection_input_fasta(context_level_results, genes_with_locati
 
     if not wrote_any:
         os.remove(output_fasta_path)
-        return None
-    return output_fasta_path
+        return None, {}
+    if trios_table_path is not None:
+        _write_trios_table(trios_by_seq_id, trios_table_path)
+    return output_fasta_path, trios_by_seq_id
 
 
 @pu.step_timing
@@ -98,26 +123,34 @@ def run_genomad(fasta_path, output_dir, genomad_db, threads):
     return os.path.join(output_dir, f'{fasta_stem}_summary', f'{fasta_stem}_plasmid_summary.tsv')
 
 
-def read_plasmid_scores(plasmid_summary_path):
+def read_plasmid_scores(plasmid_summary_path, trios_by_seq_id):
     """Reads GeNomad's plasmid_summary.tsv and splits the results into context-level and
-    contig-level plasmid scores based on whether seq_name is a "{gene}|{in_context}|{out_context}"
-    composite header or a plain contig name.
+    contig-level plasmid scores.
+
+    A sequence is a gene context if trios_by_seq_id - as returned by
+    write_plasmid_detection_input_fasta - names it, and a contig otherwise. Membership is exact, so
+    no contig can be mistaken for a context whatever it is called.
 
     Returns a tuple (context_plasmid_scores, contig_plasmid_scores):
     - context_plasmid_scores has columns [gene, in_context, out_context, plasmid_score]
     - contig_plasmid_scores has columns [contig, plasmid_score]
     """
     summary_df = pd.read_csv(plasmid_summary_path, sep='\t')[['seq_name', 'plasmid_score']]
-    is_context = summary_df['seq_name'].str.contains('|', regex=False)
+    is_context = summary_df['seq_name'].isin(trios_by_seq_id)
+
+    if trios_by_seq_id and len(summary_df) and not is_context.any():
+        raise ValueError(f'none of the {len(summary_df)} sequences GeNomad reported on is one of the '
+                         f'{len(trios_by_seq_id)} gene contexts written for it - the trios were not '
+                         f'produced by this run, so every context would silently score 0')
 
     context_plasmid_scores = summary_df[is_context].copy()
     if context_plasmid_scores.empty:
         context_plasmid_scores = pd.DataFrame(columns=['gene', 'in_context', 'out_context', 'plasmid_score'])
     else:
-        context_split = context_plasmid_scores['seq_name'].str.split('|', expand=True)
-        context_plasmid_scores['gene'] = context_split[0]
-        context_plasmid_scores['in_context'] = context_split[1]
-        context_plasmid_scores['out_context'] = context_split[2]
+        trios = context_plasmid_scores['seq_name'].map(trios_by_seq_id)
+        context_plasmid_scores['gene'] = [trio[0] for trio in trios]
+        context_plasmid_scores['in_context'] = [trio[1] for trio in trios]
+        context_plasmid_scores['out_context'] = [trio[2] for trio in trios]
         context_plasmid_scores = context_plasmid_scores[['gene', 'in_context', 'out_context', 'plasmid_score']]
 
     contig_plasmid_scores = summary_df[~is_context].rename(columns={'seq_name': 'contig'})[['contig', 'plasmid_score']]
