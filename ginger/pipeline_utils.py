@@ -257,6 +257,11 @@ def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str,
             results_dict['reference_contig'].append(reference)
             results_dict['in_context'].append(match.in_path.query_name)
             results_dict['out_context'].append(match.out_path.query_name)
+            # which copy of the gene in the assembly this pair of contexts flanks. both are cut from
+            # the same one, so the row describes a stretch of sequence that is really on this contig
+            results_dict['contig'].append(match.locus.contig if match.locus is not None else None)
+            results_dict['gene_start_in_contig'].append(match.locus.start if match.locus is not None else None)
+            results_dict['gene_end_in_contig'].append(match.locus.end if match.locus is not None else None)
             if match.in_path.strand == '+':
                 results_dict['in_context_start'].append(match.in_path.ref_genome_start)
                 results_dict['out_context_end'].append(match.out_path.ref_genome_end)

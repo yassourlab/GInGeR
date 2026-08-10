@@ -28,6 +28,9 @@ GAPPY_CONTIG_SEGMENTS = [['1+'], ['2+', '3+']]
 
 
 def gene_contig_match(start, end):
+    """start and end are 1-based inclusive, the way mmseqs2 reports them. GeneContigMatch turns them
+    into 0-based half-open, so start_in_first_node below is one less than the number passed here
+    minus the offset of the node the gene starts on."""
     return mc.GeneContigMatch(f'{CONTIG_NAME}\tgene\t{start}\t{end}\t100\t100')
 
 
@@ -40,7 +43,7 @@ class LocatingGenesInGraphTest(unittest.TestCase):
                                                        {CONTIG_NAME: [['2+', '3+']]}, NODE_SEQUENCES,
                                                        NODES_TO_CONTIGS_DF)
         self.assertEqual([match.nodes_list for match in matches], [['2+', '3+']])
-        self.assertEqual([match.start_in_first_node for match in matches], [50])
+        self.assertEqual([match.start_in_first_node for match in matches], [49])
 
     def test_add_node_list_to_genes_to_contigs_gappy_contig(self):
         # the gene is at 350-500 in the contig, which is inside the second segment (anchored at 300,
@@ -49,14 +52,14 @@ class LocatingGenesInGraphTest(unittest.TestCase):
                                                        {CONTIG_NAME: GAPPY_CONTIG_SEGMENTS}, NODE_SEQUENCES,
                                                        NODES_TO_CONTIGS_DF)
         self.assertEqual([match.nodes_list for match in matches], [['2+', '3+']])
-        self.assertEqual([match.start_in_first_node for match in matches], [50])
+        self.assertEqual([match.start_in_first_node for match in matches], [49])
 
     def test_add_node_list_to_genes_to_contigs_gappy_contig_first_segment(self):
         matches = lg.add_node_list_to_genes_to_contigs([gene_contig_match(20, 70)],
                                                        {CONTIG_NAME: GAPPY_CONTIG_SEGMENTS}, NODE_SEQUENCES,
                                                        NODES_TO_CONTIGS_DF)
         self.assertEqual([match.nodes_list for match in matches], [['1+']])
-        self.assertEqual([match.start_in_first_node for match in matches], [20])
+        self.assertEqual([match.start_in_first_node for match in matches], [19])
 
     def test_add_node_list_to_genes_to_contigs_gene_over_a_gap(self):
         # a gene spanning the join between the segments is covered by no segment, so it falls back to
@@ -65,7 +68,7 @@ class LocatingGenesInGraphTest(unittest.TestCase):
                                                        {CONTIG_NAME: GAPPY_CONTIG_SEGMENTS}, NODE_SEQUENCES,
                                                        NODES_TO_CONTIGS_DF)
         self.assertEqual([match.nodes_list for match in matches], [['1+']])
-        self.assertEqual([match.start_in_first_node for match in matches], [90])
+        self.assertEqual([match.start_in_first_node for match in matches], [89])
 
     def test_add_node_list_to_genes_to_contigs_unanchored_segments(self):
         # none of the segments' first nodes aligned to the contig, so the single graph node that
@@ -74,7 +77,7 @@ class LocatingGenesInGraphTest(unittest.TestCase):
                                                        {CONTIG_NAME: [['4+'], ['5+']]}, NODE_SEQUENCES,
                                                        NODES_TO_CONTIGS_DF)
         self.assertEqual([match.nodes_list for match in matches], [['2+']])
-        self.assertEqual([match.start_in_first_node for match in matches], [50])
+        self.assertEqual([match.start_in_first_node for match in matches], [49])
 
     def test_add_node_list_to_genes_to_contigs_keeps_unlocated_gene_on_a_gappy_contig(self):
         # the gene is at 800-900 in the contig, where no segment could be anchored and no node
@@ -84,6 +87,45 @@ class LocatingGenesInGraphTest(unittest.TestCase):
                                                        NODES_TO_CONTIGS_DF, {CONTIG_NAME})
         self.assertEqual([match.nodes_list for match in matches], [None])
         self.assertEqual([match.start_in_first_node for match in matches], [None])
+
+    def test_node_oriented_with_contig(self):
+        # every edge is in the fastg twice, as itself and as its reverse complement, and either can
+        # be the record that aligned to the contig. what decides the orientation to walk the graph
+        # in is the combination of which record it was and which strand it aligned on
+        forward, reverse_complement = 'EDGE_4_length_100_cov_1', "EDGE_4_length_100_cov_1'"
+        self.assertEqual(lg.node_oriented_with_contig(forward, '+'), '4+')
+        self.assertEqual(lg.node_oriented_with_contig(forward, '-'), '4-')
+        self.assertEqual(lg.node_oriented_with_contig(reverse_complement, '+'), '4-')
+        self.assertEqual(lg.node_oriented_with_contig(reverse_complement, '-'), '4+')
+
+    def test_add_node_list_to_genes_to_contigs_takes_the_node_that_runs_with_the_contig(self):
+        # node 4's forward record aligned on the minus strand, so it is its reverse complement that
+        # runs in the contig's direction - and whose graph predecessors are therefore what precedes
+        # the gene on the contig, rather than what follows it
+        nodes_to_contigs_df = pd.DataFrame([
+            {'contig': CONTIG_NAME, 'contig_start': 600, 'contig_end': 700,
+             'node': 'EDGE_4_length_100_cov_1', 'score': 1.0, 'strand': '-'}])
+
+        matches = lg.add_node_list_to_genes_to_contigs([gene_contig_match(650, 680)],
+                                                       {CONTIG_NAME: [['8+'], ['9+']]}, NODE_SEQUENCES,
+                                                       nodes_to_contigs_df)
+
+        self.assertEqual([match.nodes_list for match in matches], [['4-']])
+        # the node runs with the contig either way, so the offset is measured from where it aligned
+        self.assertEqual([match.start_in_first_node for match in matches], [49])
+
+    def test_add_node_list_to_genes_to_contigs_needs_the_node_to_cover_the_genes_start(self):
+        # start_in_first_node is an offset into the node, so a node that overlaps only the tail of
+        # the gene cannot place it, whichever strand it aligned on
+        nodes_to_contigs_df = pd.DataFrame([
+            {'contig': CONTIG_NAME, 'contig_start': 660, 'contig_end': 700,
+             'node': 'EDGE_4_length_100_cov_1', 'score': 1.0, 'strand': '-'}])
+
+        matches = lg.add_node_list_to_genes_to_contigs([gene_contig_match(650, 680)],
+                                                       {CONTIG_NAME: [['8+'], ['9+']]}, NODE_SEQUENCES,
+                                                       nodes_to_contigs_df)
+
+        self.assertEqual(matches, [])
 
     def test_add_node_list_to_genes_to_contigs_drops_unlocated_gene_on_a_gap_free_contig(self):
         matches = lg.add_node_list_to_genes_to_contigs([gene_contig_match(800, 900)],
