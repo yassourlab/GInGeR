@@ -51,12 +51,6 @@ def read_plasmid_scores(plasmid_summary_path, records_by_seq_id):
     """
     summary_df = pd.read_csv(plasmid_summary_path, sep='\t')[['seq_name', 'plasmid_score']]
     is_context = summary_df['seq_name'].isin(records_by_seq_id)
-
-    if records_by_seq_id and len(summary_df) and not is_context.any():
-        raise ValueError(f'none of the {len(summary_df)} sequences GeNomad reported on is one of the '
-                         f'{len(records_by_seq_id)} gene contexts written for it - the contexts were '
-                         f'not produced by this run, so every context would silently score 0')
-
     context_plasmid_scores = summary_df[is_context].copy()
     if context_plasmid_scores.empty:
         context_plasmid_scores = pd.DataFrame(columns=['gene', 'in_context', 'out_context', 'plasmid_score'])

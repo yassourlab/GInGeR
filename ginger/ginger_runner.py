@@ -148,7 +148,8 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                     write_context_sequences=False):
     # Log the command that was run
     log.info(f"Running GInGeR with command: {' '.join(sys.argv)}")
-    
+
+    pu.ensure_out_dir_is_fresh(out_dir)
     # create output directory if it doesn't exist
     pu.check_and_make_dir_no_file_name(out_dir)
     # filter reference database using kraken

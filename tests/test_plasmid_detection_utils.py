@@ -118,20 +118,6 @@ class GeneNamesWithSeparatorsTest(helper.TempDirTestCase):
         self.assertEqual(row['plasmid_score'], 0.7)
 
 
-class ReadPlasmidScoresGuardTest(helper.TempDirTestCase):
-    def test_raises_when_none_of_genomads_sequences_are_known_contexts(self):
-        # a summary from another run would classify every context as a contig, and every context
-        # level row would quietly end up with a plasmid score of 0
-        summary_path = os.path.join(self.tmp_dir, 'plasmid_summary.tsv')
-        pd.DataFrame({'seq_name': ['ctx0000000'], 'plasmid_score': [0.9]}).to_csv(summary_path, sep='\t',
-                                                                                  index=False)
-
-        with self.assertRaises(ValueError):
-            pdu.read_plasmid_scores(
-                summary_path,
-                {'ctx0000042': pu.ContextSeqRecord('ctx0000042', 'geneA', 'in_ctx1', 'out_ctx1', 8, 12)})
-
-
 class KeepOnlyPlasmidSummaryTest(helper.TempDirTestCase):
     def setUp(self):
         super().setUp()

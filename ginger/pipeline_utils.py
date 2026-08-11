@@ -65,6 +65,19 @@ def check_and_make_dir_no_file_name(path):
     os.makedirs(path, exist_ok=True)
 
 
+def ensure_out_dir_is_fresh(out_dir):
+    """Refuses to run into an out_dir that already holds files from a previous run.
+
+    A leftover file from a previous run (e.g. in_gene_out_contexts.fasta) is indistinguishable from
+    this run's own output to every downstream step that reads out_dir, so mixing them is never safe.
+    A previous run's assembly or Kraken2 output can still be reused - point --assembly-dir /
+    --kraken-output-path directly at it, in a directory other than out_dir.
+    """
+    if os.path.isdir(out_dir) and os.listdir(out_dir):
+        raise FileExistsError(f'{out_dir} already exists and is not empty - GInGeR writes fresh output '
+                              f'per run into a new or empty out_dir')
+
+
 def parse_list_of_nodes(as_str):
     splt = as_str.split(',')
     return [node.replace(';', '') for node in splt]

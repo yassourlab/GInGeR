@@ -525,6 +525,25 @@ class AddContextSeqIdsToContextLevelCsvTest(helper.TempDirTestCase):
         self.assertTrue(pd.isna(geneb['gene_start_in_context_seq']))
 
 
+class EnsureOutDirIsFreshTest(helper.TempDirTestCase):
+    def test_does_not_raise_when_out_dir_does_not_exist(self):
+        pu.ensure_out_dir_is_fresh(os.path.join(self.tmp_dir, 'not_created_yet'))  # does not raise
+
+    def test_does_not_raise_when_out_dir_is_empty(self):
+        empty_dir = os.path.join(self.tmp_dir, 'empty')
+        os.makedirs(empty_dir)
+        pu.ensure_out_dir_is_fresh(empty_dir)  # does not raise
+
+    def test_raises_when_out_dir_holds_a_leftover_file(self):
+        # a stale in_gene_out_contexts.fasta from a previous run is indistinguishable from this
+        # run's own output to anything reading out_dir later, so this has to be caught up front
+        with open(os.path.join(self.tmp_dir, 'in_gene_out_contexts.fasta'), 'w') as f:
+            f.write('>ctx0000000\nACGT\n')
+
+        with self.assertRaises(FileExistsError):
+            pu.ensure_out_dir_is_fresh(self.tmp_dir)
+
+
 class StreamToolTest(unittest.TestCase):
     """Kraken2, Bracken and MetaSPAdes are run through stream_tool.
 
