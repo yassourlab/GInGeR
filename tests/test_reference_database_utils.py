@@ -1,3 +1,4 @@
+import io
 import unittest
 import tempfile
 import os
@@ -40,11 +41,8 @@ class MyTestCase(unittest.TestCase):
         bracken_output_path = f'{TEST_FILES}/bracken_out_coverage_test.txt'
         metadata_path = f'{TEST_FILES}/uhgg_metadata_coverage_test.tsv'
         avg_sum = 200.0
-        passing = rdu.get_species_passing_coverage_threshold(
-            bracken_output_path, avg_sum, metadata_path,
-            max_refs_per_species=2,
-            species_coverage_threshold=10,
-        )
+        stats = rdu.get_species_coverage_stats(bracken_output_path, avg_sum, metadata_path, max_refs_per_species=2)
+        passing = rdu.get_species_passing_coverage_threshold(stats, species_coverage_threshold=10)
 
         # Coverage calculations:
         # EC: 250000*200/4000000 = 12.5 (pass)
@@ -78,10 +76,8 @@ class MyTestCase(unittest.TestCase):
         metadata_path = f'{TEST_FILES}/uhgg_metadata_coverage_test.tsv'
         avg_sum = 200.0
         top_species = ['Enterobacter cloacae', 'Yersinia enterocolitica']
-        included = rdu.get_species_included_in_analysis_df(
-            bracken_output_path, kraken_report_path, avg_sum, metadata_path,
-            max_refs_per_species=2, top_species=top_species,
-        )
+        stats = rdu.get_species_coverage_stats(bracken_output_path, avg_sum, metadata_path, max_refs_per_species=2)
+        included = rdu.get_species_included_in_analysis_df(stats, kraken_report_path, top_species)
         self.assertEqual(set(included['name']), set(top_species))
         included_by_name = included.set_index('name')
         self.assertEqual(included_by_name.loc['Enterobacter cloacae', 'distinct_minimizers'], 400000)
@@ -103,6 +99,54 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(set(filtered.loc[filtered['rank'] != 'S', 'taxid']), {0, 1, 100})
         # only the species row above the threshold survives
         self.assertEqual(set(filtered.loc[filtered['rank'] == 'S', 'taxid']), {1001})
+
+
+class DownloadRetryTest(unittest.TestCase):
+    """The reference download retries a failing FTP fetch N_ATTEMPTS times.
+
+    It used to call time.sleep without importing time, so the first failure raised NameError and no
+    retry ever happened - which on a multi-hour run threw away the whole reference database step over
+    one FTP hiccup.
+    """
+
+    def _download_with_failing_urlopen(self, n_failures, references_folder_content=()):
+        attempts = []
+
+        def failing_urlopen(url, timeout=None):
+            attempts.append(url)
+            if len(attempts) > n_failures:
+                return io.BytesIO(b'downloaded bytes')
+            raise OSError('ftp is down')
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(rdu, 'N_ATTEMPTS', 3), patch.object(rdu, 'SLEEP_SECS', 0), \
+                    patch.object(rdu, 'gffgz_to_fasta', lambda *args: None), \
+                    patch('urllib.request.urlopen', failing_urlopen):
+                error = None
+                try:
+                    rdu.download_and_write_content_to_file(tmpdir, list(references_folder_content),
+                                                           'ftp://example.invalid/MGYG000000001.gff.gz',
+                                                           io.StringIO())
+                except Exception as e:
+                    error = e
+        return attempts, error
+
+    def test_retries_until_the_download_succeeds(self):
+        attempts, error = self._download_with_failing_urlopen(n_failures=2)
+        self.assertIsNone(error)
+        self.assertEqual(len(attempts), 3)  # two failures, then the one that worked
+
+    def test_raises_the_download_error_after_the_last_attempt(self):
+        attempts, error = self._download_with_failing_urlopen(n_failures=99)
+        # the error the download actually failed with, not the NameError the retry used to raise
+        self.assertIsInstance(error, OSError)
+        self.assertEqual(len(attempts), 3)  # N_ATTEMPTS, patched down from 10
+
+    def test_does_not_download_a_reference_that_is_already_there(self):
+        attempts, error = self._download_with_failing_urlopen(
+            n_failures=99, references_folder_content=['MGYG000000001.gff.gz'])
+        self.assertIsNone(error)
+        self.assertEqual(attempts, [])
 
 
 if __name__ == '__main__':

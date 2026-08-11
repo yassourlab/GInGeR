@@ -1,12 +1,10 @@
 import sys
 import logging
 import click
-from Bio import SeqIO
 import os
 import pandas as pd
 import shutil
 from glob import glob
-import pickle
 
 from ginger import locating_genes_in_graph as lg
 from ginger import reference_database_utils as rdu
@@ -34,50 +32,37 @@ def cleanup_intermediate_files(out_dir, keep_options):
     
     log.info('Cleaning up intermediate files')
     
-    # Define file patterns for each category
+    # Define file patterns for each category.
+    # in_gene_out_contexts.fasta is deliberately in none of them - it is a result, not an
+    # intermediate, and context_level_matches.csv is unusable for visualization without it.
+    # --write-context-sequences is what decides whether it is there at all
     cleanup_map = {
         'assembly': ['SPAdes'],
         'alignment': ['*.paf', '*.m8', 'mmseqs_tmp', 'nodes_to_contigs_w_gaps.paf'],
-        'sequences': ['all_in_paths.fasta', 'all_out_paths.fasta', 'contexts_to_loci.tsv'],
+        'sequences': ['all_in_paths.fasta', 'all_out_paths.fasta'],
         'kraken': ['kraken_*.tsv', 'bracken_*.tsv'],
         'reference': ['merged_filtered_ref_db.*', 'references_used.csv'],
-        'plasmid': ['plasmid_detection_input.fasta', 'plasmid_detection_input_trios.tsv', 'genomad_output'],
+        # genomad_output only survives a GeNomad that failed - a successful run keeps just the summary
+        'plasmid': ['plasmid_summary.tsv', 'genomad_output'],
     }
     
     # Remove categories not in keep_options
     # 'final' is not a real category, it just means "keep final CSV results"
-    categories_to_remove = [cat for cat in cleanup_map.keys() if cat not in keep_options]
-    
-    for category in categories_to_remove:
-        patterns = cleanup_map[category]
+    for category, patterns in cleanup_map.items():
+        if category in keep_options:
+            continue
         for pattern in patterns:
-            # Handle both files and directories
-            if '*' in pattern:
-                # Glob pattern
-                matches = glob(os.path.join(out_dir, pattern))
-                for match in matches:
-                    try:
-                        if os.path.isdir(match):
-                            shutil.rmtree(match)
-                            log.debug(f'Removed directory {match}')
-                        else:
-                            os.remove(match)
-                            log.debug(f'Removed file {match}')
-                    except Exception as e:
-                        log.warning(f'Failed to remove {match}: {e}')
-            else:
-                # Exact file/directory name
-                path = os.path.join(out_dir, pattern)
-                if os.path.exists(path):
-                    try:
-                        if os.path.isdir(path):
-                            shutil.rmtree(path)
-                            log.debug(f'Removed directory {path}')
-                        else:
-                            os.remove(path)
-                            log.debug(f'Removed file {path}')
-                    except Exception as e:
-                        log.warning(f'Failed to remove {path}: {e}')
+            # glob handles an exact name too - it yields the path when it exists and nothing when it does not
+            for path in glob(os.path.join(out_dir, pattern)):
+                try:
+                    if os.path.isdir(path):
+                        shutil.rmtree(path)
+                        log.debug(f'Removed directory {path}')
+                    else:
+                        os.remove(path)
+                        log.debug(f'Removed file {path}')
+                except Exception as e:
+                    log.warning(f'Failed to remove {path}: {e}')
 
 
 @click.command()
@@ -119,7 +104,7 @@ def cleanup_intermediate_files(out_dir, keep_options):
               type=click.Choice(['all', 'final', 'assembly', 'alignment', 'sequences', 'kraken', 'reference', 'plasmid'],
                                case_sensitive=False),
               default=['all'],
-              help='Specify which intermediate files to keep. Options: all (default, keep everything), final (only result CSVs), assembly (SPAdes output), alignment (PAF/M8 files), sequences (FASTA files), kraken (Kraken2/Bracken output), reference (reference database files), plasmid (GeNomad input fasta and output directory). Can specify multiple by repeating the flag: --keep-intermediate final --keep-intermediate assembly')
+              help="Specify which intermediate files to keep. Options: all (default, keep everything), final (only result files), assembly (SPAdes output), alignment (PAF/M8 files), sequences (FASTA files), kraken (Kraken2/Bracken output), reference (reference database files), plasmid (GeNomad's plasmid summary). Can specify multiple by repeating the flag: --keep-intermediate final --keep-intermediate assembly. in_gene_out_contexts.fasta is a result, so when it is written (see --write-context-sequences) it is always kept.")
 @click.option('--skip-assembly', is_flag=True, default=False,
               help='A flag that indicates whether or not to skip the assembly step. If the flag is set to True, the argument --assembly--dir must be supplied and direct to the results of a SPAdes run')
 @click.option('--return-all-gene-matches', is_flag=True, default=False,
@@ -133,11 +118,9 @@ def cleanup_intermediate_files(out_dir, keep_options):
               help="The path to GeNomad's database directory (create one with `genomad download-database <path>`). Only used when --add-plasmid-score is set.")
 @click.option('--contig-context-fallback/--no-contig-context-fallback', default=True,
               help='For a gene found on a gap-containing contig (a contig SPAdes assembled from several graph paths joined using paired-end evidence), also take its context from the flanking sequence of the contig itself. The assembly graph describes such a gene\'s context poorly or not at all, but a context taken from the contig may cross one of those joins rather than a graph edge, so it is named "..._path_contigfallback_{contig}_{start}_{end}" in the output. Default: True')
-def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                   kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
-                   max_gap_ratio, context_len, gene_pident_filtering_th,
-                   paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
-                   add_plasmid_score, genomad_db, contig_context_fallback):
+@click.option('--write-context-sequences/--no-write-context-sequences', default=False,
+              help='Write in_gene_out_contexts.fasta - the in-gene-out sequence behind every context level row, and the full contig of every gene with no species-level match - along with the context_seq_id and gene offset columns that join a row to its sequence. Tens of MB for a typical sample, so it is off unless asked for. Implied by --add-plasmid-score, which needs this fasta as GeNomad\'s input. Default: False')
+def run_ginger_e2e(**kwargs):
     """GInGeR - A tool for analyzing the genomic contexts of genes in metagenomic samples.
 
     \b
@@ -145,7 +128,7 @@ def run_ginger_e2e(long_reads, short_reads_1, short_reads_2, out_dir, assembly_d
 
     \b
     SHORT_READS_2 - R2 fastq or fastq.gzip file
-t
+
     \b
     GENES_PATH - A fasta file with the genes of interest
 
@@ -153,33 +136,31 @@ t
     OUT_DIR - A path specifying where to save GInGeR's output
 
     """
-    return ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
-                           kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path,
-                           depth_limit, max_gap_ratio, context_len, gene_pident_filtering_th,
-                           paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
-                           add_plasmid_score, genomad_db, contig_context_fallback)
+    # click passes every argument and option by keyword, under the same names ginger_e2e_func takes
+    return ginger_e2e_func(**kwargs)
 
 
 def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
                     kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
                     max_gap_ratio, context_len, gene_pident_filtering_th,
                     paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
-                    add_plasmid_score=True, genomad_db=None, contig_context_fallback=True):
+                    add_plasmid_score=True, genomad_db=None, contig_context_fallback=True,
+                    write_context_sequences=False):
     # Log the command that was run
     log.info(f"Running GInGeR with command: {' '.join(sys.argv)}")
     
     # create output directory if it doesn't exist
     pu.check_and_make_dir_no_file_name(out_dir)
     # filter reference database using kraken
-    references_used_path = f'{out_dir}/references_used.csv'
+    references_used_path = c.REFERENCES_USED_TEMPLATE.format(out_dir=out_dir)
     if sample_specific_references is None:
-        sample_specific_references = f'{out_dir}/merged_filtered_ref_db.fasta'
+        sample_specific_references = c.MERGED_FILTERED_REF_DB_TEMPLATE.format(out_dir=out_dir)
         # if the file was not specified or the specified file does not exist
         if kraken_output_path is None or not os.path.exists(kraken_output_path):
-            kraken_output_path = f'{out_dir}/kraken_output_file.tsv'
-            kraken_report_path = f'{out_dir}/kraken_report_file.tsv'
-            bracken_output = f'{out_dir}/bracken_output_file.tsv'
-            bracken_report = f'{out_dir}/bracken_report_file.tsv'
+            kraken_output_path = c.KRAKEN_OUTPUT_TEMPLATE.format(out_dir=out_dir)
+            kraken_report_path = c.KRAKEN_REPORT_TEMPLATE.format(out_dir=out_dir)
+            bracken_output = c.BRACKEN_OUTPUT_TEMPLATE.format(out_dir=out_dir)
+            bracken_report = c.BRACKEN_REPORT_TEMPLATE.format(out_dir=out_dir)
             species_included_in_analysis_path = c.SPECIES_INCLUDED_IN_ANALYSIS_TEMPLATE.format(out_dir=out_dir)
             rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads, kraken_output_path,
                                                  kraken_report_path, bracken_output, bracken_report, species_coverage_threshold,
@@ -193,12 +174,12 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
         indexed_reference = sample_specific_references
     # run assembly
     if assembly_dir is None:
-        assembly_dir = f'{out_dir}/SPAdes'
+        assembly_dir = c.ASSEMBLY_DIR_TEMPLATE.format(out_dir=out_dir)
     if not skip_assembly:
         au.run_meta_or_hybrid_spades(short_reads_1, short_reads_2, long_reads, assembly_dir, threads)
     # run tool
 
-    assembly_graph, genes_to_analyze, assembly_graph_nodes, contigs_with_gaps = lg.locate_genes_in_graph(assembly_dir,
+    assembly_graph, genes_to_analyze, geometry, contigs_with_gaps = lg.locate_genes_in_graph(assembly_dir,
                                                                                                   gene_pident_filtering_th,
                                                                                                   genes_path,
                                                                                                   threads,
@@ -217,15 +198,13 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     # get in and out paths
     in_paths_fasta = c.IN_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
     out_paths_fasta = c.OUT_PATHS_FASTA_TEMPLATE.format(temp_folder=out_dir)
-    contexts_to_loci_path = c.CONTEXTS_TO_LOCI_TEMPLATE.format(temp_folder=out_dir)
-    gene_lengths, contexts_to_loci = ecc.extract_all_in_out_paths_and_write_them_to_fastas(
-                                                              assembly_graph, assembly_graph_nodes,
+    gene_lengths = ecc.extract_all_in_out_paths_and_write_them_to_fastas(
+                                                              assembly_graph, geometry,
                                                               genes_to_analyze, depth_limit,
                                                               context_len, in_paths_fasta,
                                                               out_paths_fasta,
                                                               c.CONTIGS_PATH_TEMPLATE.format(assembly_dir=assembly_dir),
-                                                              contigs_with_gaps if contig_context_fallback else frozenset(),
-                                                              contexts_to_loci_path)
+                                                              contigs_with_gaps if contig_context_fallback else frozenset())
 
     # map them to the reference
     in_contexts_to_ref_genomes = c.IN_MAPPING_TO_REF_GENOMES_PATH_TEMPLATE.format(temp_folder=out_dir)
@@ -238,23 +217,29 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     context_level_results = vcc.process_in_and_out_paths_to_results(in_contexts_to_ref_genomes,
                                                                     out_contexts_to_ref_genomes,
                                                                     gene_lengths, paths_pident_filtering_th, 0,
-                                                                    max_gap_ratio, reference_genomes_metadata,
-                                                                    contexts_to_loci)
+                                                                    max_gap_ratio, reference_genomes_metadata)
+
+    # write the sequence behind every conclusion below - the in-gene-out sequence of every context
+    # level row, and the contig of every gene with no context match. Tens of MB for a typical sample,
+    # so it is written when the user asked for it to visualize and analyze, and when GeNomad is going
+    # to run on it either way
+    contexts_fasta_path, context_seq_records = None, {}
+    if write_context_sequences or add_plasmid_score:
+        genes_with_context_matches = {gene for gene, _ in context_level_results.keys()} if context_level_results else set()
+        contexts_fasta_path, context_seq_records = pu.write_in_gene_out_contexts_fasta(
+            context_level_results, genes_to_analyze, genes_with_context_matches,
+            in_paths_fasta, out_paths_fasta, c.CONTIGS_PATH_TEMPLATE.format(assembly_dir=assembly_dir),
+            c.IN_GENE_OUT_CONTEXTS_FASTA_TEMPLATE.format(out_dir=out_dir))
 
     # run GeNomad on the gene contexts and on the contigs of genes with no species-level match
     context_plasmid_scores, contig_plasmid_scores = None, None
-    if add_plasmid_score:
-        genes_with_context_matches = {gene for gene, _ in context_level_results.keys()} if context_level_results else set()
-        plasmid_input_fasta = c.PLASMID_DETECTION_INPUT_FASTA_TEMPLATE.format(temp_folder=out_dir)
-        plasmid_fasta_path, trios_by_seq_id = pdu.write_plasmid_detection_input_fasta(
-            context_level_results, genes_to_analyze, genes_with_context_matches,
-            in_paths_fasta, out_paths_fasta, c.CONTIGS_PATH_TEMPLATE.format(assembly_dir=assembly_dir),
-            plasmid_input_fasta, c.PLASMID_DETECTION_TRIOS_TEMPLATE.format(temp_folder=out_dir))
-        if plasmid_fasta_path:
-            genomad_out_dir = c.GENOMAD_OUTPUT_DIR_TEMPLATE.format(out_dir=out_dir)
-            plasmid_summary_path = pdu.run_genomad(plasmid_fasta_path, genomad_out_dir, genomad_db, threads)
-            context_plasmid_scores, contig_plasmid_scores = pdu.read_plasmid_scores(plasmid_summary_path,
-                                                                                     trios_by_seq_id)
+    if add_plasmid_score and contexts_fasta_path:
+        genomad_out_dir = c.GENOMAD_OUTPUT_DIR_TEMPLATE.format(out_dir=out_dir)
+        plasmid_summary_path = pdu.run_genomad(contexts_fasta_path, genomad_out_dir, genomad_db, threads)
+        context_plasmid_scores, contig_plasmid_scores = pdu.read_plasmid_scores(plasmid_summary_path,
+                                                                                 context_seq_records)
+        pdu.keep_only_plasmid_summary(genomad_out_dir, plasmid_summary_path,
+                                      c.PLASMID_SUMMARY_TEMPLATE.format(out_dir=out_dir))
 
     if not context_level_results:
         wrote_no_species_match_csv = pu.write_genes_detected_in_graph_with_no_species_match(
@@ -273,6 +258,11 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     subspecies_level_output_path = c.SUBSPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     pu.write_context_level_output_to_csv(context_level_results, context_level_output_path, reference_genomes_metadata,
                                           max_species_representatives)
+    # the join key onto in_gene_out_contexts.fasta, added before the plasmid scores so that a row
+    # carries its sequence id even when GeNomad did not run. Only when that fasta was written - a
+    # column pointing into a file that does not exist would be worse than no column
+    if context_seq_records:
+        pu.add_context_seq_ids_to_context_level_csv(context_level_output_path, context_seq_records)
     if context_plasmid_scores is not None:
         pdu.add_plasmid_scores_to_context_level_csv(context_level_output_path, context_plasmid_scores)
 

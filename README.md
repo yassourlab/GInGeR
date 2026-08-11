@@ -53,10 +53,11 @@ additional files.
 `-t` or `--threads` - An integer specifying the number of threads that will be used for running Kraken2, SPAdes and
 Minimap2. Default is 1.
 
-`--species-inclusion-threshold` - A float in the range [0,1] specifying the minimal fraction of reads that need to be mapped to a certain
-species for it to be included in the analysis. This represents read-based abundance (proportion of DNA sequences in the sample), 
-not cell count abundance. Species with larger genomes contribute more reads than those with smaller genomes at equal cell counts. 
-Default is 0.01 (1%).
+`--species-coverage-threshold` - A float specifying the minimal estimated sequencing coverage required for including a
+species in the analysis. Coverage is estimated as `bracken_estimated_reads * (avg_len_R1 + avg_len_R2) /
+median_genome_length` (see [Reference database](#reference-database)), so it accounts for genome length - unlike a
+read-fraction threshold, under which species with larger genomes look more abundant than smaller ones at equal cell
+counts. Default is 10.
 
 `--max-species-representatives` - The maximal references per species that will be downloaded from UHGG and taken into
 account in the aggregation of results at the species level. Default is 100.
@@ -76,8 +77,8 @@ from several graph paths joined using paired-end evidence (marked with a `;` in 
 sits on a node that is usually a dead end in the graph, and sometimes cannot be located in the graph at all, so the
 assembly graph describes its context poorly or not at all, while the contig has flanking sequence on both sides.
 Contexts taken from the contig may cross one of those joins, which is weaker evidence than pure graph sequence, so they
-are identifiable in the output by the `..._path_contigfallback_{contig}_{gene_start}_{gene_end}` context name. Contexts
-that the graph supplies are kept as well. Default is enabled.
+are identifiable in the output by `contigfallback` in place of the graph path in their context name (see
+[Context names](#context-names)). Contexts that the graph supplies are kept as well. Default is enabled.
 
 `--gene-pident-filtering-th` - A float in the range [0,1] specifying the minimal % of matched base pairs required for
 locating a gene in the graph. Default is 0.9.
@@ -113,7 +114,14 @@ and saved multiple times.
 
 `--sample-specific-references` - A reference database in a fasta format. Using this will skip the stages of creating a sample-specific database based on the species Kraken2 detected in the sample.
 
-`--keep-intermediate` - Controls which intermediate files are kept after the pipeline completes. By default, all files are kept (`all`). Options include: `final` (only result CSVs), `assembly` (SPAdes output), `alignment` (PAF/M8 files), `sequences` (FASTA files), `kraken` (Kraken2/Bracken output), `reference` (reference database files), `plasmid` (GeNomad input fasta and output directory). Can specify multiple categories by repeating the flag. Example: `--keep-intermediate final --keep-intermediate assembly` keeps only the final CSV results and the SPAdes directory.
+`--keep-intermediate` - Controls which intermediate files are kept after the pipeline completes. By default, all files are kept (`all`). Options include: `final` (only result files), `assembly` (SPAdes output), `alignment` (PAF/M8 files), `sequences` (FASTA files), `kraken` (Kraken2/Bracken output), `reference` (reference database files), `plasmid` (GeNomad's plasmid summary). Can specify multiple categories by repeating the flag. Example: `--keep-intermediate final --keep-intermediate assembly` keeps only the final results and the SPAdes directory. `in_gene_out_contexts.fasta` is a result rather than an intermediate, so when it is written it is always kept - `--write-context-sequences` is what decides whether it is written at all.
+
+`--write-context-sequences` / `--no-write-context-sequences` - Whether to write
+[in_gene_out_contexts.fasta](#in_gene_out_contextsfasta), holding the in-gene-out sequence behind every
+`context_level_matches.csv` row and the full contig of every gene with no species-level match, along with the
+`context_seq_id` and gene offset columns that join a row to its sequence. Tens of MB for a typical sample, so it
+is off unless asked for. `--add-plasmid-score` implies it, since GeNomad reads this fasta as its input.
+Default: disabled.
 
 ### Plasmid scoring
 
@@ -121,12 +129,44 @@ and saved multiple times.
 on the genomic contexts found for each gene (and on the contigs of genes that were located in the
 assembly but had no species-level match) and add `plasmid_score` columns to the output CSVs. Default: enabled.
 
+GeNomad is run on `in_gene_out_contexts.fasta`, which this flag causes to be written whether or not
+`--write-context-sequences` was given. Of GeNomad's
+end-to-end output - some 80MB per sample - only the plasmid summary is read, so once it has been read
+it is kept as `plasmid_summary.tsv` and the rest of the `genomad_output` directory is removed. A run
+in which GeNomad itself failed keeps its whole output tree for debugging.
+
 `--genomad-db` - The path to GeNomad's database directory. Required when `--add-plasmid-score` is set (the
 default). Create it with `genomad download-database <path>` (see
 [GeNomad's documentation](https://portal.nersc.gov/genomad/)). Defaults to a `genomad_db` directory next to the
 GInGeR package.
 
 # GInGeR's outputs
+
+### Context names
+
+Every context candidate is written to `all_in_paths.fasta` or `all_out_paths.fasta` under a name that says everything
+about where it came from. The fields are `|`-separated:
+
+```
+{gene}|{contig}|{gene_start}|{gene_end}|{gene_match_score}|{nodes}|{path}|{side}
+
+test_gene|NODE_1_length_1000_cov_140.6|336|615|1.0000|5+|7+_5+_44+|in
+test_gene|NODE_1_length_1000_cov_140.6|336|615|1.0000|5+|contigfallback|out
+```
+
+* `gene` - the gene of interest, exactly as named in the input fasta
+* `contig`, `gene_start`, `gene_end` - where the gene was found in the assembly, 0-based half-open. These three
+  identify the copy of the gene the context was cut from, which is what lets an incoming and an outgoing context be
+  paired only when they flank the same copy
+* `gene_match_score` - the gene-to-contig match score
+* `nodes` - the assembly graph nodes the gene itself sits on, joined with `_`. Empty when the gene could not be
+  located in the graph
+* `path` - the path through the graph that the context was read off, or `contigfallback` when it was sliced straight
+  out of the contig (see `--contig-context-fallback`)
+* `side` - `in` or `out`
+
+The gene comes first and no other field may contain a `|`, so a name is taken apart from the right and the gene keeps
+whatever `|` characters its own name has - SARG's and CARD's have several.
 
 GInGeR outputs the following result files:
 
@@ -136,17 +176,31 @@ GInGeR outputs the following result files:
     * reference_contig - the reference sequence (usually an assembly contig) where the context of gene in the sample was
       matched
     * in_context - the name of the incoming context that was matched (the equivalent sequence can be found in
-      all_in_paths.fasta)
+      all_in_paths.fasta). See [Context names](#context-names) for what the name is made of
     * out_context - the name of the outgoing context that was matched (the equivalent sequence can be found in
       all_out_paths.fasta)
+    * context_seq_id - (only when `in_gene_out_contexts.fasta` is written, see
+      `--write-context-sequences`) the record in that fasta holding this row's in_context, gene and out_context
+      as one sequence, for visualization and further analysis (see
+      [in_gene_out_contexts.fasta](#in_gene_out_contextsfasta))
+    * gene_start_in_context_seq / gene_end_in_context_seq - (same) where the gene sits inside that record,
+      0-based half-open, so that `record[gene_start_in_context_seq:gene_end_in_context_seq]` is the aligned part
+      of the gene and what surrounds it is the two contexts
+    * contig - the contig of the assembly the gene was found on
+    * gene_start_in_contig / gene_end_in_contig - where the gene was found on that contig, 0-based half-open, so that
+      `contig[gene_start_in_contig:gene_end_in_contig]` is the aligned part of the gene. Together with the gene and the
+      contig this identifies the copy of the gene both contexts were cut from - the two are only ever paired within one
+      copy, so that the pair describes a stretch of sequence that is really in the assembly
     * in_context_start - the start of the match of the incoming context to the reference sequence
     * gene_start - the end of the match of the incoming context to the reference sequence (note that the gene is not
       necessarily found there, this is the estimated start location of the gene)
     * gene_end - the start of the match of the outgoing context to the reference sequence
     * out_context_end - the end of the match of the outgoing context to the reference sequence
-    * match_score - the match score. Namely, the % of matching base-pairs between the genomic contexts and the reference
-      sequence
-    * genome - the genome id as inferred from the reference_contig field
+    * score - the match score. Namely, the % of matching base-pairs between the genomic contexts and the reference
+      sequence, averaged over the two contexts and weighted by their lengths
+    * gene_match_score - the gene-to-contig match score (the % of matching base-pairs between the gene and the contig)
+    * in_context_score / out_context_score - the match score of each context to the reference sequence on its own
+    * Genome - the genome id as inferred from the reference_contig field
     * species - the species name as inferred from UHGG-metadata.tsv
     * plasmid_score - (only when `--add-plasmid-score` is set, default) [GeNomad](https://github.com/apcamargo/genomad)'s
       plasmid score (in the range [0,1]) for the sequence formed by the in_context, the gene and the out_context. 0 if
@@ -169,7 +223,7 @@ GInGeR outputs the following result files:
     * gene - the gene of interest as described for `context_level_output.csv`
     * species - the species name as described for `context_level_output.csv`
     * references_ratio - the % of instances of the species that included the gene (given as a ratio in the range [0,1])
-    * match_score_max - the maximal match score for the given gene and species
+    * score_max - the maximal match score for the given gene and species
     * species_instances - the number of instances of the given species taken into account in the calculation (determined
       as the minimum between `--max-species-representatives` and the number of instances found in the UHGG database)
     * plasmid_score_mean - (only when `--add-plasmid-score` is set, default) the average `plasmid_score` across all of
@@ -190,7 +244,34 @@ GInGeR outputs the following result files:
     * plasmid_score - (only when `--add-plasmid-score` is set, default) GeNomad's plasmid score for the full contig the
       gene was found on. 0 if GeNomad did not report a score for this contig.
 
-4. **species_included_in_analysis.csv** - The Bracken output (see [Reference database](#reference-database) below),
+4. **in_gene_out_contexts.fasta** - (only when `--write-context-sequences` is set, or when
+   `--add-plasmid-score` is, since GeNomad reads it) The sequence behind every conclusion above, to be taken to a
+   genome browser or any further analysis. It holds two kinds of record:
+    * one per distinct `in_context`/`out_context` pair in `context_level_matches.csv`, holding the incoming
+      context, the gene and the outgoing context as one continuous sequence, named `ctx0000000` and up. A row of
+      `context_level_matches.csv` names its record in `context_seq_id` and says where the gene sits inside it in
+      `gene_start_in_context_seq`/`gene_end_in_context_seq`, so pulling a row's sequence is
+      `seqkit grep -p <context_seq_id> in_gene_out_contexts.fasta`
+    * one per contig carrying a gene that appears in `genes_detected_in_graph_with_no_species_match.csv`, holding
+      that contig in full and named after it, so those rows join to it on their `contig` column
+
+   Record names are deliberately short and opaque - the file is also GeNomad's input, and viewers display a
+   record's name - so what a record stands for lives in the CSV columns rather than in the name.
+
+   A record's two flanks abut the gene with no overlap and no gap, so a full-length gene keeps its reading frame
+   across both junctions. Note that a record is a candidate locus supported by the assembly graph, not
+   necessarily a stretch of an assembled contig: where the graph branches beside a gene, each path through the
+   branch yields its own record, and only the path the contig itself took is a substring of that contig. Contexts
+   sliced straight out of a gap-containing contig instead (`contigfallback` in the
+   [context name](#context-names)) are contig sequence, but may cross a join SPAdes inferred from paired-end
+   reads.
+
+5. **plasmid_summary.tsv** - (only when `--add-plasmid-score` is set, default) GeNomad's plasmid summary for the
+   sequences of `in_gene_out_contexts.fasta`, keyed by the same record names. Its `plasmid_score` column is
+   already merged into the CSVs above; the rest of GeNomad's output is not kept (see
+   [Plasmid scoring](#plasmid-scoring)).
+
+6. **species_included_in_analysis.csv** - The Bracken output (see [Reference database](#reference-database) below),
    restricted to the species that passed `--species-coverage-threshold` and so were included in the sample-specific
    reference database. In addition to Bracken's columns (`name`, `taxonomy_id`, `taxonomy_lvl`,
    `kraken_assigned_reads`, `added_reads`, `new_est_reads`, `fraction_total_reads`), it includes:

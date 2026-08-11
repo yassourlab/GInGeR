@@ -1,19 +1,16 @@
 import urllib.request
-import time
-from subprocess import run, Popen, PIPE
-from collections import defaultdict
+from subprocess import run
 
 import numpy as np
 import pandas as pd
 from glob import glob
-import urllib
 import gzip
 import logging
 import csv
 from ginger import pipeline_utils as pu
-from tqdm import tqdm
 import os
 import re
+import time
 
 log = logging.getLogger(__name__)
 KRAKEN_COMMAND = 'kraken2 --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {kraken_output} --report {kraken_report} --confidence 0.1 --use-names --report-minimizer-data'  # --report {report}
@@ -54,19 +51,13 @@ def get_paired_reads_seqkit_stats(reads_1: str, reads_2: str):
 
 
 def run_kraken(reads_1, reads_2, threads, output_path, report_path, kraken_db):
-    command = KRAKEN_COMMAND.format(kraken_db=kraken_db, reads_1=reads_1, reads_2=reads_2,
-                                    threads=threads, kraken_output=output_path, kraken_report=report_path)
     # if kraken db does not exist, raise an error
     if not os.path.exists(kraken_db):
         raise Exception(f'Kraken database does not exist in {kraken_db}')
 
-    log.info(f'Running Kraken2 - {command}')
-    # command_output = run(command, shell=True, capture_output=True)
-    with Popen(command.split(' '), stdout=PIPE) as kraken_process:
-        output_lines = [output_line for output_line in tqdm(iter(lambda: kraken_process.stdout.readline(), b""))]
-        if kraken_process.returncode:
-            log.error(kraken_process.stderr)
-            raise Exception('Kraken2 failed - GInGeR aborted')
+    pu.stream_tool('Kraken2', KRAKEN_COMMAND.format(kraken_db=kraken_db, reads_1=reads_1, reads_2=reads_2,
+                                                    threads=threads, kraken_output=output_path,
+                                                    kraken_report=report_path))
 
 
 def filter_kraken_report_by_distinct_kmer_count(kraken_report_path, filtered_kraken_report_path,
@@ -128,17 +119,10 @@ def run_bracken(kraken_report, bracken_output, bracken_report, kraken_db, min_re
     kmer_length_options = get_kmer_length_options(kraken_db)
     # get the kmer length that is closest to the read length
     read_len = min(kmer_length_options, key=lambda x: abs(int(x) - max_read_len))
-    command = BRACKEN_COMMAND.format(kraken_db=kraken_db, kraken_report=kraken_report, bracken_output=bracken_output,
-                                     bracken_report=bracken_report, read_len=read_len,
-                                     min_reads_for_bracken=min_reads_for_bracken)
-    log.info(f'Running Bracken - {command}')
-    # command_output = run(command, shell=True, capture_output=True)
-    with Popen(command.split(' '), stdout=PIPE) as bracken_process:
-        output_lines = [output_line for output_line in tqdm(iter(lambda: bracken_process.stdout.readline(), b""))]
-        if bracken_process.returncode:
-            log.error(bracken_process.stderr)
-            raise Exception('Bracken failed - GInGeR aborted')
-            log.info(bracken_process.stdout)
+    pu.stream_tool('Bracken', BRACKEN_COMMAND.format(kraken_db=kraken_db, kraken_report=kraken_report,
+                                                     bracken_output=bracken_output, bracken_report=bracken_report,
+                                                     read_len=read_len,
+                                                     min_reads_for_bracken=min_reads_for_bracken))
 
 
 def get_list_of_top_species_by_bracken(bracken_output_path, fraction_of_reads):
@@ -146,6 +130,16 @@ def get_list_of_top_species_by_bracken(bracken_output_path, fraction_of_reads):
     top_species = bracken_out[bracken_out['fraction_total_reads'] > fraction_of_reads]['name'].tolist()
     log.info(f'Top species detected: {top_species}')
     return top_species
+
+
+def compute_quality(metadata: pd.DataFrame) -> pd.Series:
+    """A UHGG reference's quality score: Completeness - 5 * Contamination + ln(N50).
+
+    Both the references that get downloaded and the genome lengths the coverage estimate is based on
+    are the top scorers by this, so they have to score them the same way.
+    """
+    return metadata['Completeness'] - 5 * metadata['Contamination'] + \
+        metadata['N50'].apply(lambda n50: 0 if n50 <= 0 else np.log(n50))
 
 
 def get_species_median_genome_length_by_quality(metadata: pd.DataFrame, species_list, max_refs_per_species: int):
@@ -176,7 +170,7 @@ def get_species_median_genome_length_by_quality(metadata: pd.DataFrame, species_
     if len(df) == 0:
         return {}
 
-    df['Quality'] = df['Completeness'] - 5 * df['Contamination'] + df['N50'].apply(lambda x: 0 if x <= 0 else np.log(x))
+    df['Quality'] = compute_quality(df)
 
     # Select the top references per species by Quality, breaking ties by Genome
     df = df.sort_values(['species', 'Quality', 'Genome'])
@@ -210,13 +204,9 @@ def get_species_coverage_stats(bracken_output_path: str,
     return bracken_out
 
 
-def get_species_passing_coverage_threshold(bracken_output_path: str,
-                                          avg_sum: float,
-                                          metadata_path: str,
-                                          max_refs_per_species: int,
-                                          species_coverage_threshold: float):
-    """Return species list filtered by estimated coverage."""
-    stats = get_species_coverage_stats(bracken_output_path, avg_sum, metadata_path, max_refs_per_species)
+def get_species_passing_coverage_threshold(stats: pd.DataFrame, species_coverage_threshold: float):
+    """The species of a `get_species_coverage_stats` table whose estimated coverage clears the
+    threshold - the ones GInGeR will download references for and look for genes in."""
     passing_mask = stats['estimated_genome_length'].notna() & (stats['estimated_genome_length'] > 0) & \
         (stats['estimated_coverage'] > species_coverage_threshold)
     passing = stats.loc[passing_mask, 'name'].tolist()
@@ -233,15 +223,9 @@ def get_distinct_minimizers_by_species(kraken_report_path: str) -> dict:
     return species_rows.set_index('name')['distinct_kmer_count'].to_dict()
 
 
-def get_species_included_in_analysis_df(bracken_output_path: str,
-                                       kraken_report_path: str,
-                                       avg_sum: float,
-                                       metadata_path: str,
-                                       max_refs_per_species: int,
-                                       top_species) -> pd.DataFrame:
-    """Bracken output restricted to species included in the analysis, with distinct minimizers,
-    estimated genome length and estimated coverage added."""
-    stats = get_species_coverage_stats(bracken_output_path, avg_sum, metadata_path, max_refs_per_species)
+def get_species_included_in_analysis_df(stats: pd.DataFrame, kraken_report_path: str, top_species) -> pd.DataFrame:
+    """A `get_species_coverage_stats` table restricted to the species included in the analysis, with
+    each one's distinct minimizer count added."""
     distinct_minimizers_by_species = get_distinct_minimizers_by_species(kraken_report_path)
 
     included = stats[stats['name'].isin(top_species)].copy()
@@ -262,14 +246,20 @@ def download_and_write_content_to_file(references_folder, references_folder_cont
         for attempt in range(N_ATTEMPTS):
             try:
                 data = urllib.request.urlopen(ftp_download_str, timeout=URLOPEN_TIMEOUT).read()
-                with open(local_tar_gz_path, 'wb') as f:
+                # written beside the real name and moved onto it, so that a download interrupted
+                # mid-write leaves nothing behind rather than a truncated file that the next run finds
+                # in references_folder_content and treats as already downloaded
+                with open(f'{local_tar_gz_path}.part', 'wb') as f:
                     f.write(data)
+                os.replace(f'{local_tar_gz_path}.part', local_tar_gz_path)
                 break
             except Exception as e:
+                # the last attempt raises rather than sleeping through a retry it will not make
+                if attempt == N_ATTEMPTS - 1:
+                    log.error(f'Failed to download {ftp_download_str} in {N_ATTEMPTS} attempts: {e}')
+                    raise e
                 log.error(f'Failed to download {ftp_download_str}: {e}. Retrying in {SLEEP_SECS} seconds')
                 time.sleep(SLEEP_SECS)
-                if attempt == N_ATTEMPTS - 1:
-                    raise e
 
     # read tar.gt file and add it's content to the merged filtered fasta
     gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f)
@@ -289,27 +279,22 @@ def gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f):
 def generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path, references_folder,
                                                                merged_filtered_fasta, max_refs_per_species):
     metadata = pd.read_csv(metadata_path, sep='\t')
-    # Create column 'Quality' as Completeness - 5 * Contamination + ln(N50)
-    metadata['Quality'] = metadata.Completeness - 5 * metadata.Contamination + \
-                                      metadata.N50.apply(lambda x: 0 if x <= 0 else np.log(x))
-    # metadata['species'] = metadata.Lineage.apply(lambda x: x.split('s__')[-1])
+    metadata['Quality'] = compute_quality(metadata)
+    # max_refs_per_species applies per subspecies when the metadata names them, and to the species as
+    # a whole when it does not
+    has_subspecies = 'subspecies' in metadata.columns
     references_folder_content = [x.split('/')[-1] for x in glob(references_folder + '/*')]
     selected_samples_dfs_list = []
     with open(merged_filtered_fasta, 'w') as merged_filtered_fasta_f:
         for species in top_species:
             single_species_table = metadata[
                 (metadata.species == species) & (metadata.FTP_download.str.startswith('ftp'))]
-            if 'subspecies' in single_species_table.columns:
-                for subspecies, subspecies_table in single_species_table.groupby('subspecies'):
-                    top_x_df = take_top_species_and_download_to_file(max_refs_per_species, subspecies_table,
-                                                                     references_folder, references_folder_content,
-                                                                     merged_filtered_fasta_f)
-                    selected_samples_dfs_list.append(top_x_df)
-            else:
-                top_x_df = take_top_species_and_download_to_file(max_refs_per_species, single_species_table,
-                                                                 references_folder,
-                                                                 references_folder_content, merged_filtered_fasta_f)
-                selected_samples_dfs_list.append(top_x_df)
+            tables_to_download = ([table for _, table in single_species_table.groupby('subspecies')]
+                                  if has_subspecies else [single_species_table])
+            for table in tables_to_download:
+                selected_samples_dfs_list.append(
+                    take_top_species_and_download_to_file(max_refs_per_species, table, references_folder,
+                                                          references_folder_content, merged_filtered_fasta_f))
 
     return pd.concat(selected_samples_dfs_list)
 
@@ -318,10 +303,9 @@ def take_top_species_and_download_to_file(max_refs_per_species, single_species_t
                                           references_folder_content, merged_filtered_fasta_f):
     # Take top X references according to Quality score, breaking ties alphabetically by Genome
     top_x_df = single_species_table.sort_values(['Quality', 'Genome']).tail(max_refs_per_species)
-    top_x_df.apply(lambda x: download_and_write_content_to_file(references_folder,
-                                                                references_folder_content,
-                                                                x.FTP_download,
-                                                                merged_filtered_fasta_f), axis=1)
+    for ftp_download in top_x_df['FTP_download']:
+        download_and_write_content_to_file(references_folder, references_folder_content, ftp_download,
+                                           merged_filtered_fasta_f)
     return top_x_df
 
 
@@ -344,11 +328,12 @@ def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_pa
 
     min_reads_for_bracken = get_min_reads_for_bracken(metadata_path, species_coverage_threshold, avg_sum)
     run_bracken(filtered_kraken_report_path, bracken_output, bracken_report, kraken_db, min_reads_for_bracken, max_read_len)
-    top_species = get_species_passing_coverage_threshold(bracken_output, avg_sum, metadata_path,
-                                                         max_species_representatives, species_coverage_threshold)
-    species_included_in_analysis_df = get_species_included_in_analysis_df(bracken_output, filtered_kraken_report_path,
-                                                                          avg_sum, metadata_path,
-                                                                          max_species_representatives, top_species)
+    # both of the steps below read the same coverage table, which costs a pass over the reference
+    # metadata to estimate every detected species' genome length - so it is built once here
+    coverage_stats = get_species_coverage_stats(bracken_output, avg_sum, metadata_path, max_species_representatives)
+    top_species = get_species_passing_coverage_threshold(coverage_stats, species_coverage_threshold)
+    species_included_in_analysis_df = get_species_included_in_analysis_df(coverage_stats, filtered_kraken_report_path,
+                                                                          top_species)
     species_included_in_analysis_df.to_csv(species_included_in_analysis_path, index=False, sep='\t')
     selected_species_df = generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path,
                                                                                      references_folder,
