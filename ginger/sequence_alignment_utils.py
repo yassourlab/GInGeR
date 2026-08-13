@@ -69,13 +69,11 @@ def is_similar_to_representatives(representatives, gene_paths_to_ref_genome_matc
     return False
 
 
-def non_max_suppression_single_class(matches, sorting_func=lambda x: (x.score, x.end - x.start, x.start, x.gene),
+def non_max_suppression_single_class(matches, sorting_func=lambda x: (x.score, x.end - x.start, x.gene),
                                      iou_th=IOU_TH, reverse=True):
     """Keeps the best of every group of matches that overlap each other by more than iou_th.
 
-    sorting_func and reverse together have to put the best match first, and break ties the same way on
-    every run - two matches with equal scores otherwise keep whichever of them the file happened to
-    list first, and one alignment file's order is not the next one's.
+    sorting_func and reverse together have to put the best match first, and break ties the match length and the gene name.
     """
     sorted_matches = sorted(matches, key=sorting_func, reverse=reverse)
     representative_matches = []
