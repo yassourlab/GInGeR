@@ -189,5 +189,6 @@ class GetShortNodeNameTest(unittest.TestCase):
         self.assertEqual(lg.get_short_node_name("EDGE_12345_length_9_cov_0.1'"), '12345-')
 
 
+
 if __name__ == '__main__':
     unittest.main()
