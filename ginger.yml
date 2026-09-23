@@ -19,3 +19,4 @@ dependencies:
   - mmseqs2=18.8cc5c
   - genomad=1.12.0
   - seqkit=2.13.0
+  - ncbi-datasets-cli=18.37.0

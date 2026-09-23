@@ -17,12 +17,19 @@ genomic contexts in the graph, verifies the contexts and assigns them to carrier
     * `conda activate ginger_env`
 3. Install the ginger package on your conda env:
     * `python -m pip install .` (note that the `.` is part of the command)
-5. Download the Kraken2 database to the GInGeR directory:
-    * `wget -r -np -nH --cut-dirs=5 -R "index.html*" https://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.2/kraken2_db_uhgg_v2.0.2/`
+5. Download the Kraken2 database to `kraken2_db_gtdb_r226` in the GInGeR directory (or anywhere
+   else, and point `--kraken-db` at it):
+    * `sbatch scripts/download_gtdb_kraken_db.sbatch`, or without a cluster, fetch each file of
+      `https://genome-idx.s3.amazonaws.com/kraken/gtdb_genome_reps_20250609/` listed in that script
+    * **This database is ~646GB on disk** (GTDB indexes 143,614 species representatives against
+      UHGG's 4,744), so check your free space before starting. The download is resumable and
+      md5-verified, so an interrupted run can simply be restarted.
 6. To verify your installation run ginger on a test dataset:
     * `run_ginger tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.faa e2e_test_output --max-species-representatives 1`
     * **Note that due to Kraken2's memory requirements, you'd need to allocate at least 16G of memory for the pipeline
-      to run successfully**. In case you would like to test ginger but skip the step using Kraken, you can
+      to run successfully**. GInGeR runs Kraken2 with `--memory-mapping`, so the 644GB hash table is
+      read from disk instead of loaded into RAM - the database is large but the memory requirement is
+      not. Give the database a fast filesystem if you can: memory-mapping turns it into random reads. In case you would like to test ginger but skip the step using Kraken, you can
       run: `run_ginger tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.faa e2e_test_output --sample-specific-references tests/test_files/merged_filtered_ref_db.fasta.gz --max-species-representatives 1`
 
 # Running GInGeR
@@ -59,7 +66,7 @@ median_genome_length` (see [Reference database](#reference-database)), so it acc
 read-fraction threshold, under which species with larger genomes look more abundant than smaller ones at equal cell
 counts. Default is 10.
 
-`--max-species-representatives` - The maximal references per species that will be downloaded from UHGG and taken into
+`--max-species-representatives` - The maximal references per species that will be downloaded from NCBI and taken into
 account in the aggregation of results at the species level. Default is 100.
 
 `--depth-limit` - An integer specifying the maximal depth for paths describing context candidates in the assembly graph.
@@ -108,7 +115,7 @@ a pre-ran assembly, please specify here the directory of SPAdes' output.
 `--reference-genomes-metadata` - The path to the reference database metadata table (see more information in the Reference database
 section).
 
-`--downloaded-references-dir` - The directory to which GInGeR will download missing reference genomes from UHGG. Defaults
+`--downloaded-references-dir` - The directory to which GInGeR will download missing reference genomes from NCBI. Defaults
 to `references_dir`. This folder can be shared for all runs of GInGeR in order to avoid the same file being downloaded
 and saved multiple times.
 
@@ -201,7 +208,7 @@ GInGeR outputs the following result files:
     * gene_match_score - the gene-to-contig match score (the % of matching base-pairs between the gene and the contig)
     * in_context_score / out_context_score - the match score of each context to the reference sequence on its own
     * Genome - the genome id as inferred from the reference_contig field
-    * species - the species name as inferred from UHGG-metadata.tsv
+    * species - the species name as inferred from GTDB-metadata.tsv
     * plasmid_score - (only when `--add-plasmid-score` is set, default) [GeNomad](https://github.com/apcamargo/genomad)'s
       plasmid score (in the range [0,1]) for the sequence formed by the in_context, the gene and the out_context. 0 if
       GeNomad did not report a score for this sequence.
@@ -225,7 +232,7 @@ GInGeR outputs the following result files:
     * references_ratio - the % of instances of the species that included the gene (given as a ratio in the range [0,1])
     * score_max - the maximal match score for the given gene and species
     * species_instances - the number of instances of the given species taken into account in the calculation (determined
-      as the minimum between `--max-species-representatives` and the number of instances found in the UHGG database)
+      as the minimum between `--max-species-representatives` and the number of instances found in the reference database)
     * plasmid_score_mean - (only when `--add-plasmid-score` is set, default) the average `plasmid_score` across all of
       the gene's distinct genomic contexts matched to this species
     * plasmid_score_most_common_context - (only when `--add-plasmid-score` is set, default) the `plasmid_score` of the
@@ -284,30 +291,57 @@ GInGeR outputs the following result files:
 
 # Reference database
 
-By default, GInGeR uses the Unified Human Gastrointestinal Genome collection (UHGG,
-see [genome catalog](http://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0/README_v2.0.txt) and
-[Almeida et al.](https://www.nature.com/articles/s41587-020-0603-3)) as a reference database. When
-running GInGer, it first detects the dominant species in the sample using Kraken2 and estimates per-species read counts using Bracken. It then keeps only species with estimated sequencing coverage above `--species-coverage-threshold` (default: 10). Estimated coverage is computed as:
+By default, GInGeR uses the Genome Taxonomy Database (GTDB release 226,
+see [GTDB](https://gtdb.ecogenomic.org/) and
+[Parks et al.](https://academic.oup.com/nar/article/50/D1/D785/6370255)) as a reference database.
+`ginger/GTDB-metadata.tsv` catalogs its 732,475 genomes across 143,614 species (136,646 bacterial
+from `bac120` plus 6,968 archaeal from `ar53`), and is regenerated with
+`scripts/build_gtdb_metadata.py`.
+
+When running GInGer, it first detects the dominant species in the sample using Kraken2 and estimates per-species read counts using Bracken. It then keeps only species with estimated sequencing coverage above `--species-coverage-threshold` (default: 10). Estimated coverage is computed as:
 
 new_est_reads * (avg_len_R1 + avg_len_R2) / median_genome_length
 
-where `new_est_reads` comes from Bracken, read lengths come from `seqkit stats`, and `median_genome_length` is computed from the top UHGG reference genomes per species (ranked by the metadata Quality score) capped by `--max-species-representatives`. GInGeR then downloads missing
-references (`--max-species-representatives` of references per species) for these species from UHGG to the `--downloaded-references-dir` and
+where `new_est_reads` comes from Bracken, read lengths come from `seqkit stats`, and `median_genome_length` is computed from the top reference genomes per species (ranked by the metadata Quality score) capped by `--max-species-representatives`. GInGeR then downloads missing
+references (`--max-species-representatives` of references per species) for these species from NCBI
+with the [datasets](https://www.ncbi.nlm.nih.gov/datasets/) CLI, fetching them by assembly accession
+in batches, to the `--downloaded-references-dir`, and
 combining them into a reference database customized for the given sample. It is recommended to use a
 shared `--downloaded-references-dir` for multiple samples (this is GInGeR's default behavior) to save time and storage by
 not downloading the same references multiple times.
+
+Alongside the database, GInGeR writes `reference_contig_to_genome.tsv`, recording which reference
+genome each contig of the database came from. That is how a context matched to a reference contig is
+attributed to a genome and from there to a species: reference contig names do not have to encode
+their genome, and NCBI's are nucleotide accessions (`NZ_CP007265.1`) that do not.
+
+The species names in the metadata table are GTDB species names without the `s__` prefix, which is
+exactly how Kraken2 reports them for a GTDB-derived database, so Bracken's output joins onto the
+table directly.
+
+Using UHGG instead: GInGeR still ships `ginger/UHGG-metadata.tsv`, so a UHGG run is
+`--reference-genomes-metadata ginger/UHGG-metadata.tsv --kraken-db <your UHGG Kraken2 database>`.
 
 ### Supply GInGeR with a FASTA of reference species
 
 You can do so using the `--sample-specific-references` option. For optimal results, it should include only species that
 are relevant for your sample. In this case you should also supply a `--reference-genomes-metadata` file in TSV format with the header
-'Genome Length Lineage FTP_download species':
+'Genome Completeness Contamination N50 Length species':
 
-- 'Genomes' should be the id of the genome as appears in your fasta file. Each contig should have the following format
-  <genome_id>_<contig_num>.
-- 'Completeness' can be left with Null values because it is not used in this option.
-- 'FTP_download' can be left with Null values because it is not used in this option.
+- 'Genome' should be the id of the genome as appears in your fasta file.
+- 'Completeness', 'Contamination' and 'N50' can be left with Null values because they are only used
+  to rank references for download, which this option skips.
+- 'Length' the genome's length. Only used for the coverage estimate, which this option skips.
 - 'species' the species name of the given genome. Will be used when generating the outputs.
+
+GInGeR also needs to know which genome each contig of your fasta belongs to. Either:
+
+- pass `--reference-contig-to-genome`, a TSV with 'contig' and 'Genome' columns. GInGeR writes
+  exactly this file (`reference_contig_to_genome.tsv`) whenever it builds a reference database
+  itself, so when you reuse a database across runs, pass back the one from the run that built it.
+  This is the reliable option, and the only one if your contigs are named like NCBI's; or
+- name every contig `<genome_id>_<contig_num>`, and GInGeR will take the part before the first
+  '_' or '.' as the genome id.
 
 # Dependencies
 

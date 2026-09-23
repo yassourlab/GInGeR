@@ -9,6 +9,7 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from ginger import extract_contexts_candidates as ecc
 from ginger import pipeline_utils as pu
+from ginger import verify_context_candidates as vcc
 from ginger.matches_classes import GeneLocus, InOutPathsMatch
 
 from tests import helper
@@ -192,7 +193,9 @@ class PipelineUtilsTest(unittest.TestCase):
 
         csv_path = f'{self.out_dir}/context_level_matches_context_species_diversity_out.csv'
         # species_A has 3 genomes in the metadata, capped to 2 by max_species_representatives
-        pu.write_context_level_output_to_csv(output, csv_path, self.context_species_diversity_metadata_path, 2)
+        lookup = vcc.build_contig_species_lookup(self.context_species_diversity_metadata_path)
+        pu.write_context_level_output_to_csv(output, csv_path, self.context_species_diversity_metadata_path, 2,
+                                              lookup)
 
         results_df = pd.read_csv(csv_path)
         diversity_by_contig = results_df.set_index('reference_contig')['context_species_diversity']

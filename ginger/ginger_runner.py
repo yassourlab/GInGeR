@@ -41,7 +41,7 @@ def cleanup_intermediate_files(out_dir, keep_options):
         'alignment': ['*.paf', '*.m8', 'mmseqs_tmp', 'nodes_to_contigs_w_gaps.paf'],
         'sequences': ['all_in_paths.fasta', 'all_out_paths.fasta'],
         'kraken': ['kraken_*.tsv', 'bracken_*.tsv'],
-        'reference': ['merged_filtered_ref_db.*', 'references_used.csv'],
+        'reference': ['merged_filtered_ref_db.*', 'references_used.csv', 'reference_contig_to_genome.tsv'],
         # genomad_output only survives a GeNomad that failed - a successful run keeps just the summary
         'plasmid': ['plasmid_summary.tsv', 'genomad_output'],
     }
@@ -77,19 +77,21 @@ def cleanup_intermediate_files(out_dir, keep_options):
               help='Number of threads that will be used for running Kraken2, SPAdes and Minimap2')
 @click.option('--kraken-output-path', default=None, help="A path for saving Kraken2's output")
 @click.option('--kraken-db', type=click.Path(),
-              default=os.path.join(os.path.dirname(__file__), '..', 'kraken2_db_uhgg_v2.0.2'),
-              help='The path to UHGG\'s Kraken2 database directory')
+              default=os.path.join(os.path.dirname(__file__), '..', 'kraken2_db_gtdb_r226'),
+              help='The path to the Kraken2 database directory (GTDB r226 by default)')
 @click.option('--species-coverage-threshold', type=float, default=10,
               help='The minimal estimated sequencing coverage required for including a species in the analysis. Coverage is estimated as: bracken_estimated_reads * (avg_len_R1 + avg_len_R2) / median_genome_length, where median genome length is computed from the top references per species (by Quality) capped by --max-species-representatives. Default 10.')
 @click.option('--max-species-representatives', type=int, default=100,
-              help='The maximal references per species that will be downloaded from UHGG and taken into account in the aggregation of results at the species level')
+              help='The maximal references per species that will be downloaded from NCBI and taken into account in the aggregation of results at the species level')
 @click.option('--reference-genomes-metadata', type=click.Path(),
-              default=os.path.join(os.path.dirname(__file__), 'UHGG-metadata.tsv'),
+              default=os.path.join(os.path.dirname(__file__), 'GTDB-metadata.tsv'),
               help='The path to the reference database metadata table')
 @click.option('--downloaded-references-dir', type=click.Path(), default='references_dir',
-              help='The directory to which GInGeR will download missing reference genomes from UHGG. This folder can be shared for all runs of GInGer in order to avoid the same file being  downloaded and saved multiple times')
+              help='The directory to which GInGeR will download missing reference genomes from NCBI. This folder can be shared for all runs of GInGer in order to avoid the same file being  downloaded and saved multiple times')
 @click.option('--sample-specific-references', type=click.Path(), default=None,
               help='A fasta, fasta.gz or mmi (minimap indexed) file that will be used a reference database (using this will skip the stages of creating a sample specific database based on the species detected in the sample by Kraken2)')
+@click.option('--reference-contig-to-genome', type=click.Path(), default=None,
+              help="A TSV with 'contig' and 'Genome' columns mapping every contig of --sample-specific-references to the reference genome it belongs to. GInGeR writes one (reference_contig_to_genome.tsv) whenever it builds the reference database itself, so pass that file back when reusing a database across runs. Without it the genome is guessed from the contig name, which only works when contigs are named {genome_id}_{contig_num}")
 @click.option('--depth-limit', type=int, default=12,
               help='The maximal depth for paths describing context candidates in the assembly graph')
 @click.option('--max-gap-ratio', type=float, default=1.5,
@@ -145,7 +147,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                     max_gap_ratio, context_len, gene_pident_filtering_th,
                     paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
                     add_plasmid_score=True, genomad_db=None, contig_context_fallback=True,
-                    write_context_sequences=False):
+                    write_context_sequences=False, reference_contig_to_genome=None):
     # Log the command that was run
     log.info(f"Running GInGeR with command: {' '.join(sys.argv)}")
 
@@ -154,8 +156,14 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     pu.check_and_make_dir_no_file_name(out_dir)
     # filter reference database using kraken
     references_used_path = c.REFERENCES_USED_TEMPLATE.format(out_dir=out_dir)
+    # how a match on a reference contig is traced back to a genome and so to a species. GInGeR
+    # writes it when it builds the reference database; with --sample-specific-references the user
+    # supplies the one saved from the run that built that database, or leaves it unset and lets the
+    # genome be guessed from the contig name
+    contig_to_genome_path = reference_contig_to_genome
     if sample_specific_references is None:
         sample_specific_references = c.MERGED_FILTERED_REF_DB_TEMPLATE.format(out_dir=out_dir)
+        contig_to_genome_path = c.CONTIG_TO_GENOME_TEMPLATE.format(out_dir=out_dir)
         # if the file was not specified or the specified file does not exist
         if kraken_output_path is None or not os.path.exists(kraken_output_path):
             kraken_output_path = c.KRAKEN_OUTPUT_TEMPLATE.format(out_dir=out_dir)
@@ -168,7 +176,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                  reference_genomes_metadata, downloaded_references_dir, sample_specific_references,
                                                  references_used_path,
                                                  max_species_representatives, kraken_db,
-                                                 species_included_in_analysis_path)
+                                                 species_included_in_analysis_path, contig_to_genome_path)
     if not sample_specific_references.endswith('mmi'):
         indexed_reference = sau.generate_index(sample_specific_references, sau.INDEXING_PRESET)
     else:
@@ -215,10 +223,14 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                        out_contexts_to_ref_genomes, threads)
 
     # merge and get results
+    # built once and handed to both stages, so that the species a match was resolved to and the
+    # Genome column written beside it in the CSV always come from the same mapping
+    contig_species_lookup = vcc.build_contig_species_lookup(reference_genomes_metadata, contig_to_genome_path)
     context_level_results = vcc.process_in_and_out_paths_to_results(in_contexts_to_ref_genomes,
                                                                     out_contexts_to_ref_genomes,
                                                                     gene_lengths, paths_pident_filtering_th, 0,
-                                                                    max_gap_ratio, reference_genomes_metadata)
+                                                                    max_gap_ratio, reference_genomes_metadata,
+                                                                    contig_species_lookup=contig_species_lookup)
 
     # write the sequence behind every conclusion below - the in-gene-out sequence of every context
     # level row, and the contig of every gene with no context match. Tens of MB for a typical sample,
@@ -258,7 +270,7 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     species_level_output_path = c.SPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     subspecies_level_output_path = c.SUBSPECIES_LEVEL_OUTPUT_TEMPLATE.format(out_dir=out_dir)
     pu.write_context_level_output_to_csv(context_level_results, context_level_output_path, reference_genomes_metadata,
-                                          max_species_representatives)
+                                          max_species_representatives, contig_species_lookup=contig_species_lookup)
     # the join key onto in_gene_out_contexts.fasta, added before the plasmid scores so that a row
     # carries its sequence id even when GeNomad did not run. Only when that fasta was written - a
     # column pointing into a file that does not exist would be worse than no column

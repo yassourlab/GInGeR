@@ -1,10 +1,10 @@
-import urllib.request
+import shutil
+import tempfile
+import zipfile
 from subprocess import run
 
 import numpy as np
 import pandas as pd
-from glob import glob
-import gzip
 import logging
 import csv
 from ginger import pipeline_utils as pu
@@ -13,9 +13,20 @@ import re
 import time
 
 log = logging.getLogger(__name__)
-KRAKEN_COMMAND = 'kraken2 --db {kraken_db} --paired {reads_1} {reads_2} --threads {threads} --output {kraken_output} --report {kraken_report} --confidence 0.1 --use-names --report-minimizer-data'  # --report {report}
+# --memory-mapping reads the database's hash table off disk instead of loading it into RAM. The GTDB
+# database's is 644GB (against UHGG's 15.5GB), so without it GInGeR would need a ~700GB node rather
+# than the 16-32GB it asks for today.
+KRAKEN_COMMAND = 'kraken2 --db {kraken_db} --memory-mapping --paired {reads_1} {reads_2} --threads {threads} --output {kraken_output} --report {kraken_report} --confidence 0.1 --use-names --report-minimizer-data'  # --report {report}
 BRACKEN_COMMAND = 'bracken -d {kraken_db} -i {kraken_report} -o {bracken_output} -w {bracken_report} -r {read_len} -l S -t {min_reads_for_bracken}'
-URLOPEN_TIMEOUT = 60
+# NCBI's datasets CLI, which fetches reference genomes by assembly accession. An accessions
+# file rather than one accession per invocation: the top references of every selected species
+# come to a few thousand genomes, and that many round trips is both slow and far more likely to
+# be throttled.
+DATASETS_COMMAND = ('datasets download genome accession --inputfile {accessions_file} '
+                    '--include genome --no-progressbar --filename {zip_path}')
+# how many accessions go into one `datasets` call. Small enough that a failure re-fetches
+# little, large enough that a few thousand genomes take tens of calls rather than thousands
+DOWNLOAD_CHUNK_SIZE = 200
 N_ATTEMPTS = 10
 SLEEP_SECS = 60
 BRACKEN_MIN_READS_RELAXATION_FACTOR = 0.5
@@ -84,17 +95,18 @@ def filter_kraken_report_by_distinct_kmer_count(kraken_report_path, filtered_kra
 
 
 def get_kmer_length_options(kraken_db):
-    pattern = r'database(.*?)mers\.kraken'
-    # List to store the extracted *** parts
-    extracted_parts = []
-    # Walk through the directory
+    """The read lengths a Kraken2 database has Bracken distributions for.
+
+    Keyed on the .kmer_distrib files, which are what Bracken reads at run time. The
+    database{N}mers.kraken files are bracken-build intermediates a database need not ship - the
+    prebuilt GTDB one does not, and matching those would leave run_bracken with nothing to pick from.
+    """
+    read_lengths = []
     for filename in os.listdir(kraken_db):
-        # Check if the filename matches the pattern
-        match = re.match(pattern, filename)
+        match = re.fullmatch(r'database(\d+)mers\.kmer_distrib', filename)
         if match:
-            # Extract the *** part and add it to the list
-            extracted_parts.append(int(match.group(1)))
-    return extracted_parts
+            read_lengths.append(int(match.group(1)))
+    return read_lengths
 
 
 def get_min_reads_for_bracken(metadata_path: str, species_coverage_threshold: float, avg_sum: float, bracken_relaxation_factor:float =BRACKEN_MIN_READS_RELAXATION_FACTOR) -> int:
@@ -133,7 +145,7 @@ def get_list_of_top_species_by_bracken(bracken_output_path, fraction_of_reads):
 
 
 def compute_quality(metadata: pd.DataFrame) -> pd.Series:
-    """A UHGG reference's quality score: Completeness - 5 * Contamination + ln(N50).
+    """A reference genome's quality score: Completeness - 5 * Contamination + ln(N50).
 
     Both the references that get downloaded and the genome lengths the coverage estimate is based on
     are the top scorers by this, so they have to score them the same way.
@@ -151,12 +163,11 @@ def get_species_median_genome_length_by_quality(metadata: pd.DataFrame, species_
     if metadata is None or len(metadata) == 0:
         return {}
 
-    for col in ['Genome', 'Completeness', 'Contamination', 'N50', 'FTP_download', 'species', 'Length']:
+    for col in ['Genome', 'Completeness', 'Contamination', 'N50', 'species', 'Length']:
         if col not in metadata.columns:
             raise ValueError(f"Metadata is missing required column '{col}'")
 
     df = metadata[metadata['species'].isin(species_list)].copy()
-    df = df[df['FTP_download'].astype(str).str.startswith('ftp')]
     if len(df) == 0:
         return {}
 
@@ -165,7 +176,7 @@ def get_species_median_genome_length_by_quality(metadata: pd.DataFrame, species_
     df['N50'] = pd.to_numeric(df['N50'], errors='coerce')
     df['Length'] = pd.to_numeric(df['Length'], errors='coerce')
 
-    df = df.dropna(subset=['Completeness', 'Contamination', 'N50', 'Length', 'Genome', 'species', 'FTP_download'])
+    df = df.dropna(subset=['Completeness', 'Contamination', 'N50', 'Length', 'Genome', 'species'])
     df = df[df['Length'] > 0]
     if len(df) == 0:
         return {}
@@ -233,80 +244,159 @@ def get_species_included_in_analysis_df(stats: pd.DataFrame, kraken_report_path:
     return included
 
 
-def download_and_write_content_to_file(references_folder, references_folder_content, ftp_download_str: str,
-                                       merged_filtered_fasta_f):
-    mgyg_file = ftp_download_str.split('/')[-1]
-    local_tar_gz_path = f'{references_folder}/{mgyg_file}'
-    # download file from FTP if needed
+def reference_fasta_path(references_folder: str, genome: str) -> str:
+    """Where a downloaded reference genome lives - one file per assembly accession, so that
+    "do we have this genome already?" is an existence check."""
+    return os.path.join(references_folder, f'{genome}.fna')
 
-    if mgyg_file in references_folder_content:
-        log.debug(f'{mgyg_file} already exists in {references_folder} - skipping download')
-    else:
-        log.debug(f'{mgyg_file} not found in {references_folder} - downloading file')
+
+def run_datasets_download(accessions, zip_path: str):
+    """Fetch a chunk of assembly accessions with NCBI's datasets CLI, retrying the whole chunk.
+
+    Retried per chunk rather than per genome, because `datasets` fetches a chunk in one request.
+    """
+    with tempfile.NamedTemporaryFile('w', suffix='.txt') as accessions_file:
+        accessions_file.write('\n'.join(accessions) + '\n')
+        accessions_file.flush()
+        command = DATASETS_COMMAND.format(accessions_file=accessions_file.name, zip_path=zip_path)
         for attempt in range(N_ATTEMPTS):
-            try:
-                data = urllib.request.urlopen(ftp_download_str, timeout=URLOPEN_TIMEOUT).read()
-                # written beside the real name and moved onto it, so that a download interrupted
-                # mid-write leaves nothing behind rather than a truncated file that the next run finds
-                # in references_folder_content and treats as already downloaded
-                with open(f'{local_tar_gz_path}.part', 'wb') as f:
-                    f.write(data)
-                os.replace(f'{local_tar_gz_path}.part', local_tar_gz_path)
-                break
-            except Exception as e:
-                # the last attempt raises rather than sleeping through a retry it will not make
-                if attempt == N_ATTEMPTS - 1:
-                    log.error(f'Failed to download {ftp_download_str} in {N_ATTEMPTS} attempts: {e}')
-                    raise e
-                log.error(f'Failed to download {ftp_download_str}: {e}. Retrying in {SLEEP_SECS} seconds')
-                time.sleep(SLEEP_SECS)
-
-    # read tar.gt file and add it's content to the merged filtered fasta
-    gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f)
+            out = run(command, shell=True, capture_output=True, text=True)
+            # the zip check catches a datasets that reports success without writing anything, which
+            # would otherwise surface as a confusing failure to unpack the archive
+            if out.returncode == 0 and os.path.exists(zip_path):
+                return
+            error = out.stderr.strip() or out.stdout.strip()
+            # the last attempt raises rather than sleeping through a retry it will not make
+            if attempt == N_ATTEMPTS - 1:
+                raise RuntimeError(f'datasets download failed for {len(accessions)} accessions in '
+                                   f'{N_ATTEMPTS} attempts. stderr: {error}')
+            log.error(f'datasets download failed: {error}. Retrying in {SLEEP_SECS} seconds')
+            time.sleep(SLEEP_SECS)
 
 
-# TODO sed -n '/>MGYG000005036.fa_1/,$p' MGYG000005036.gff > MGYG000005036.fasta works in command line. Can I use it here?
-def gffgz_to_fasta(local_tar_gz_path, merged_filtered_fasta_f):
-    with gzip.open(local_tar_gz_path, 'rt') as gzip_fin:
-        fasta_part = False
-        for line in gzip_fin:
-            if fasta_part:
-                merged_filtered_fasta_f.write(line)
-            elif line.startswith('##FASTA'):
-                fasta_part = True
+def extract_genomes_from_datasets_zip(zip_path: str, references_folder: str) -> set:
+    """Unpack one datasets archive into {accession}.fna files, returning the accessions found.
+
+    A datasets archive lays genomes out as ncbi_dataset/data/{accession}/{something}.fna, with an
+    assembly's sequence possibly split over several files. Each accession's files are concatenated
+    into one .fna, written beside the real name and moved onto it so an interrupted extraction
+    cannot leave a partial file that the next run treats as already downloaded.
+    """
+    downloaded = set()
+    with zipfile.ZipFile(zip_path) as archive:
+        by_accession = {}
+        for name in archive.namelist():
+            parts = name.split('/')
+            # ncbi_dataset/data/<accession>/<file>.fna - anything else is the archive's own
+            # metadata (dataset_catalog.json, README.md, ...)
+            if len(parts) >= 4 and parts[0] == 'ncbi_dataset' and parts[1] == 'data' \
+                    and name.endswith('.fna'):
+                by_accession.setdefault(parts[2], []).append(name)
+
+        for accession, members in sorted(by_accession.items()):
+            target = reference_fasta_path(references_folder, accession)
+            with open(f'{target}.part', 'wb') as out_f:
+                for member in sorted(members):
+                    with archive.open(member) as in_f:
+                        shutil.copyfileobj(in_f, out_f)
+            os.replace(f'{target}.part', target)
+            downloaded.add(accession)
+    return downloaded
+
+
+def download_missing_references(genomes, references_folder: str):
+    """Make sure every genome in `genomes` has a .fna in references_folder, fetching what is absent.
+
+    Returns the genomes that are available afterwards. NCBI suppresses assemblies over time, and
+    GTDB's metadata outlives those removals, so an accession that cannot be fetched is dropped with
+    a warning rather than failing the run - the references that did make it are recorded in
+    references_used.csv.
+    """
+    missing = {genome for genome in genomes
+               if not os.path.exists(reference_fasta_path(references_folder, genome))}
+    available = set(genomes) - missing
+    log.info(f'{len(available)} reference genomes already downloaded, fetching {len(missing)}')
+
+    missing = sorted(missing)
+    for chunk_start in range(0, len(missing), DOWNLOAD_CHUNK_SIZE):
+        chunk = missing[chunk_start:chunk_start + DOWNLOAD_CHUNK_SIZE]
+        zip_path = os.path.join(references_folder, f'datasets_chunk_{chunk_start}.zip')
+        try:
+            run_datasets_download(chunk, zip_path)
+            available |= extract_genomes_from_datasets_zip(zip_path, references_folder)
+        finally:
+            if os.path.exists(zip_path):
+                os.remove(zip_path)
+        log.info(f'downloaded {min(chunk_start + DOWNLOAD_CHUNK_SIZE, len(missing))}/{len(missing)}')
+
+    unavailable = set(missing) - available
+    if unavailable:
+        log.warning(f'{len(unavailable)} reference genomes could not be downloaded from NCBI and '
+                    f'are excluded from the analysis: {sorted(unavailable)}')
+    return available
+
+
+def write_genome_to_merged_fasta(genome: str, references_folder: str, merged_filtered_fasta_f,
+                                 contig_to_genome_f):
+    """Append one reference genome to the merged fasta, recording which genome each contig came from.
+
+    The map is what attributes a match on a reference contig to a genome and from there to a species,
+    which the contig's name cannot do: NCBI contigs are nucleotide accessions (NZ_CP007265.1).
+    """
+    with open(reference_fasta_path(references_folder, genome)) as genome_f:
+        for line in genome_f:
+            if line.startswith('>'):
+                # minimap2 reports the first whitespace-delimited token as the target name, so that
+                # is the key the PAF will have to be looked up by
+                contig_to_genome_f.write(f'{line[1:].split()[0]}\t{genome}\n')
+            merged_filtered_fasta_f.write(line)
 
 
 def generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path, references_folder,
-                                                               merged_filtered_fasta, max_refs_per_species):
+                                                               merged_filtered_fasta, max_refs_per_species,
+                                                               contig_to_genome_path):
+    """Build the sample-specific reference database out of the top references of every selected species.
+
+    In two phases - pick the references and fetch what is missing in batches, then stream what is on
+    disk into the merged fasta - because `datasets` is fed many accessions per call.
+    """
     metadata = pd.read_csv(metadata_path, sep='\t')
     metadata['Quality'] = compute_quality(metadata)
     # max_refs_per_species applies per subspecies when the metadata names them, and to the species as
     # a whole when it does not
     has_subspecies = 'subspecies' in metadata.columns
-    references_folder_content = [x.split('/')[-1] for x in glob(references_folder + '/*')]
     selected_samples_dfs_list = []
-    with open(merged_filtered_fasta, 'w') as merged_filtered_fasta_f:
-        for species in top_species:
-            single_species_table = metadata[
-                (metadata.species == species) & (metadata.FTP_download.str.startswith('ftp'))]
-            tables_to_download = ([table for _, table in single_species_table.groupby('subspecies')]
-                                  if has_subspecies else [single_species_table])
-            for table in tables_to_download:
-                selected_samples_dfs_list.append(
-                    take_top_species_and_download_to_file(max_refs_per_species, table, references_folder,
-                                                          references_folder_content, merged_filtered_fasta_f))
+    for species in top_species:
+        single_species_table = metadata[metadata.species == species]
+        tables_to_take_from = ([table for _, table in single_species_table.groupby('subspecies')]
+                               if has_subspecies else [single_species_table])
+        for table in tables_to_take_from:
+            selected_samples_dfs_list.append(take_top_references_per_species(max_refs_per_species, table))
 
-    return pd.concat(selected_samples_dfs_list)
+    if not selected_samples_dfs_list:
+        raise ValueError(f'None of the {len(top_species)} selected species has references in '
+                         f'{metadata_path}')
+    # a genome listed twice would go into the merged fasta twice, leaving minimap2 with duplicate
+    # sequence names
+    selected_samples_df = pd.concat(selected_samples_dfs_list).drop_duplicates(subset='Genome')
+
+    available = download_missing_references(selected_samples_df['Genome'].tolist(), references_folder)
+    selected_samples_df = selected_samples_df[selected_samples_df['Genome'].isin(available)]
+
+    with open(merged_filtered_fasta, 'w') as merged_filtered_fasta_f, \
+            open(contig_to_genome_path, 'w') as contig_to_genome_f:
+        contig_to_genome_f.write('contig\tGenome\n')
+        for genome in selected_samples_df['Genome']:
+            write_genome_to_merged_fasta(genome, references_folder, merged_filtered_fasta_f,
+                                         contig_to_genome_f)
+    log.info(f'built a reference database of {len(selected_samples_df)} genomes for '
+             f'{len(top_species)} species')
+    return selected_samples_df
 
 
-def take_top_species_and_download_to_file(max_refs_per_species, single_species_table, references_folder,
-                                          references_folder_content, merged_filtered_fasta_f):
+def take_top_references_per_species(max_refs_per_species, single_species_table):
     # Take top X references according to Quality score, breaking ties alphabetically by Genome
-    top_x_df = single_species_table.sort_values(['Quality', 'Genome']).tail(max_refs_per_species)
-    for ftp_download in top_x_df['FTP_download']:
-        download_and_write_content_to_file(references_folder, references_folder_content, ftp_download,
-                                           merged_filtered_fasta_f)
-    return top_x_df
+    return single_species_table.sort_values(['Quality', 'Genome']).tail(max_refs_per_species)
 
 
 @pu.step_timing
@@ -314,7 +404,7 @@ def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_pa
                                      bracken_output,
                                      bracken_report, species_coverage_threshold, metadata_path, references_folder,
                                      merged_filtered_fasta, references_used_path, max_species_representatives, kraken_db,
-                                     species_included_in_analysis_path):
+                                     species_included_in_analysis_path, contig_to_genome_path):
     pu.check_and_makedir(kraken_output_path)
     pu.check_and_make_dir_no_file_name(references_folder)
     run_kraken(reads_1, reads_2, threads, kraken_output_path, kraken_report_path, kraken_db)
@@ -338,6 +428,7 @@ def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_pa
     selected_species_df = generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path,
                                                                                      references_folder,
                                                                                      merged_filtered_fasta,
-                                                                                     max_refs_per_species=max_species_representatives)
+                                                                                     max_refs_per_species=max_species_representatives,
+                                                                                     contig_to_genome_path=contig_to_genome_path)
     selected_species_df.to_csv(references_used_path, index=False, sep='\t')
     return merged_filtered_fasta

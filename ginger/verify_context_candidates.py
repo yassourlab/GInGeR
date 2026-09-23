@@ -1,5 +1,6 @@
 import csv
 import logging
+import os
 from collections import defaultdict
 import re
 
@@ -92,7 +93,8 @@ def get_ref_genome_species_dict_from_metadata_path(metadata_path):
     Falls back to the species embedded in the Lineage column ('...;s__Escherichia coli') when there is
     no species column or a row leaves it empty, and to the first column when none is named Genome.
 
-    Streamed rather than read with pandas: the UHGG table is ~60MB of columns this needs three of.
+    Streamed rather than read with pandas: the reference table is tens of MB of columns this needs
+    three of.
     """
     with open(metadata_path, 'r') as f:
         # QUOTE_NONE so that a '"' anywhere in a lineage stays part of the field instead of quoting it
@@ -110,6 +112,79 @@ def get_ref_genome_species_dict_from_metadata_path(metadata_path):
     return ref_genome_species_dict
 
 
+def read_contig_to_genome_map(contig_to_genome_path) -> dict:
+    """contig id -> the reference genome it belongs to, as written when the reference DB was built.
+
+    Missing or unreadable means "no map": callers fall back to deriving the genome from the contig
+    name, which is what a reference database GInGeR did not build itself (--sample-specific-references)
+    still relies on.
+    """
+    if not contig_to_genome_path or not os.path.exists(contig_to_genome_path):
+        return {}
+    with open(contig_to_genome_path) as f:
+        reader = csv.DictReader(f, delimiter='\t', quoting=csv.QUOTE_NONE)
+        if not reader.fieldnames:
+            return {}
+        reader.fieldnames = [name.strip().lower() for name in reader.fieldnames]
+        if 'contig' not in reader.fieldnames or 'genome' not in reader.fieldnames:
+            log.warning(f'{contig_to_genome_path} has no contig/genome columns - '
+                        f'falling back to deriving genomes from contig names')
+            return {}
+        return {row['contig']: row['genome'] for row in reader if row.get('contig')}
+
+
+def genome_from_contig_name(contig_name: str) -> str:
+    """The genome a reference contig belongs to, guessed from its name.
+
+    The fallback for a reference database GInGeR did not build and so has no contig->genome map for.
+    Assumes the {genome_id}_{contig_num} naming that README documents for
+    --sample-specific-references, and that UHGG's MGYG000260594_1 follows.
+    """
+    return re.split(r'[._]', contig_name)[0]
+
+
+def build_contig_species_lookup(metadata_path, contig_to_genome_path=None) -> dict:
+    """contig id -> (genome, species), the lookup a match on a reference contig is resolved with.
+
+    Built by composing the contig->genome map written when the reference database was assembled with
+    the genome->species mapping from the reference metadata. Without a map the genome is guessed from
+    the contig name, and the lookup answers for any contig rather than a fixed set, so it is returned
+    as a callable-backed dict-alike below.
+    """
+    genome_to_species = get_ref_genome_species_dict_from_metadata_path(metadata_path)
+    contig_to_genome = read_contig_to_genome_map(contig_to_genome_path)
+    if contig_to_genome:
+        log.info(f'resolving reference contigs with a {len(contig_to_genome)} contig map')
+    else:
+        log.info('no reference contig->genome map - deriving genomes from reference contig names')
+    return ContigSpeciesLookup(genome_to_species, contig_to_genome)
+
+
+class ContigSpeciesLookup:
+    """Resolves a reference contig to the (genome, species) it belongs to.
+
+    Not a plain dict because without a contig->genome map the genome is derived from the contig name
+    on demand, so the set of answerable contigs is not known up front.
+    """
+
+    def __init__(self, genome_to_species: dict, contig_to_genome: dict):
+        self.genome_to_species = genome_to_species
+        self.contig_to_genome = contig_to_genome
+
+    def genome(self, contig_name: str) -> str:
+        if self.contig_to_genome:
+            return self.contig_to_genome.get(contig_name, '')
+        return genome_from_contig_name(contig_name)
+
+    def resolve(self, contig_name: str) -> tuple:
+        """(genome, species) for a reference contig. species is 'unknown_{contig}' when the contig
+        cannot be traced to a genome the metadata knows, which is the signal that the reference
+        database and the metadata table do not describe the same genomes."""
+        genome = self.genome(contig_name)
+        species = self.genome_to_species.get(genome) if genome else None
+        return genome, species or f'unknown_{contig_name}'
+
+
 def species_from_lineage(lineage) -> str:
     """The species of a GTDB-style lineage - the 's__' rank of 'd__Bacteria;...;s__Escherichia coli'."""
     match = re.search(r'(?:^|;)s__([^;]+)', lineage) if lineage else None
@@ -118,9 +193,12 @@ def species_from_lineage(lineage) -> str:
 @pu.step_timing
 def process_in_and_out_paths_to_results(in_path_mapping_to_ref_genomes, out_path_mapping_to_ref_genomes, genes_lengths,
                                         paths_pident_filtering_th, minimal_gap_ratio,
-                                        maximal_gap_ratio, metadata_path):
+                                        maximal_gap_ratio, metadata_path, contig_to_genome_path=None,
+                                        contig_species_lookup=None):
     log.info('parsing the mapping of in and out paths')
-    ref_species_dict = get_ref_genome_species_dict_from_metadata_path(metadata_path)
+    # the caller may have built the lookup already - it is also what the context level CSV is
+    # written with, and reading the reference metadata twice is pure cost
+    ref_species_dict = contig_species_lookup or build_contig_species_lookup(metadata_path, contig_to_genome_path)
     # keyed by (gene, gene copy, reference genome) - see read_and_filter_path_matches_per_gene
     in_paths_by_gene_locus_and_ref_genome = read_and_filter_path_matches_per_gene(
         mc.PathRefGenomeMatch, in_path_mapping_to_ref_genomes, paths_pident_filtering_th, ref_species_dict)

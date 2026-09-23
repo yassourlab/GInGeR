@@ -1,7 +1,8 @@
-import io
 import unittest
 import tempfile
 import os
+import zipfile
+from types import SimpleNamespace
 from unittest.mock import patch
 import pandas as pd
 from ginger import reference_database_utils as rdu
@@ -102,51 +103,152 @@ class MyTestCase(unittest.TestCase):
 
 
 class DownloadRetryTest(unittest.TestCase):
-    """The reference download retries a failing FTP fetch N_ATTEMPTS times.
+    """The reference download retries a failing `datasets` call N_ATTEMPTS times.
 
-    It used to call time.sleep without importing time, so the first failure raised NameError and no
-    retry ever happened - which on a multi-hour run threw away the whole reference database step over
-    one FTP hiccup.
+    An earlier version called time.sleep without importing time, so the first failure raised
+    NameError and no retry ever happened - which on a multi-hour run threw away the whole reference
+    database step over one hiccup. Retries are per chunk of accessions, because `datasets` fetches a
+    chunk in a single request.
     """
 
-    def _download_with_failing_urlopen(self, n_failures, references_folder_content=()):
-        attempts = []
+    def _download_with_failing_datasets(self, n_failures, already_downloaded=(), genomes=('GCF_000001.1',)):
+        """Run download_missing_references against a `datasets` that fails its first n_failures calls.
 
-        def failing_urlopen(url, timeout=None):
-            attempts.append(url)
-            if len(attempts) > n_failures:
-                return io.BytesIO(b'downloaded bytes')
-            raise OSError('ftp is down')
+        Returns the accessions files each call was given, and the error that escaped (if any).
+        """
+        calls = []
+
+        def failing_run(command, **kwargs):
+            # the accessions file is written before the call and deleted after, so its contents have
+            # to be captured here rather than inspected afterwards
+            accessions_file = command.split('--inputfile ')[1].split(' ')[0]
+            with open(accessions_file) as f:
+                calls.append([line.strip() for line in f if line.strip()])
+            if len(calls) <= n_failures:
+                return SimpleNamespace(returncode=1, stdout='', stderr='NCBI is down')
+            zip_path = command.split('--filename ')[1].strip()
+            _write_datasets_zip(zip_path, calls[-1])
+            return SimpleNamespace(returncode=0, stdout='', stderr='')
 
         with tempfile.TemporaryDirectory() as tmpdir:
+            for genome in already_downloaded:
+                with open(rdu.reference_fasta_path(tmpdir, genome), 'w') as f:
+                    f.write(f'>{genome}_contig_1\nACGT\n')
             with patch.object(rdu, 'N_ATTEMPTS', 3), patch.object(rdu, 'SLEEP_SECS', 0), \
-                    patch.object(rdu, 'gffgz_to_fasta', lambda *args: None), \
-                    patch('urllib.request.urlopen', failing_urlopen):
+                    patch.object(rdu, 'run', failing_run):
                 error = None
                 try:
-                    rdu.download_and_write_content_to_file(tmpdir, list(references_folder_content),
-                                                           'ftp://example.invalid/MGYG000000001.gff.gz',
-                                                           io.StringIO())
+                    rdu.download_missing_references(list(genomes), tmpdir)
                 except Exception as e:
                     error = e
-        return attempts, error
+        return calls, error
 
     def test_retries_until_the_download_succeeds(self):
-        attempts, error = self._download_with_failing_urlopen(n_failures=2)
+        calls, error = self._download_with_failing_datasets(n_failures=2)
         self.assertIsNone(error)
-        self.assertEqual(len(attempts), 3)  # two failures, then the one that worked
+        self.assertEqual(len(calls), 3)  # two failures, then the one that worked
 
     def test_raises_the_download_error_after_the_last_attempt(self):
-        attempts, error = self._download_with_failing_urlopen(n_failures=99)
-        # the error the download actually failed with, not the NameError the retry used to raise
-        self.assertIsInstance(error, OSError)
-        self.assertEqual(len(attempts), 3)  # N_ATTEMPTS, patched down from 10
+        calls, error = self._download_with_failing_datasets(n_failures=99)
+        self.assertIsInstance(error, RuntimeError)
+        self.assertEqual(len(calls), 3)  # N_ATTEMPTS, patched down from 10
 
     def test_does_not_download_a_reference_that_is_already_there(self):
-        attempts, error = self._download_with_failing_urlopen(
-            n_failures=99, references_folder_content=['MGYG000000001.gff.gz'])
+        calls, error = self._download_with_failing_datasets(
+            n_failures=99, already_downloaded=['GCF_000001.1'])
         self.assertIsNone(error)
-        self.assertEqual(attempts, [])
+        self.assertEqual(calls, [])
+
+    def test_only_the_missing_accessions_are_requested(self):
+        calls, error = self._download_with_failing_datasets(
+            n_failures=0, already_downloaded=['GCF_000001.1'],
+            genomes=['GCF_000001.1', 'GCF_000002.1'])
+        self.assertIsNone(error)
+        self.assertEqual(calls, [['GCF_000002.1']])
+
+    def test_accessions_are_requested_in_chunks(self):
+        genomes = [f'GCF_{i:06d}.1' for i in range(5)]
+        with patch.object(rdu, 'DOWNLOAD_CHUNK_SIZE', 2):
+            calls, error = self._download_with_failing_datasets(n_failures=0, genomes=genomes)
+        self.assertIsNone(error)
+        # 5 accessions in chunks of 2, and every accession asked for exactly once
+        self.assertEqual([len(c) for c in calls], [2, 2, 1])
+        self.assertEqual(sorted(a for call in calls for a in call), genomes)
+
+
+def _write_datasets_zip(zip_path, accessions):
+    """A stand-in for what `datasets download genome` produces: one .fna per accession under
+    ncbi_dataset/data/, alongside metadata members that must be ignored."""
+    with zipfile.ZipFile(zip_path, 'w') as archive:
+        archive.writestr('README.md', 'not a genome')
+        archive.writestr('ncbi_dataset/data/dataset_catalog.json', '{}')
+        for accession in accessions:
+            archive.writestr(f'ncbi_dataset/data/{accession}/{accession}_genomic.fna',
+                             f'>{accession}_contig_1 some description\nACGT\n')
+
+
+class DatasetsArchiveTest(unittest.TestCase):
+    """Unpacking a datasets archive into the one-file-per-accession layout the rest of the pipeline
+    expects."""
+
+    def test_extracts_one_fasta_per_accession(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zip_path = os.path.join(tmpdir, 'chunk.zip')
+            _write_datasets_zip(zip_path, ['GCF_000001.1', 'GCA_000002.1'])
+            extracted = rdu.extract_genomes_from_datasets_zip(zip_path, tmpdir)
+
+        self.assertEqual(extracted, {'GCF_000001.1', 'GCA_000002.1'})
+
+    def test_concatenates_an_assembly_split_over_several_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zip_path = os.path.join(tmpdir, 'chunk.zip')
+            with zipfile.ZipFile(zip_path, 'w') as archive:
+                archive.writestr('ncbi_dataset/data/GCF_000001.1/chr1.fna', '>c1\nAAAA\n')
+                archive.writestr('ncbi_dataset/data/GCF_000001.1/chr2.fna', '>c2\nCCCC\n')
+            rdu.extract_genomes_from_datasets_zip(zip_path, tmpdir)
+            with open(rdu.reference_fasta_path(tmpdir, 'GCF_000001.1')) as f:
+                content = f.read()
+
+        self.assertEqual(content, '>c1\nAAAA\n>c2\nCCCC\n')
+
+    def test_an_accession_ncbi_does_not_return_is_skipped_rather_than_failing(self):
+        """GTDB's metadata outlives NCBI's suppressions, so an accession that comes back empty is
+        dropped with a warning instead of killing a multi-hour run."""
+        calls = []
+
+        def run_returning_one_of_two(command, **kwargs):
+            calls.append(command)
+            zip_path = command.split('--filename ')[1].strip()
+            _write_datasets_zip(zip_path, ['GCF_000001.1'])  # GCF_000002.1 is not in the archive
+            return SimpleNamespace(returncode=0, stdout='', stderr='')
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(rdu, 'run', run_returning_one_of_two):
+                available = rdu.download_missing_references(['GCF_000001.1', 'GCF_000002.1'], tmpdir)
+
+        self.assertEqual(available, {'GCF_000001.1'})
+
+
+class ContigToGenomeMapTest(unittest.TestCase):
+    """The merged reference fasta and the contig->genome map are written together, so that every
+    contig in the database can be traced back to the genome it came from."""
+
+    def test_records_every_contig_of_every_genome(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(rdu.reference_fasta_path(tmpdir, 'GCF_000001.1'), 'w') as f:
+                f.write('>NZ_CP007265.1 Escherichia coli chromosome\nACGT\n>NZ_CP007266.1 plasmid\nTTTT\n')
+            merged = os.path.join(tmpdir, 'merged.fasta')
+            map_path = os.path.join(tmpdir, 'map.tsv')
+            with open(merged, 'w') as merged_f, open(map_path, 'w') as map_f:
+                rdu.write_genome_to_merged_fasta('GCF_000001.1', tmpdir, merged_f, map_f)
+            with open(map_path) as f:
+                rows = [line.strip().split('\t') for line in f if line.strip()]
+            with open(merged) as f:
+                merged_content = f.read()
+
+        # keyed by the first whitespace-delimited token, which is what minimap2 reports as tname
+        self.assertEqual(rows, [['NZ_CP007265.1', 'GCF_000001.1'], ['NZ_CP007266.1', 'GCF_000001.1']])
+        self.assertIn('>NZ_CP007265.1 Escherichia coli chromosome', merged_content)
 
 
 if __name__ == '__main__':

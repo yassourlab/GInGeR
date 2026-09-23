@@ -19,6 +19,10 @@ GENOMAD_OUTPUT_DIR_TEMPLATE = '{out_dir}/genomad_output'
 SPECIES_INCLUDED_IN_ANALYSIS_TEMPLATE = '{out_dir}/species_included_in_analysis.csv'
 REFERENCES_USED_TEMPLATE = '{out_dir}/references_used.csv'
 MERGED_FILTERED_REF_DB_TEMPLATE = '{out_dir}/merged_filtered_ref_db.fasta'
+# which reference genome each contig of the merged reference database came from. Reference contig
+# names are not required to encode their genome - NCBI's are nucleotide accessions - so this is how
+# a match on a contig is attributed to a genome and from there to a species
+CONTIG_TO_GENOME_TEMPLATE = '{out_dir}/reference_contig_to_genome.tsv'
 KRAKEN_OUTPUT_TEMPLATE = '{out_dir}/kraken_output_file.tsv'
 KRAKEN_REPORT_TEMPLATE = '{out_dir}/kraken_report_file.tsv'
 BRACKEN_OUTPUT_TEMPLATE = '{out_dir}/bracken_output_file.tsv'
