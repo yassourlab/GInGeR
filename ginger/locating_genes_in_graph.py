@@ -217,8 +217,9 @@ def map_nodes_to_contigs_w_gaps(contigs_with_gaps, assembly_graph_path, contigs_
     """
     # filter contigs fasta to keep only contigs with gaps
     contigs_w_gaps_path = contigs_path.replace('.fasta', '_w_gaps.fasta')
-    SeqIO.write([contig for contig in SeqIO.parse(contigs_path, 'fasta') if contig.id in contigs_with_gaps],
-                contigs_w_gaps_path, 'fasta')
+    with open(contigs_path) as contigs_f:
+        SeqIO.write([contig for contig in SeqIO.parse(contigs_f, 'fasta') if contig.id in contigs_with_gaps],
+                    contigs_w_gaps_path, 'fasta')
     # find nodes in contigs with gaps
     nodes_to_contigs_path = sau.run_minimap2_paf(assembly_graph_path, contigs_w_gaps_path,
                                                  nodes_to_contigs_w_gaps_path, nthreads=n_threads)

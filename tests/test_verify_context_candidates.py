@@ -21,7 +21,7 @@ def path_match(ref_genome_start, ref_genome_end, locus=FIRST_COPY, gene='geneA',
     context_name = f'{gene}|{locus.contig}|{locus.start}|{locus.end}|1.0000|1+|1+|{side}'
     paf_line = (f'{context_name}\t100\t0\t100\t{strand}\t'
                 f'{ref_genome}\t100000\t{ref_genome_start}\t{ref_genome_end}\t100\t100\t60')
-    return mc.PathRefGenomeMatch(PafRecord.from_str(paf_line), {})
+    return mc.PathRefGenomeMatch(PafRecord.from_str(paf_line), helper.empty_contig_species_lookup())
 
 
 class GetAllInOutMatchesTest(unittest.TestCase):
@@ -80,10 +80,9 @@ class ReadAndFilterPathMatchesPerGeneTest(unittest.TestCase):
     LOCUS = mc.GeneLocus('NODE_1_length_1000_cov_140.620106', 336, 615)
 
     def test_matches_are_grouped_by_the_copy_of_the_gene(self):
-        # an empty lookup: the grouping key is the reference contig, which does not depend on
-        # resolving it to a genome
-        lookup = vcc.ContigSpeciesLookup({}, {})
-        grouped = vcc.read_and_filter_path_matches_per_gene(mc.PathRefGenomeMatch, self.IN_PATHS_PAF, 0.9, lookup)
+        # the grouping key is the reference contig, which does not depend on resolving it to a genome
+        grouped = vcc.read_and_filter_path_matches_per_gene(mc.PathRefGenomeMatch, self.IN_PATHS_PAF, 0.9,
+                                                            helper.empty_contig_species_lookup())
 
         self.assertEqual(sorted(grouped), [('test_gene', self.LOCUS, 'MGYG000077121_281'),
                                            ('test_gene', self.LOCUS, 'MGYG000260594_1')])

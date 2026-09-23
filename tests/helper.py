@@ -10,6 +10,7 @@ from Bio import SeqIO
 from ginger import locating_genes_in_graph as lg
 from ginger import matches_classes as mc
 from ginger import pipeline_utils as pu
+from ginger import verify_context_candidates as vcc
 
 
 class TempDirTestCase(unittest.TestCase):
@@ -34,6 +35,15 @@ class TempDirTestCase(unittest.TestCase):
             for header, seq in records.items():
                 f.write(f'>{header}\n{seq}\n')
         return path
+
+
+def empty_contig_species_lookup():
+    """A contig->(genome, species) lookup that resolves nothing.
+
+    For the tests that only exercise the query side of a PathRefGenomeMatch - the gene and the locus
+    its context name encodes - and do not care which genome the reference contig belongs to.
+    """
+    return vcc.ContigSpeciesLookup({}, {})
 
 
 def get_filedir() -> str:
