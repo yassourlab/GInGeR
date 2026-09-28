@@ -138,7 +138,7 @@ class DownloadRetryTest(unittest.TestCase):
                     patch.object(rdu, 'run', failing_run):
                 error = None
                 try:
-                    rdu.download_missing_references(list(genomes), tmpdir)
+                    rdu.download_missing_references(list(genomes), tmpdir, 'sample1')
                 except Exception as e:
                     error = e
         return calls, error
@@ -195,7 +195,7 @@ class DatasetsArchiveTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             zip_path = os.path.join(tmpdir, 'chunk.zip')
             _write_datasets_zip(zip_path, ['GCF_000001.1', 'GCA_000002.1'])
-            extracted = rdu.extract_genomes_from_datasets_zip(zip_path, tmpdir)
+            extracted = rdu.extract_genomes_from_datasets_zip(zip_path, tmpdir, 'sample1')
 
         self.assertEqual(extracted, {'GCF_000001.1', 'GCA_000002.1'})
 
@@ -205,7 +205,7 @@ class DatasetsArchiveTest(unittest.TestCase):
             with zipfile.ZipFile(zip_path, 'w') as archive:
                 archive.writestr('ncbi_dataset/data/GCF_000001.1/chr1.fna', '>c1\nAAAA\n')
                 archive.writestr('ncbi_dataset/data/GCF_000001.1/chr2.fna', '>c2\nCCCC\n')
-            rdu.extract_genomes_from_datasets_zip(zip_path, tmpdir)
+            rdu.extract_genomes_from_datasets_zip(zip_path, tmpdir, 'sample1')
             with open(rdu.reference_fasta_path(tmpdir, 'GCF_000001.1')) as f:
                 content = f.read()
 
@@ -224,7 +224,7 @@ class DatasetsArchiveTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             with patch.object(rdu, 'run', run_returning_one_of_two):
-                available = rdu.download_missing_references(['GCF_000001.1', 'GCF_000002.1'], tmpdir)
+                available = rdu.download_missing_references(['GCF_000001.1', 'GCF_000002.1'], tmpdir, 'sample1')
 
         self.assertEqual(available, {'GCF_000001.1'})
 

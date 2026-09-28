@@ -274,13 +274,16 @@ def run_datasets_download(accessions, zip_path: str):
             time.sleep(SLEEP_SECS)
 
 
-def extract_genomes_from_datasets_zip(zip_path: str, references_folder: str) -> set:
+def extract_genomes_from_datasets_zip(zip_path: str, references_folder: str, sample_tag: str) -> set:
     """Unpack one datasets archive into {accession}.fna files, returning the accessions found.
 
     A datasets archive lays genomes out as ncbi_dataset/data/{accession}/{something}.fna, with an
     assembly's sequence possibly split over several files. Each accession's files are concatenated
-    into one .fna, written beside the real name and moved onto it so an interrupted extraction
-    cannot leave a partial file that the next run treats as already downloaded.
+    into a `.part` file tagged with sample_tag and moved onto the real name so an interrupted
+    extraction cannot leave a partial file that the next run treats as already downloaded, and two
+    samples fetching the same accession into a shared references_folder don't interleave their
+    writes into the same `.part` file (references_folder is deliberately shared across concurrent
+    runs of the same cohort, since they tend to need the same species).
     """
     downloaded = set()
     with zipfile.ZipFile(zip_path) as archive:
@@ -295,16 +298,17 @@ def extract_genomes_from_datasets_zip(zip_path: str, references_folder: str) -> 
 
         for accession, members in sorted(by_accession.items()):
             target = reference_fasta_path(references_folder, accession)
-            with open(f'{target}.part', 'wb') as out_f:
+            part_path = f'{target}.{sample_tag}.part'
+            with open(part_path, 'wb') as out_f:
                 for member in sorted(members):
                     with archive.open(member) as in_f:
                         shutil.copyfileobj(in_f, out_f)
-            os.replace(f'{target}.part', target)
+            os.replace(part_path, target)
             downloaded.add(accession)
     return downloaded
 
 
-def download_missing_references(genomes, references_folder: str):
+def download_missing_references(genomes, references_folder: str, sample_tag: str):
     """Make sure every genome in `genomes` has a .fna in references_folder, fetching what is absent.
 
     Returns the genomes that are available afterwards. NCBI suppresses assemblies over time, and
@@ -320,10 +324,13 @@ def download_missing_references(genomes, references_folder: str):
     missing = sorted(missing)
     for chunk_start in range(0, len(missing), DOWNLOAD_CHUNK_SIZE):
         chunk = missing[chunk_start:chunk_start + DOWNLOAD_CHUNK_SIZE]
-        zip_path = os.path.join(references_folder, f'datasets_chunk_{chunk_start}.zip')
+        # tagged with sample_tag so two samples sharing references_folder (deliberate, for cohorts
+        # with overlapping species) don't collide on the same zip name - one run's cleanup
+        # `os.remove` would otherwise delete the other run's in-flight download
+        zip_path = os.path.join(references_folder, f'datasets_chunk_{chunk_start}_{sample_tag}.zip')
         try:
             run_datasets_download(chunk, zip_path)
-            available |= extract_genomes_from_datasets_zip(zip_path, references_folder)
+            available |= extract_genomes_from_datasets_zip(zip_path, references_folder, sample_tag)
         finally:
             if os.path.exists(zip_path):
                 os.remove(zip_path)
@@ -354,7 +361,7 @@ def write_genome_to_merged_fasta(genome: str, references_folder: str, merged_fil
 
 def generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path, references_folder,
                                                                merged_filtered_fasta, max_refs_per_species,
-                                                               contig_to_genome_path):
+                                                               contig_to_genome_path, sample_tag):
     """Build the sample-specific reference database out of the top references of every selected species.
 
     In two phases - pick the references and fetch what is missing in batches, then stream what is on
@@ -380,7 +387,7 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
     # sequence names
     selected_samples_df = pd.concat(selected_samples_dfs_list).drop_duplicates(subset='Genome')
 
-    available = download_missing_references(selected_samples_df['Genome'].tolist(), references_folder)
+    available = download_missing_references(selected_samples_df['Genome'].tolist(), references_folder, sample_tag)
     selected_samples_df = selected_samples_df[selected_samples_df['Genome'].isin(available)]
 
     with open(merged_filtered_fasta, 'w') as merged_filtered_fasta_f, \
@@ -425,10 +432,14 @@ def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_pa
     species_included_in_analysis_df = get_species_included_in_analysis_df(coverage_stats, filtered_kraken_report_path,
                                                                           top_species)
     species_included_in_analysis_df.to_csv(species_included_in_analysis_path, index=False, sep='\t')
+    # identifies this sample's in-flight downloads within a references_folder shared across a
+    # cohort's concurrent runs, so they don't collide on the same temp file
+    sample_tag = os.path.basename(reads_1)
     selected_species_df = generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path,
                                                                                      references_folder,
                                                                                      merged_filtered_fasta,
                                                                                      max_refs_per_species=max_species_representatives,
-                                                                                     contig_to_genome_path=contig_to_genome_path)
+                                                                                     contig_to_genome_path=contig_to_genome_path,
+                                                                                     sample_tag=sample_tag)
     selected_species_df.to_csv(references_used_path, index=False, sep='\t')
     return merged_filtered_fasta
