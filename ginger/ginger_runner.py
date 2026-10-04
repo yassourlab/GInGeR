@@ -27,11 +27,13 @@ log = logging.getLogger(__name__)
 
 def resolve_reference_source(reference_source, kraken_db, reference_genomes_metadata,
                              downloaded_references_dir):
-    """Fill in whichever reference options the caller left unset from the chosen catalog.
+    """Resolve the settings that go with a reference catalog.
 
-    The metadata table ships inside the package and the Kraken database sits beside it in the repo,
-    which is where the previous per-option defaults pointed; the references directory stays relative
-    to the working directory. Returns the three in the order they were passed.
+    The three paths are filled in only where the caller left them unset - the metadata table ships
+    inside the package and the Kraken database sits beside it in the repo, which is where the
+    previous per-option defaults pointed, while the references directory stays relative to the
+    working directory. The distinct-k-mer ratio threshold always comes from the catalog, since the
+    right value depends on how finely that catalog splits species.
     """
     source = rdu.REFERENCE_SOURCES[reference_source]
     package_dir = os.path.dirname(__file__)
@@ -41,9 +43,12 @@ def resolve_reference_source(reference_source, kraken_db, reference_genomes_meta
         reference_genomes_metadata = os.path.join(package_dir, source['metadata'])
     if downloaded_references_dir is None:
         downloaded_references_dir = source['references_dir']
+    distinct_kmer_ratio_threshold = source['distinct_kmer_ratio_threshold']
     log.info(f'reference source {reference_source}: metadata {reference_genomes_metadata}, '
-             f'kraken db {kraken_db}, references dir {downloaded_references_dir}')
-    return kraken_db, reference_genomes_metadata, downloaded_references_dir
+             f'kraken db {kraken_db}, references dir {downloaded_references_dir}, '
+             f'distinct k-mer ratio threshold {distinct_kmer_ratio_threshold}')
+    return (kraken_db, reference_genomes_metadata, downloaded_references_dir,
+            distinct_kmer_ratio_threshold)
 
 
 def cleanup_intermediate_files(out_dir, keep_options):
@@ -176,8 +181,9 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
 
     # whatever the caller did not pin down comes from the chosen catalog, so a GTDB metadata table
     # can't end up paired with the UHGG Kraken database by omission
-    kraken_db, reference_genomes_metadata, downloaded_references_dir = resolve_reference_source(
-        reference_source, kraken_db, reference_genomes_metadata, downloaded_references_dir)
+    kraken_db, reference_genomes_metadata, downloaded_references_dir, distinct_kmer_ratio_threshold = \
+        resolve_reference_source(reference_source, kraken_db, reference_genomes_metadata,
+                                 downloaded_references_dir)
 
     pu.ensure_out_dir_is_fresh(out_dir)
     # create output directory if it doesn't exist
@@ -205,7 +211,8 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                  references_used_path,
                                                  max_species_representatives, kraken_db,
                                                  species_included_in_analysis_path, contig_to_genome_path,
-                                                 source=reference_source)
+                                                 source=reference_source,
+                                                 distinct_kmer_ratio_threshold=distinct_kmer_ratio_threshold)
     if not sample_specific_references.endswith('mmi'):
         indexed_reference = sau.generate_index(sample_specific_references, sau.INDEXING_PRESET)
     else:

@@ -36,20 +36,17 @@ URLOPEN_TIMEOUT = 60
 REFERENCE_SOURCES = {
     'gtdb': dict(metadata='GTDB-metadata.tsv', kraken_db='kraken2_db_gtdb_r226',
                  references_dir='references_dir_gtdb',
-                 # GTDB's hash table is 644GB: --memory-mapping reads it off disk instead of loading
-                 # it, which is what keeps GInGeR's memory requirement at 16-32GB
-                 kraken_extra_args='--memory-mapping'),
+                 kraken_extra_args='--memory-mapping', # as the database is very large
+                 distinct_kmer_ratio_threshold=0.01), # GTDB has more species so the number of k-mers mapped uniqely to the specific clade is smaller in average
     'uhgg': dict(metadata='UHGG-metadata.tsv', kraken_db='kraken2_db_uhgg_v2.0.2',
                  references_dir='references_dir_uhgg',
-                 # UHGG's is 15.5GB, so loading it into RAM is both possible and much faster than
-                 # memory-mapping it would be
-                 kraken_extra_args=''),
+                 kraken_extra_args='', # UHGG's is 15.5GB, so loading it into RAM is both possible and much faster than memory-mapping it would be
+                 distinct_kmer_ratio_threshold=0.05),
 }
 DEFAULT_REFERENCE_SOURCE = 'gtdb'
 BRACKEN_MIN_READS_RELAXATION_FACTOR = 0.5
 DISTINCT_KMER_RATIO_THRESHOLD = 0.01
 KRAKEN_REPORT_COLS = ['pct', 'reads_clade', 'reads_direct', 'kmer_count', 'distinct_kmer_count', 'rank', 'taxid', 'name']
-
 
 def get_paired_reads_seqkit_stats(reads_1: str, reads_2: str):
     """Return (avg_len_r1, max_len_r1, avg_len_r2, max_len_r2) from `seqkit stats -T`."""
@@ -522,7 +519,8 @@ def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_pa
                                      bracken_report, species_coverage_threshold, metadata_path, references_folder,
                                      merged_filtered_fasta, references_used_path, max_species_representatives, kraken_db,
                                      species_included_in_analysis_path, contig_to_genome_path,
-                                     reuse_existing_kraken_output=False, source=DEFAULT_REFERENCE_SOURCE):
+                                     reuse_existing_kraken_output=False, source=DEFAULT_REFERENCE_SOURCE,
+                                     distinct_kmer_ratio_threshold=DISTINCT_KMER_RATIO_THRESHOLD):
     pu.check_and_makedir(kraken_output_path)
     pu.check_and_make_dir_no_file_name(references_folder)
     # Kraken2 is by far the slowest step - when asked to, reuse a previous run's output instead of redoing it
@@ -531,7 +529,8 @@ def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_pa
                    extra_args=REFERENCE_SOURCES[source]['kraken_extra_args'])
     filtered_kraken_report_path = f'{kraken_report_path}.distinct_kmer_filtered'
     filter_kraken_report_by_distinct_kmer_count(kraken_report_path, filtered_kraken_report_path,
-                                                metadata_path, max_species_representatives)
+                                                metadata_path, max_species_representatives,
+                                                threshold=distinct_kmer_ratio_threshold)
 
     avg1, max1, avg2, max2 = get_paired_reads_seqkit_stats(reads_1, reads_2)
     avg_sum = avg1 + avg2

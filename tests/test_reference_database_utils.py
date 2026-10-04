@@ -297,14 +297,21 @@ class ReferenceSourceTest(unittest.TestCase):
 
     def test_unset_options_come_from_the_source_and_explicit_ones_win(self):
         for source in ('gtdb', 'uhgg'):
-            kraken_db, metadata, refs_dir = ginger_runner.resolve_reference_source(source, None, None, None)
+            kraken_db, metadata, refs_dir, _ = ginger_runner.resolve_reference_source(source, None, None, None)
             self.assertIn(rdu.REFERENCE_SOURCES[source]['kraken_db'], kraken_db)
             self.assertTrue(metadata.endswith(rdu.REFERENCE_SOURCES[source]['metadata']))
             self.assertEqual(refs_dir, rdu.REFERENCE_SOURCES[source]['references_dir'])
 
-        _, metadata, refs_dir = ginger_runner.resolve_reference_source('uhgg', None, '/custom.tsv', '/refs')
+        _, metadata, refs_dir, _ = ginger_runner.resolve_reference_source('uhgg', None, '/custom.tsv', '/refs')
         self.assertEqual(metadata, '/custom.tsv')
         self.assertEqual(refs_dir, '/refs')
+
+    def test_the_distinct_kmer_threshold_is_per_catalog(self):
+        """GTDB fragments an organism across sibling clusters, so each clears a lower bar than
+        UHGG's coarser ones; one shared value loses species on GTDB or admits extras on UHGG."""
+        _, _, _, gtdb = ginger_runner.resolve_reference_source('gtdb', None, None, None)
+        _, _, _, uhgg = ginger_runner.resolve_reference_source('uhgg', None, None, None)
+        self.assertEqual((gtdb, uhgg), (0.01, 0.05))
 
 
 class ContigToGenomeMapTest(unittest.TestCase):

@@ -337,8 +337,9 @@ together with the matching defaults, so the two cannot be half-configured:
 | `--kraken-db` | `kraken2_db_gtdb_r226` | `kraken2_db_uhgg_v2.0.2` |
 | `--downloaded-references-dir` | `references_dir_gtdb` | `references_dir_uhgg` |
 | Kraken2 `--memory-mapping` | yes (644GB hash) | no (15.5GB, loaded into RAM) |
+| distinct-k-mer ratio threshold | 0.01 | 0.05 |
 
-Any of those options passed explicitly overrides the catalog's default — which is what lets you run
+Any of the path options passed explicitly overrides the catalog's default — which is what lets you run
 a GTDB reference set against a Kraken database trained on different species names, by passing a
 metadata table whose `species` column uses the names your Kraken database reports.
 
