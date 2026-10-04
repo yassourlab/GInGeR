@@ -1,5 +1,7 @@
+import gzip
 import shutil
 import tempfile
+import urllib.request
 import zipfile
 from subprocess import run
 
@@ -13,10 +15,7 @@ import re
 import time
 
 log = logging.getLogger(__name__)
-# --memory-mapping reads the database's hash table off disk instead of loading it into RAM. The GTDB
-# database's is 644GB (against UHGG's 15.5GB), so without it GInGeR would need a ~700GB node rather
-# than the 16-32GB it asks for today.
-KRAKEN_COMMAND = 'kraken2 --db {kraken_db} --memory-mapping --paired {reads_1} {reads_2} --threads {threads} --output {kraken_output} --report {kraken_report} --confidence 0.1 --use-names --report-minimizer-data'  # --report {report}
+KRAKEN_COMMAND = 'kraken2 --db {kraken_db} {extra_args} --paired {reads_1} {reads_2} --threads {threads} --output {kraken_output} --report {kraken_report} --confidence 0.1 --use-names --report-minimizer-data'  # --report {report}
 BRACKEN_COMMAND = 'bracken -d {kraken_db} -i {kraken_report} -o {bracken_output} -w {bracken_report} -r {read_len} -l S -t {min_reads_for_bracken}'
 # NCBI's datasets CLI, which fetches reference genomes by assembly accession. An accessions
 # file rather than one accession per invocation: the top references of every selected species
@@ -29,8 +28,26 @@ DATASETS_COMMAND = ('datasets download genome accession --inputfile {accessions_
 DOWNLOAD_CHUNK_SIZE = 200
 N_ATTEMPTS = 10
 SLEEP_SECS = 60
+URLOPEN_TIMEOUT = 60
+
+# The reference catalogs GInGeR knows about. They differ in one thing that matters - where genome
+# sequence comes from - plus the database and defaults that go with it. Everything downstream of the
+# download is column-driven and shared. Paths are relative; ginger_runner resolves them.
+REFERENCE_SOURCES = {
+    'gtdb': dict(metadata='GTDB-metadata.tsv', kraken_db='kraken2_db_gtdb_r226',
+                 references_dir='references_dir_gtdb',
+                 # GTDB's hash table is 644GB: --memory-mapping reads it off disk instead of loading
+                 # it, which is what keeps GInGeR's memory requirement at 16-32GB
+                 kraken_extra_args='--memory-mapping'),
+    'uhgg': dict(metadata='UHGG-metadata.tsv', kraken_db='kraken2_db_uhgg_v2.0.2',
+                 references_dir='references_dir_uhgg',
+                 # UHGG's is 15.5GB, so loading it into RAM is both possible and much faster than
+                 # memory-mapping it would be
+                 kraken_extra_args=''),
+}
+DEFAULT_REFERENCE_SOURCE = 'gtdb'
 BRACKEN_MIN_READS_RELAXATION_FACTOR = 0.5
-DISTINCT_KMER_RATIO_THRESHOLD = 0.05
+DISTINCT_KMER_RATIO_THRESHOLD = 0.01
 KRAKEN_REPORT_COLS = ['pct', 'reads_clade', 'reads_direct', 'kmer_count', 'distinct_kmer_count', 'rank', 'taxid', 'name']
 
 
@@ -61,13 +78,13 @@ def get_paired_reads_seqkit_stats(reads_1: str, reads_2: str):
     return avg1, max1, avg2, max2
 
 
-def run_kraken(reads_1, reads_2, threads, output_path, report_path, kraken_db):
+def run_kraken(reads_1, reads_2, threads, output_path, report_path, kraken_db, extra_args=''):
     # if kraken db does not exist, raise an error
     if not os.path.exists(kraken_db):
         raise Exception(f'Kraken database does not exist in {kraken_db}')
 
-    pu.stream_tool('Kraken2', KRAKEN_COMMAND.format(kraken_db=kraken_db, reads_1=reads_1, reads_2=reads_2,
-                                                    threads=threads, kraken_output=output_path,
+    pu.stream_tool('Kraken2', KRAKEN_COMMAND.format(kraken_db=kraken_db, extra_args=extra_args, reads_1=reads_1,
+                                                    reads_2=reads_2, threads=threads, kraken_output=output_path,
                                                     kraken_report=report_path))
 
 
@@ -168,6 +185,10 @@ def get_species_median_genome_length_by_quality(metadata: pd.DataFrame, species_
             raise ValueError(f"Metadata is missing required column '{col}'")
 
     df = metadata[metadata['species'].isin(species_list)].copy()
+    # UHGG lists references it has no download URL for; they cannot be used, so they should not
+    # steer the median either. GTDB's table has no such column - every row is fetchable by accession
+    if 'FTP_download' in df.columns:
+        df = df[df['FTP_download'].astype(str).str.startswith('ftp')]
     if len(df) == 0:
         return {}
 
@@ -343,6 +364,86 @@ def download_missing_references(genomes, references_folder: str, sample_tag: str
     return available
 
 
+def gffgz_to_fasta(gff_gz_path, fasta_f):
+    """Write the FASTA half of a UHGG .gff.gz - everything after its ##FASTA marker - to fasta_f."""
+    with gzip.open(gff_gz_path, 'rt') as gzip_fin:
+        fasta_part = False
+        for line in gzip_fin:
+            if fasta_part:
+                fasta_f.write(line)
+            elif line.startswith('##FASTA'):
+                fasta_part = True
+
+
+def download_uhgg_references(selected_df, references_folder: str, sample_tag: str):
+    """The UHGG counterpart of download_missing_references: fetch what is missing, leave {Genome}.fna.
+
+    UHGG serves one .gff.gz per genome over FTP rather than assemblies by accession, so this needs
+    the FTP_download column rather than just the ids. The .gff.gz is kept as the cache, since shared
+    reference directories are already full of them, and converted to the same {Genome}.fna layout the
+    NCBI path produces - which is what lets everything downstream stay catalog-agnostic.
+    """
+    if 'FTP_download' not in selected_df.columns:
+        raise ValueError("--reference-source uhgg needs a metadata table with an FTP_download column; "
+                         "this one has none. A GTDB table carrying UHGG species names is still a GTDB "
+                         "table - run it with --reference-source gtdb.")
+
+    available, missing = set(), []
+    for genome, url in zip(selected_df['Genome'], selected_df['FTP_download']):
+        if os.path.exists(reference_fasta_path(references_folder, genome)):
+            available.add(genome)
+        else:
+            missing.append((genome, url))
+    log.info(f'{len(available)} reference genomes already downloaded, fetching {len(missing)}')
+
+    unavailable = []
+    for n, (genome, url) in enumerate(missing, start=1):
+        gff_gz_path = os.path.join(references_folder, os.path.basename(str(url)))
+        try:
+            if not os.path.exists(gff_gz_path):
+                download_with_retries(str(url), gff_gz_path, sample_tag)
+            target = reference_fasta_path(references_folder, genome)
+            part_path = f'{target}.{sample_tag}.part'
+            with open(part_path, 'w') as fasta_f:
+                gffgz_to_fasta(gff_gz_path, fasta_f)
+            os.replace(part_path, target)
+            available.add(genome)
+        except Exception as e:
+            # UHGG's FTP outlives individual files going missing; one unreachable genome should not
+            # end a multi-hour run, and references_used.csv records what actually went in
+            log.error(f'Failed to fetch {genome} from {url}: {e}')
+            unavailable.append(genome)
+        if n % 100 == 0:
+            log.info(f'downloaded {n}/{len(missing)}')
+
+    if unavailable:
+        log.warning(f'{len(unavailable)} reference genomes could not be downloaded from UHGG and are '
+                    f'excluded from the analysis: {sorted(unavailable)}')
+    return available
+
+
+def download_with_retries(url: str, target_path: str, sample_tag: str):
+    """Fetch one URL to target_path, retrying N_ATTEMPTS times.
+
+    Written through a sample-tagged .part file and moved onto the real name, so an interrupted
+    download leaves nothing rather than a truncated file the next run treats as cached.
+    """
+    part_path = f'{target_path}.{sample_tag}.part'
+    for attempt in range(N_ATTEMPTS):
+        try:
+            data = urllib.request.urlopen(url, timeout=URLOPEN_TIMEOUT).read()
+            with open(part_path, 'wb') as f:
+                f.write(data)
+            os.replace(part_path, target_path)
+            return
+        except Exception as e:
+            # the last attempt raises rather than sleeping through a retry it will not make
+            if attempt == N_ATTEMPTS - 1:
+                raise
+            log.error(f'Failed to download {url}: {e}. Retrying in {SLEEP_SECS} seconds')
+            time.sleep(SLEEP_SECS)
+
+
 def write_genome_to_merged_fasta(genome: str, references_folder: str, merged_filtered_fasta_f,
                                  contig_to_genome_f):
     """Append one reference genome to the merged fasta, recording which genome each contig came from.
@@ -361,7 +462,8 @@ def write_genome_to_merged_fasta(genome: str, references_folder: str, merged_fil
 
 def generate_filtered_minimap_db_according_to_selected_species(top_species, metadata_path, references_folder,
                                                                merged_filtered_fasta, max_refs_per_species,
-                                                               contig_to_genome_path, sample_tag):
+                                                               contig_to_genome_path, sample_tag,
+                                                               source=DEFAULT_REFERENCE_SOURCE):
     """Build the sample-specific reference database out of the top references of every selected species.
 
     In two phases - pick the references and fetch what is missing in batches, then stream what is on
@@ -373,8 +475,12 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
     # a whole when it does not
     has_subspecies = 'subspecies' in metadata.columns
     selected_samples_dfs_list = []
+    has_ftp = 'FTP_download' in metadata.columns
     for species in top_species:
         single_species_table = metadata[metadata.species == species]
+        if has_ftp:
+            single_species_table = single_species_table[
+                single_species_table.FTP_download.astype(str).str.startswith('ftp')]
         tables_to_take_from = ([table for _, table in single_species_table.groupby('subspecies')]
                                if has_subspecies else [single_species_table])
         for table in tables_to_take_from:
@@ -387,7 +493,11 @@ def generate_filtered_minimap_db_according_to_selected_species(top_species, meta
     # sequence names
     selected_samples_df = pd.concat(selected_samples_dfs_list).drop_duplicates(subset='Genome')
 
-    available = download_missing_references(selected_samples_df['Genome'].tolist(), references_folder, sample_tag)
+    # the one place the catalogs genuinely differ
+    if source == 'uhgg':
+        available = download_uhgg_references(selected_samples_df, references_folder, sample_tag)
+    else:
+        available = download_missing_references(selected_samples_df['Genome'].tolist(), references_folder, sample_tag)
     selected_samples_df = selected_samples_df[selected_samples_df['Genome'].isin(available)]
 
     with open(merged_filtered_fasta, 'w') as merged_filtered_fasta_f, \
@@ -411,10 +521,14 @@ def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_pa
                                      bracken_output,
                                      bracken_report, species_coverage_threshold, metadata_path, references_folder,
                                      merged_filtered_fasta, references_used_path, max_species_representatives, kraken_db,
-                                     species_included_in_analysis_path, contig_to_genome_path):
+                                     species_included_in_analysis_path, contig_to_genome_path,
+                                     reuse_existing_kraken_output=False, source=DEFAULT_REFERENCE_SOURCE):
     pu.check_and_makedir(kraken_output_path)
     pu.check_and_make_dir_no_file_name(references_folder)
-    run_kraken(reads_1, reads_2, threads, kraken_output_path, kraken_report_path, kraken_db)
+    # Kraken2 is by far the slowest step - when asked to, reuse a previous run's output instead of redoing it
+    if not (reuse_existing_kraken_output and os.path.exists(kraken_output_path) and os.path.exists(kraken_report_path)):
+        run_kraken(reads_1, reads_2, threads, kraken_output_path, kraken_report_path, kraken_db,
+                   extra_args=REFERENCE_SOURCES[source]['kraken_extra_args'])
     filtered_kraken_report_path = f'{kraken_report_path}.distinct_kmer_filtered'
     filter_kraken_report_by_distinct_kmer_count(kraken_report_path, filtered_kraken_report_path,
                                                 metadata_path, max_species_representatives)
@@ -440,6 +554,7 @@ def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_pa
                                                                                      merged_filtered_fasta,
                                                                                      max_refs_per_species=max_species_representatives,
                                                                                      contig_to_genome_path=contig_to_genome_path,
-                                                                                     sample_tag=sample_tag)
+                                                                                     sample_tag=sample_tag,
+                                                                                     source=source)
     selected_species_df.to_csv(references_used_path, index=False, sep='\t')
     return merged_filtered_fasta

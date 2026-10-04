@@ -1,11 +1,13 @@
 import unittest
 import tempfile
+import gzip
 import os
 import zipfile
 from types import SimpleNamespace
 from unittest.mock import patch
 import pandas as pd
 from ginger import reference_database_utils as rdu
+from ginger import ginger_runner
 from tests import helper
 
 TEST_FILES = helper.get_filedir()
@@ -227,6 +229,82 @@ class DatasetsArchiveTest(unittest.TestCase):
                 available = rdu.download_missing_references(['GCF_000001.1', 'GCF_000002.1'], tmpdir, 'sample1')
 
         self.assertEqual(available, {'GCF_000001.1'})
+
+
+class UhggDownloadTest(unittest.TestCase):
+    """UHGG serves a .gff.gz per genome rather than assemblies by accession, but has to leave the
+    same {Genome}.fna behind, since everything downstream of the download is shared."""
+
+    GFF = '##gff-version 3\nMGYG1\tx\tCDS\t1\t9\t.\t+\t0\tID=1\n##FASTA\n>MGYG1_1\nACGT\n>MGYG1_2\nTTTT\n'
+
+    def _folder_with_cached_gff(self, tmpdir):
+        gff_path = os.path.join(tmpdir, 'MGYG1.gff.gz')
+        with gzip.open(gff_path, 'wt') as f:
+            f.write(self.GFF)
+        return pd.DataFrame({'Genome': ['MGYG1'],
+                             'FTP_download': ['ftp://example.invalid/MGYG1.gff.gz']})
+
+    def test_converts_a_cached_gff_gz_to_fasta_without_downloading(self):
+        def must_not_download(*args, **kwargs):
+            raise AssertionError('downloaded a genome whose .gff.gz was already cached')
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            df = self._folder_with_cached_gff(tmpdir)
+            with patch('urllib.request.urlopen', must_not_download):
+                available = rdu.download_uhgg_references(df, tmpdir, sample_tag='t')
+            with open(rdu.reference_fasta_path(tmpdir, 'MGYG1')) as f:
+                fasta = f.read()
+
+        self.assertEqual(available, {'MGYG1'})
+        # only the half after ##FASTA, so the gff annotations do not end up in the reference db
+        self.assertEqual(fasta, '>MGYG1_1\nACGT\n>MGYG1_2\nTTTT\n')
+
+    def test_skips_a_genome_whose_fasta_already_exists(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            df = self._folder_with_cached_gff(tmpdir)
+            with open(rdu.reference_fasta_path(tmpdir, 'MGYG1'), 'w') as f:
+                f.write('>already\nAAAA\n')
+            with patch('urllib.request.urlopen', side_effect=AssertionError('should not download')):
+                available = rdu.download_uhgg_references(df, tmpdir, sample_tag='t')
+            with open(rdu.reference_fasta_path(tmpdir, 'MGYG1')) as f:
+                fasta = f.read()
+
+        self.assertEqual(available, {'MGYG1'})
+        self.assertEqual(fasta, '>already\nAAAA\n')  # left untouched, not re-converted
+
+    def test_a_metadata_table_with_no_ftp_column_is_rejected(self):
+        """A GTDB table carrying UHGG species names has no FTP_download, and must not be silently
+        treated as UHGG - it belongs on the accession path."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self.assertRaises(ValueError):
+                rdu.download_uhgg_references(pd.DataFrame({'Genome': ['GCF_1.1']}), tmpdir, 't')
+
+
+class ReferenceSourceTest(unittest.TestCase):
+    """--reference-source has to supply a coherent set of defaults: a GTDB metadata table paired
+    with the UHGG Kraken database is the mismatch this exists to prevent."""
+
+    def test_each_source_selects_its_own_kraken_flags(self):
+        gtdb = rdu.REFERENCE_SOURCES['gtdb']['kraken_extra_args']
+        uhgg = rdu.REFERENCE_SOURCES['uhgg']['kraken_extra_args']
+        # GTDB's 644GB hash table is read off disk; UHGG's 15.5GB is faster loaded into RAM
+        self.assertIn('--memory-mapping', rdu.KRAKEN_COMMAND.format(
+            kraken_db='db', extra_args=gtdb, reads_1='a', reads_2='b', threads=1,
+            kraken_output='o', kraken_report='r'))
+        self.assertNotIn('--memory-mapping', rdu.KRAKEN_COMMAND.format(
+            kraken_db='db', extra_args=uhgg, reads_1='a', reads_2='b', threads=1,
+            kraken_output='o', kraken_report='r'))
+
+    def test_unset_options_come_from_the_source_and_explicit_ones_win(self):
+        for source in ('gtdb', 'uhgg'):
+            kraken_db, metadata, refs_dir = ginger_runner.resolve_reference_source(source, None, None, None)
+            self.assertIn(rdu.REFERENCE_SOURCES[source]['kraken_db'], kraken_db)
+            self.assertTrue(metadata.endswith(rdu.REFERENCE_SOURCES[source]['metadata']))
+            self.assertEqual(refs_dir, rdu.REFERENCE_SOURCES[source]['references_dir'])
+
+        _, metadata, refs_dir = ginger_runner.resolve_reference_source('uhgg', None, '/custom.tsv', '/refs')
+        self.assertEqual(metadata, '/custom.tsv')
+        self.assertEqual(refs_dir, '/refs')
 
 
 class ContigToGenomeMapTest(unittest.TestCase):

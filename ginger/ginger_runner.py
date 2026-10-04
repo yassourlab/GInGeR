@@ -25,6 +25,27 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+def resolve_reference_source(reference_source, kraken_db, reference_genomes_metadata,
+                             downloaded_references_dir):
+    """Fill in whichever reference options the caller left unset from the chosen catalog.
+
+    The metadata table ships inside the package and the Kraken database sits beside it in the repo,
+    which is where the previous per-option defaults pointed; the references directory stays relative
+    to the working directory. Returns the three in the order they were passed.
+    """
+    source = rdu.REFERENCE_SOURCES[reference_source]
+    package_dir = os.path.dirname(__file__)
+    if kraken_db is None:
+        kraken_db = os.path.join(package_dir, '..', source['kraken_db'])
+    if reference_genomes_metadata is None:
+        reference_genomes_metadata = os.path.join(package_dir, source['metadata'])
+    if downloaded_references_dir is None:
+        downloaded_references_dir = source['references_dir']
+    log.info(f'reference source {reference_source}: metadata {reference_genomes_metadata}, '
+             f'kraken db {kraken_db}, references dir {downloaded_references_dir}')
+    return kraken_db, reference_genomes_metadata, downloaded_references_dir
+
+
 def cleanup_intermediate_files(out_dir, keep_options):
     """Remove intermediate files based on keep_options."""
     if 'all' in keep_options:
@@ -76,18 +97,19 @@ def cleanup_intermediate_files(out_dir, keep_options):
 @click.option('--threads', '-t', type=int, default=1,
               help='Number of threads that will be used for running Kraken2, SPAdes and Minimap2')
 @click.option('--kraken-output-path', default=None, help="A path for saving Kraken2's output")
-@click.option('--kraken-db', type=click.Path(),
-              default=os.path.join(os.path.dirname(__file__), '..', 'kraken2_db_gtdb_r226'),
-              help='The path to the Kraken2 database directory (GTDB r226 by default)')
-@click.option('--species-coverage-threshold', type=float, default=10,
-              help='The minimal estimated sequencing coverage required for including a species in the analysis. Coverage is estimated as: bracken_estimated_reads * (avg_len_R1 + avg_len_R2) / median_genome_length, where median genome length is computed from the top references per species (by Quality) capped by --max-species-representatives. Default 10.')
+@click.option('--reference-source', type=click.Choice(sorted(rdu.REFERENCE_SOURCES)),
+              default=rdu.DEFAULT_REFERENCE_SOURCE,
+              help="Which reference catalog to use. Selects how reference genomes are downloaded - GTDB's by assembly accession from NCBI, UHGG's as .gff.gz over FTP - and supplies matching defaults for --kraken-db, --reference-genomes-metadata and --downloaded-references-dir. Any of those passed explicitly wins.")
+@click.option('--kraken-db', type=click.Path(), default=None,
+              help='The path to the Kraken2 database directory. Defaults to the one matching --reference-source')
+@click.option('--species-coverage-threshold', type=float, default=3,
+              help='The minimal estimated sequencing coverage required for including a species in the analysis. Coverage is estimated as: bracken_estimated_reads * (avg_len_R1 + avg_len_R2) / median_genome_length, where median genome length is computed from the top references per species (by Quality) capped by --max-species-representatives. Default 3.')
 @click.option('--max-species-representatives', type=int, default=100,
               help='The maximal references per species that will be downloaded from NCBI and taken into account in the aggregation of results at the species level')
-@click.option('--reference-genomes-metadata', type=click.Path(),
-              default=os.path.join(os.path.dirname(__file__), 'GTDB-metadata.tsv'),
-              help='The path to the reference database metadata table')
-@click.option('--downloaded-references-dir', type=click.Path(), default='references_dir',
-              help='The directory to which GInGeR will download missing reference genomes from NCBI. This folder can be shared for all runs of GInGer in order to avoid the same file being  downloaded and saved multiple times')
+@click.option('--reference-genomes-metadata', type=click.Path(), default=None,
+              help='The path to the reference database metadata table. Defaults to the one matching --reference-source')
+@click.option('--downloaded-references-dir', type=click.Path(), default=None,
+              help="The directory to which GInGeR will download missing reference genomes. This folder can be shared for all runs of GInGer in order to avoid the same file being  downloaded and saved multiple times. Defaults to references_dir_{--reference-source}, so the two catalogs never share a cache")
 @click.option('--sample-specific-references', type=click.Path(), default=None,
               help='A fasta, fasta.gz or mmi (minimap indexed) file that will be used a reference database (using this will skip the stages of creating a sample specific database based on the species detected in the sample by Kraken2)')
 @click.option('--reference-contig-to-genome', type=click.Path(), default=None,
@@ -147,9 +169,15 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                     max_gap_ratio, context_len, gene_pident_filtering_th,
                     paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
                     add_plasmid_score=True, genomad_db=None, contig_context_fallback=True,
-                    write_context_sequences=False, reference_contig_to_genome=None):
+                    write_context_sequences=False, reference_contig_to_genome=None,
+                    reference_source=rdu.DEFAULT_REFERENCE_SOURCE):
     # Log the command that was run
     log.info(f"Running GInGeR with command: {' '.join(sys.argv)}")
+
+    # whatever the caller did not pin down comes from the chosen catalog, so a GTDB metadata table
+    # can't end up paired with the UHGG Kraken database by omission
+    kraken_db, reference_genomes_metadata, downloaded_references_dir = resolve_reference_source(
+        reference_source, kraken_db, reference_genomes_metadata, downloaded_references_dir)
 
     pu.ensure_out_dir_is_fresh(out_dir)
     # create output directory if it doesn't exist
@@ -176,7 +204,8 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
                                                  reference_genomes_metadata, downloaded_references_dir, sample_specific_references,
                                                  references_used_path,
                                                  max_species_representatives, kraken_db,
-                                                 species_included_in_analysis_path, contig_to_genome_path)
+                                                 species_included_in_analysis_path, contig_to_genome_path,
+                                                 source=reference_source)
     if not sample_specific_references.endswith('mmi'):
         indexed_reference = sau.generate_index(sample_specific_references, sau.INDEXING_PRESET)
     else:

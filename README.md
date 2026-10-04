@@ -17,8 +17,11 @@ genomic contexts in the graph, verifies the contexts and assigns them to carrier
     * `conda activate ginger_env`
 3. Install the ginger package on your conda env:
     * `python -m pip install .` (note that the `.` is part of the command)
-5. Download the Kraken2 database to `kraken2_db_gtdb_r226` in the GInGeR directory (or anywhere
-   else, and point `--kraken-db` at it):
+5. Download the Kraken2 database for the catalog you intend to use (see
+   [Reference database](#reference-database)). For the default, GTDB, download it to
+   `kraken2_db_gtdb_r226` in the GInGeR directory (or anywhere else, and point `--kraken-db` at it);
+   for UHGG, `kraken2_db_uhgg_v2.0.2` from
+   `https://ftp.ebi.ac.uk/pub/databases/metagenomics/mgnify_genomes/human-gut/v2.0.2/kraken2_db_uhgg_v2.0.2/`:
     * `sbatch scripts/download_gtdb_kraken_db.sbatch`, or without a cluster, fetch each file of
       `https://genome-idx.s3.amazonaws.com/kraken/gtdb_genome_reps_20250609/` listed in that script
     * **This database is ~646GB on disk** (GTDB indexes 143,614 species representatives against
@@ -27,9 +30,11 @@ genomic contexts in the graph, verifies the contexts and assigns them to carrier
 6. To verify your installation run ginger on a test dataset:
     * `run_ginger tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.faa e2e_test_output --max-species-representatives 1`
     * **Note that due to Kraken2's memory requirements, you'd need to allocate at least 16G of memory for the pipeline
-      to run successfully**. GInGeR runs Kraken2 with `--memory-mapping`, so the 644GB hash table is
-      read from disk instead of loaded into RAM - the database is large but the memory requirement is
-      not. Give the database a fast filesystem if you can: memory-mapping turns it into random reads. In case you would like to test ginger but skip the step using Kraken, you can
+      to run successfully**. With GTDB - and only with GTDB - GInGeR runs Kraken2 with
+      `--memory-mapping`, so its 644GB hash table is read from disk instead of loaded into RAM: the
+      database is large but the memory requirement is not. Give it a fast filesystem if you can,
+      since memory-mapping turns it into random reads. UHGG's hash table is 15.5GB, so it is loaded
+      into RAM instead, which is far faster. In case you would like to test ginger but skip the step using Kraken, you can
       run: `run_ginger tests/test_files/ecoli_1K_1.fq.gz tests/test_files/ecoli_1K_2.fq.gz tests/test_files/test_gene.faa e2e_test_output --sample-specific-references tests/test_files/merged_filtered_ref_db.fasta.gz --max-species-representatives 1`
 
 # Running GInGeR
@@ -319,8 +324,26 @@ The species names in the metadata table are GTDB species names without the `s__`
 exactly how Kraken2 reports them for a GTDB-derived database, so Bracken's output joins onto the
 table directly.
 
-Using UHGG instead: GInGeR still ships `ginger/UHGG-metadata.tsv`, so a UHGG run is
-`--reference-genomes-metadata ginger/UHGG-metadata.tsv --kraken-db <your UHGG Kraken2 database>`.
+## Choosing a catalog: `--reference-source`
+
+GInGeR supports two reference catalogs, selected with `--reference-source {gtdb,uhgg}` (default
+`gtdb`). The catalogs differ in where reference genomes come from, and the flag switches that
+together with the matching defaults, so the two cannot be half-configured:
+
+| | `gtdb` | `uhgg` |
+|---|---|---|
+| genomes downloaded from | NCBI, by assembly accession, with the [datasets](https://www.ncbi.nlm.nih.gov/datasets/) CLI | EBI, one `.gff.gz` per genome over FTP |
+| `--reference-genomes-metadata` | `ginger/GTDB-metadata.tsv` | `ginger/UHGG-metadata.tsv` |
+| `--kraken-db` | `kraken2_db_gtdb_r226` | `kraken2_db_uhgg_v2.0.2` |
+| `--downloaded-references-dir` | `references_dir_gtdb` | `references_dir_uhgg` |
+| Kraken2 `--memory-mapping` | yes (644GB hash) | no (15.5GB, loaded into RAM) |
+
+Any of those options passed explicitly overrides the catalog's default — which is what lets you run
+a GTDB reference set against a Kraken database trained on different species names, by passing a
+metadata table whose `species` column uses the names your Kraken database reports.
+
+The two catalogs download into separate directories so a shared reference cache never mixes them.
+Whichever is used, GInGeR writes `reference_contig_to_genome.tsv` alongside the database.
 
 ### Supply GInGeR with a FASTA of reference species
 
