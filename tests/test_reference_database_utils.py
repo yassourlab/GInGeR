@@ -338,3 +338,40 @@ class ContigToGenomeMapTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ExistingKrakenReportTest(unittest.TestCase):
+    """--kraken-report-path replaces running Kraken2, and must have the minimizer columns."""
+
+    def _call(self, tmp, existing_report):
+        out_report = os.path.join(tmp, 'out_report.tsv')
+        with patch.object(rdu, 'run_kraken') as run_kraken, \
+                patch.object(rdu, 'filter_kraken_report_by_distinct_kmer_count', side_effect=RuntimeError('stop')):
+            with self.assertRaises(RuntimeError):
+                rdu.get_filtered_references_database(
+                    'r1', 'r2', 1, os.path.join(tmp, 'out.tsv'), out_report, 'b_out', 'b_rep', 3, 'meta',
+                    os.path.join(tmp, 'refs'), 'merged', 'used', 1, 'db', 'species', 'c2g',
+                    existing_kraken_report=existing_report)
+        return run_kraken, out_report
+
+    def test_existing_report_skips_kraken_and_is_copied(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = os.path.join(tmp, 'report.tsv')
+            with open(report, 'w') as f:
+                f.write('1.00\t10\t10\t100\t50\tS\t1\t  Escherichia coli\n')
+            run_kraken, out_report = self._call(tmp, report)
+            run_kraken.assert_not_called()
+            self.assertTrue(os.path.exists(out_report))
+
+    def test_kraken_runs_when_no_report_is_given(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run_kraken, _ = self._call(tmp, None)
+            run_kraken.assert_called_once()
+
+    def test_report_without_minimizer_columns_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            report = os.path.join(tmp, 'report.tsv')
+            with open(report, 'w') as f:
+                f.write('1.00\t10\t10\tS\t1\t  Escherichia coli\n')
+            with self.assertRaisesRegex(ValueError, 'report-minimizer-data'):
+                rdu.check_kraken_report_has_minimizer_data(report)

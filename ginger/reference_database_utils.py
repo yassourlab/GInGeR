@@ -85,6 +85,16 @@ def run_kraken(reads_1, reads_2, threads, output_path, report_path, kraken_db, e
                                                     kraken_report=report_path))
 
 
+def check_kraken_report_has_minimizer_data(kraken_report_path):
+    """Raise a clear error if a Kraken2 report lacks the minimizer columns (it was run without --report-minimizer-data)."""
+    with open(kraken_report_path) as f:
+        n_cols = len(f.readline().rstrip('\n').split('\t'))
+    if n_cols != len(KRAKEN_REPORT_COLS):
+        raise ValueError(f'Kraken2 report {kraken_report_path} has {n_cols} columns, expected '
+                         f'{len(KRAKEN_REPORT_COLS)}: it must include the distinct minimizers column, so Kraken2 must '
+                         f'be run with --report-minimizer-data')
+
+
 def filter_kraken_report_by_distinct_kmer_count(kraken_report_path, filtered_kraken_report_path,
                                                metadata_path, max_refs_per_species,
                                                threshold=DISTINCT_KMER_RATIO_THRESHOLD):
@@ -519,12 +529,15 @@ def get_filtered_references_database(reads_1, reads_2, threads, kraken_output_pa
                                      bracken_report, species_coverage_threshold, metadata_path, references_folder,
                                      merged_filtered_fasta, references_used_path, max_species_representatives, kraken_db,
                                      species_included_in_analysis_path, contig_to_genome_path,
-                                     reuse_existing_kraken_output=False, source=DEFAULT_REFERENCE_SOURCE,
+                                     existing_kraken_report=None, source=DEFAULT_REFERENCE_SOURCE,
                                      distinct_kmer_ratio_threshold=DISTINCT_KMER_RATIO_THRESHOLD):
     pu.check_and_makedir(kraken_output_path)
     pu.check_and_make_dir_no_file_name(references_folder)
-    # Kraken2 is by far the slowest step - when asked to, reuse a previous run's output instead of redoing it
-    if not (reuse_existing_kraken_output and os.path.exists(kraken_output_path) and os.path.exists(kraken_report_path)):
+    # Kraken2 is by far the slowest step - when given a report from a previous run, use it instead of redoing it
+    if existing_kraken_report:
+        check_kraken_report_has_minimizer_data(existing_kraken_report)
+        shutil.copy(existing_kraken_report, kraken_report_path)
+    else:
         run_kraken(reads_1, reads_2, threads, kraken_output_path, kraken_report_path, kraken_db,
                    extra_args=REFERENCE_SOURCES[source]['kraken_extra_args'])
     filtered_kraken_report_path = f'{kraken_report_path}.distinct_kmer_filtered'

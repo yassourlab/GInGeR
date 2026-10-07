@@ -115,7 +115,7 @@ argument `--assembly-dir` must be supplied and point to the results of a SPAdes 
 `--assembly-dir` - Specifies where to save the assembly results. Default is `<OUT_DIR>/SPAdes`. In case you want to use
 a pre-ran assembly, please specify here the directory of SPAdes' output.
 
-`--kraken-output-path` - A path for saving Kraken2's output..
+`--kraken-report-path` - A Kraken2 report from a previous run on the same reads, which skips running Kraken2 (Bracken and the later stages still run). The report must have been created with `--report-minimizer-data` (so it includes the distinct minimizers column) and with the same database as `--kraken-db`. It is copied into `<OUT_DIR>`.
 
 `--reference-genomes-metadata` - The path to the reference database metadata table (see more information in the Reference database
 section).

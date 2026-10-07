@@ -101,7 +101,8 @@ def cleanup_intermediate_files(out_dir, keep_options):
               help="Specifies where to save the assembly results. In case of pre-ran assembly, please insert the path do the spades output directory")
 @click.option('--threads', '-t', type=int, default=1,
               help='Number of threads that will be used for running Kraken2, SPAdes and Minimap2')
-@click.option('--kraken-output-path', default=None, help="A path for saving Kraken2's output")
+@click.option('--kraken-report-path', type=click.Path(exists=True), default=None,
+              help="A Kraken2 report from a previous run on the same reads, which skips running Kraken2 (Bracken and the later stages still run). It must have been created with --report-minimizer-data, and with the same database as --kraken-db")
 @click.option('--reference-source', type=click.Choice(sorted(rdu.REFERENCE_SOURCES)),
               default=rdu.DEFAULT_REFERENCE_SOURCE,
               help="Which reference catalog to use. Selects how reference genomes are downloaded - GTDB's by assembly accession from NCBI, UHGG's as .gff.gz over FTP - and supplies matching defaults for --kraken-db, --reference-genomes-metadata and --downloaded-references-dir. Any of those passed explicitly wins.")
@@ -169,7 +170,7 @@ def run_ginger_e2e(**kwargs):
     return ginger_e2e_func(**kwargs)
 
 
-def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_output_path,
+def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_dir, threads, kraken_report_path,
                     kraken_db, species_coverage_threshold, reference_genomes_metadata, downloaded_references_dir, sample_specific_references, genes_path, depth_limit,
                     max_gap_ratio, context_len, gene_pident_filtering_th,
                     paths_pident_filtering_th, keep_intermediate, skip_assembly, max_species_representatives, return_all_gene_matches, nms_iou_threshold,
@@ -198,21 +199,21 @@ def ginger_e2e_func(long_reads, short_reads_1, short_reads_2, out_dir, assembly_
     if sample_specific_references is None:
         sample_specific_references = c.MERGED_FILTERED_REF_DB_TEMPLATE.format(out_dir=out_dir)
         contig_to_genome_path = c.CONTIG_TO_GENOME_TEMPLATE.format(out_dir=out_dir)
-        # if the file was not specified or the specified file does not exist
-        if kraken_output_path is None or not os.path.exists(kraken_output_path):
-            kraken_output_path = c.KRAKEN_OUTPUT_TEMPLATE.format(out_dir=out_dir)
-            kraken_report_path = c.KRAKEN_REPORT_TEMPLATE.format(out_dir=out_dir)
-            bracken_output = c.BRACKEN_OUTPUT_TEMPLATE.format(out_dir=out_dir)
-            bracken_report = c.BRACKEN_REPORT_TEMPLATE.format(out_dir=out_dir)
-            species_included_in_analysis_path = c.SPECIES_INCLUDED_IN_ANALYSIS_TEMPLATE.format(out_dir=out_dir)
-            rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads, kraken_output_path,
-                                                 kraken_report_path, bracken_output, bracken_report, species_coverage_threshold,
-                                                 reference_genomes_metadata, downloaded_references_dir, sample_specific_references,
-                                                 references_used_path,
-                                                 max_species_representatives, kraken_db,
-                                                 species_included_in_analysis_path, contig_to_genome_path,
-                                                 source=reference_source,
-                                                 distinct_kmer_ratio_threshold=distinct_kmer_ratio_threshold)
+        kraken_output_path = c.KRAKEN_OUTPUT_TEMPLATE.format(out_dir=out_dir)
+        existing_kraken_report = kraken_report_path
+        kraken_report_path = c.KRAKEN_REPORT_TEMPLATE.format(out_dir=out_dir)
+        bracken_output = c.BRACKEN_OUTPUT_TEMPLATE.format(out_dir=out_dir)
+        bracken_report = c.BRACKEN_REPORT_TEMPLATE.format(out_dir=out_dir)
+        species_included_in_analysis_path = c.SPECIES_INCLUDED_IN_ANALYSIS_TEMPLATE.format(out_dir=out_dir)
+        rdu.get_filtered_references_database(short_reads_1, short_reads_2, threads, kraken_output_path,
+                                             kraken_report_path, bracken_output, bracken_report, species_coverage_threshold,
+                                             reference_genomes_metadata, downloaded_references_dir, sample_specific_references,
+                                             references_used_path,
+                                             max_species_representatives, kraken_db,
+                                             species_included_in_analysis_path, contig_to_genome_path,
+                                             existing_kraken_report=existing_kraken_report,
+                                             source=reference_source,
+                                             distinct_kmer_ratio_threshold=distinct_kmer_ratio_threshold)
     if not sample_specific_references.endswith('mmi'):
         indexed_reference = sau.generate_index(sample_specific_references, sau.INDEXING_PRESET)
     else:
