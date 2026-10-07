@@ -101,7 +101,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
         with open(self.in_paths_fasta) as f:
             header = f.readline().strip().lstrip('>')
         match = mc.PathRefGenomeMatch(PafRecord.from_str(f'{header}\t100\t0\t100\t+\tref\t5000\t10\t110\t100\t100\t60'),
-                                      {})
+                                      helper.empty_contig_species_lookup())
         self.assertEqual(match.gene, 'test_gene')
         self.assertEqual(match.locus, mc.GeneLocus(CONTIG_NAME, GENE_START, GENE_END))
         self.assertEqual(match.side, 'in')
@@ -135,7 +135,7 @@ class TestExtractContextsCandidates(unittest.TestCase):
         name = ecc.context_name(gene_contig_match, '5+', 'in')
 
         match = mc.PathRefGenomeMatch(PafRecord.from_str(f'{name}\t100\t0\t100\t+\tref\t5000\t10\t110\t100\t100\t60'),
-                                      {})
+                                      helper.empty_contig_species_lookup())
         self.assertEqual(match.gene, 'gb|AAA|blaTEM-1')
         self.assertEqual(match.locus, mc.GeneLocus(CONTIG_NAME, 400, 700))
 

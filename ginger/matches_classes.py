@@ -1,6 +1,5 @@
 from pafpy import PafRecord
 from collections import namedtuple
-import re
 
 # One copy of a gene in the assembly - where it sits on a contig, 0-based half-open. Identifies the
 # thing a context was cut from, so it doubles as a grouping key and as a slice of the contig.
@@ -15,7 +14,7 @@ CONTEXT_NAME_FIELDS = ['gene', 'contig', 'start', 'end', 'match_score', 'nodes',
 
 
 class PathRefGenomeMatch:
-    def __init__(self, paf_line: PafRecord, contigs_to_species: dict):
+    def __init__(self, paf_line: PafRecord, contig_species_lookup):
         # extract_contexts_candidates.context_name builds this, '|'-separated with the gene first.
         # Splitting from the right leaves the gene whatever '|' it contains - SARG's and CARD's gene
         # names have several - and no other field can contain one.
@@ -41,10 +40,12 @@ class PathRefGenomeMatch:
 
         self.strand = str(paf_line.strand)
 
+        # the reference contig this context aligned to, and the genome and species it belongs to.
+        # Resolved through verify_context_candidates.ContigSpeciesLookup rather than by splitting the
+        # contig name: NCBI reference contigs are nucleotide accessions (NZ_CP007265.1) that say
+        # nothing about which assembly they came from
         self.ref_genome = paf_line.tname
-        # reference contigs are named {genome}_{contig}, and the species metadata is keyed by genome
-        genome = re.split(r'[._]', self.ref_genome)[0]
-        self.species = contigs_to_species.get(genome, f'unknown_{self.ref_genome}')
+        self.genome, self.species = contig_species_lookup.resolve(self.ref_genome)
         self.ref_genome_length = paf_line.tlen
         self.ref_genome_start = paf_line.tstart
         self.ref_genome_end = paf_line.tend

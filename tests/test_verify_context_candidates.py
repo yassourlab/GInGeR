@@ -21,7 +21,7 @@ def path_match(ref_genome_start, ref_genome_end, locus=FIRST_COPY, gene='geneA',
     context_name = f'{gene}|{locus.contig}|{locus.start}|{locus.end}|1.0000|1+|1+|{side}'
     paf_line = (f'{context_name}\t100\t0\t100\t{strand}\t'
                 f'{ref_genome}\t100000\t{ref_genome_start}\t{ref_genome_end}\t100\t100\t60')
-    return mc.PathRefGenomeMatch(PafRecord.from_str(paf_line), {})
+    return mc.PathRefGenomeMatch(PafRecord.from_str(paf_line), helper.empty_contig_species_lookup())
 
 
 class GetAllInOutMatchesTest(unittest.TestCase):
@@ -80,7 +80,9 @@ class ReadAndFilterPathMatchesPerGeneTest(unittest.TestCase):
     LOCUS = mc.GeneLocus('NODE_1_length_1000_cov_140.620106', 336, 615)
 
     def test_matches_are_grouped_by_the_copy_of_the_gene(self):
-        grouped = vcc.read_and_filter_path_matches_per_gene(mc.PathRefGenomeMatch, self.IN_PATHS_PAF, 0.9, {})
+        # the grouping key is the reference contig, which does not depend on resolving it to a genome
+        grouped = vcc.read_and_filter_path_matches_per_gene(mc.PathRefGenomeMatch, self.IN_PATHS_PAF, 0.9,
+                                                            helper.empty_contig_species_lookup())
 
         self.assertEqual(sorted(grouped), [('test_gene', self.LOCUS, 'MGYG000077121_281'),
                                            ('test_gene', self.LOCUS, 'MGYG000260594_1')])
@@ -161,6 +163,67 @@ class KeepBestMatchesTest(unittest.TestCase):
         for order in ([left, right], [right, left]):  # and the input's order must not decide it
             self.assertEqual([m.tag for m in vcc.keep_best_matches(order, iou_th=0.3)], ['left'])
 
+
+class ContigSpeciesLookupTest(unittest.TestCase):
+    """How a match on a reference contig is traced back to a genome and a species.
+
+    Reference contig names are not required to encode their genome: UHGG's are
+    {genome}_{contig}, but NCBI's are nucleotide accessions (NZ_CP007265.1) that say nothing about
+    which assembly they belong to. The map written when the reference database is built is what
+    closes that gap; deriving the genome from the contig name is the fallback for a database GInGeR
+    did not build.
+    """
+
+    METADATA = 'Genome\tspecies\nGCF_000001.1\tEscherichia coli\nMGYG000260594\tEscherichia coli_D\n'
+
+    def _lookup(self, contig_to_genome_content=None):
+        metadata_f = tempfile.NamedTemporaryFile('w', suffix='.tsv', delete=False)
+        metadata_f.write(self.METADATA)
+        metadata_f.close()
+        map_path = None
+        if contig_to_genome_content is not None:
+            map_f = tempfile.NamedTemporaryFile('w', suffix='.tsv', delete=False)
+            map_f.write(contig_to_genome_content)
+            map_f.close()
+            map_path = map_f.name
+        try:
+            return vcc.build_contig_species_lookup(metadata_f.name, map_path)
+        finally:
+            os.unlink(metadata_f.name)
+            if map_path:
+                os.unlink(map_path)
+
+    def test_an_ncbi_contig_resolves_through_the_map(self):
+        lookup = self._lookup('contig\tGenome\nNZ_CP007265.1\tGCF_000001.1\n')
+        self.assertEqual(lookup.resolve('NZ_CP007265.1'), ('GCF_000001.1', 'Escherichia coli'))
+
+    def test_an_ncbi_contig_cannot_be_resolved_by_splitting_its_name(self):
+        # what the map exists to prevent: GCA_900066495.1 split on [._] is 'GCA', and a nucleotide
+        # accession does not name its assembly at all
+        self.assertEqual(vcc.genome_from_contig_name('NZ_CP007265.1'), 'NZ')
+
+    def test_a_contig_missing_from_the_map_is_reported_as_unknown(self):
+        lookup = self._lookup('contig\tGenome\nNZ_CP007265.1\tGCF_000001.1\n')
+        self.assertEqual(lookup.resolve('NC_999999.1'), ('', 'unknown_NC_999999.1'))
+
+    def test_without_a_map_the_genome_is_derived_from_the_contig_name(self):
+        lookup = self._lookup(None)
+        self.assertEqual(lookup.resolve('MGYG000260594_1'), ('MGYG000260594', 'Escherichia coli_D'))
+
+    def test_a_missing_map_file_falls_back_rather_than_failing(self):
+        lookup = vcc.build_contig_species_lookup(self._metadata_path(), '/nonexistent/map.tsv')
+        self.assertEqual(lookup.resolve('MGYG000260594_1')[0], 'MGYG000260594')
+
+    def test_a_map_without_the_expected_columns_falls_back(self):
+        lookup = self._lookup('something\telse\nfoo\tbar\n')
+        self.assertEqual(lookup.resolve('MGYG000260594_1')[0], 'MGYG000260594')
+
+    def _metadata_path(self):
+        f = tempfile.NamedTemporaryFile('w', suffix='.tsv', delete=False)
+        f.write(self.METADATA)
+        f.close()
+        self.addCleanup(os.unlink, f.name)
+        return f.name
 
 if __name__ == '__main__':
     unittest.main()

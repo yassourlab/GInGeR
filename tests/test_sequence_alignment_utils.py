@@ -29,7 +29,8 @@ class SequenceAlignmentUtilsTest(unittest.TestCase):
         genes_to_contigs_path = f'{TEST_FILES}/in_paths_to_reference.paf'
         pident_filtering_th = 0.9
         genes_to_contigs = sau.read_and_filter_minimap_matches(mc.PathRefGenomeMatch, genes_to_contigs_path,
-                                                               pident_filtering_th, {})
+                                                               pident_filtering_th,
+                                                               helper.empty_contig_species_lookup())
         self.assertEqual(len(genes_to_contigs), 2)
 
 

@@ -310,7 +310,8 @@ def compute_context_species_confidence_score(results_df, species_reference_count
 
 
 @step_timing
-def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str, max_species_representatives: int):
+def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str, max_species_representatives: int,
+                                       contig_species_lookup):
     results_dict = defaultdict(list)
     for gene_species_tuple, matches_list in output.items():
         gene, reference = gene_species_tuple
@@ -340,7 +341,9 @@ def write_context_level_output_to_csv(output, csv_path: str, metadata_path: str,
 
     metadata_df = pd.read_csv(metadata_path, sep='\t')
     results_df = pd.DataFrame(results_dict)
-    results_df['Genome'] = results_df['reference_contig'].apply(lambda x: x.split('_')[0].split('.')[0])
+    # the lookup the matches were resolved with, required rather than rebuilt here so that a row's
+    # Genome cannot disagree with the species beside it
+    results_df['Genome'] = results_df['reference_contig'].apply(contig_species_lookup.genome)
     metadata_cols_to_merge = [x for x in ['Genome', 'species','subspecies'] if x in metadata_df.columns]
     results_df = results_df.merge(metadata_df[metadata_cols_to_merge], on='Genome', how='left')
 
