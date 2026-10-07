@@ -32,7 +32,7 @@ def stream_tool(tool_name, command, tqdm_mininterval=None):
     """
     log.info(f'Running {tool_name} - {command}')
     tqdm_kwargs = {} if tqdm_mininterval is None else {'mininterval': tqdm_mininterval}
-    with Popen(command.split(' '), stdout=PIPE) as process:
+    with Popen(command.split(), stdout=PIPE) as process:
         for _ in tqdm(iter(lambda: process.stdout.readline(), b''), **tqdm_kwargs):
             pass
     # only now: returncode stays None until the `with` block has waited for the process, which is why
